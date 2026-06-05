@@ -23,6 +23,9 @@ def test_eval_harness_returns_fixture_backed_metrics() -> None:
 
     assert asr["librispeech_count"] == 30
     assert asr["librispeech_wer"] == 0
+    assert asr["l2_arctic_count"] == 45
+    assert asr["l2_arctic_manual_annotation_rate"] > 0
+    assert asr["l2_arctic_native_language_counts"]
     assert grammar["jfleg_count"] == 160
     assert grammar["schema_pass_rate"] == 1
     assert pronunciation["speechocean_count"] == 45
@@ -37,5 +40,6 @@ def test_eval_report_renders_markdown() -> None:
 
     assert "# Evaluation Report" in markdown
     assert "LibriSpeech WER" in markdown
+    assert "L2-ARCTIC manual annotation rate" in markdown
     assert "GLEU" in markdown
     assert "Sentence total correlation" in markdown

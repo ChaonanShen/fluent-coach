@@ -39,6 +39,8 @@ def evaluate_asr() -> dict[str, Any]:
         "librispeech_wer": corpus_wer(clean_pairs),
         "l2_arctic_count": len(l2_pairs),
         "l2_arctic_wer": corpus_wer(l2_pairs),
+        "l2_arctic_native_language_counts": _native_language_counts(l2_arctic),
+        "l2_arctic_manual_annotation_rate": _manual_annotation_rate(l2_arctic),
     }
 
 
@@ -98,6 +100,8 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- LibriSpeech WER: {asr['librispeech_wer']:.4f}",
         f"- L2-ARCTIC count: {asr['l2_arctic_count']}",
         f"- L2-ARCTIC WER: {asr['l2_arctic_wer']:.4f}",
+        f"- L2-ARCTIC manual annotation rate: {asr['l2_arctic_manual_annotation_rate']:.4f}",
+        f"- L2-ARCTIC native languages: {_format_counts(asr['l2_arctic_native_language_counts'])}",
         "",
         "## Grammar",
         "",
@@ -116,3 +120,22 @@ def render_markdown(report: dict[str, Any]) -> str:
         "",
     ]
     return "\n".join(lines)
+
+
+def _native_language_counts(items: list[dict[str, Any]]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        language = str(item.get("native_language") or "unknown")
+        counts[language] = counts.get(language, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def _manual_annotation_rate(items: list[dict[str, Any]]) -> float:
+    if not items:
+        return 0.0
+    annotated = sum(1 for item in items if item.get("has_manual_annotation") is True)
+    return annotated / len(items)
+
+
+def _format_counts(counts: dict[str, int]) -> str:
+    return ", ".join(f"{name}={count}" for name, count in counts.items()) if counts else "none"
