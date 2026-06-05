@@ -749,8 +749,7 @@ export default function App() {
     <main className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">XEngineer</p>
-          <h1>AI English Speaking Coach</h1>
+          <h1>Speaking Coach</h1>
         </div>
         <span className="status-pill">{status}</span>
       </header>
@@ -762,7 +761,6 @@ export default function App() {
           <div className="conversation-toolbar">
             <div>
               <h2>Conversation</h2>
-              {selectedScenario ? <p>{selectedScenario.user_role}</p> : null}
             </div>
             <label className="scenario-select-label">
               <span>Scenario</span>
@@ -805,14 +803,6 @@ export default function App() {
               {sessionActionLabel}
             </button>
           </div>
-
-          {selectedScenario ? (
-            <div className="scenario-strip">
-              {selectedScenario.conversation_goals.slice(0, 2).map((goal) => (
-                <span key={goal}>{goal}</span>
-              ))}
-            </div>
-          ) : null}
 
           <div className="message-list" aria-label="Conversation history" ref={messageListRef}>
             {turns.map((turn) => (

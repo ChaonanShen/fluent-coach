@@ -297,8 +297,11 @@ afterEach(() => {
 test('loads scenarios and starts a session', async () => {
   render(<App />);
 
+  expect(await screen.findByRole('heading', { name: 'Speaking Coach' })).toBeInTheDocument();
   expect(await screen.findByRole('combobox', { name: 'Scenario' })).toHaveValue('interview');
-  expect(screen.getByText('Introduce professional background clearly')).toBeInTheDocument();
+  expect(screen.queryByText('XEngineer')).not.toBeInTheDocument();
+  expect(screen.queryByText('Candidate')).not.toBeInTheDocument();
+  expect(screen.queryByText('Introduce professional background clearly')).not.toBeInTheDocument();
   expect(screen.getByText('am working')).toBeInTheDocument();
   expect(screen.getByText('Sessions')).toBeInTheDocument();
   expect(screen.getByText('72')).toBeInTheDocument();
@@ -319,7 +322,7 @@ test('starts a custom scenario from the conversation toolbar', async () => {
   fireEvent.change(screen.getByLabelText('Custom scenario'), {
     target: { value: 'airport check-in' },
   });
-  expect(screen.getByText('Practice a realistic conversation about airport check-in')).toBeInTheDocument();
+  expect(screen.queryByText('Practice a realistic conversation about airport check-in')).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   expect(await screen.findByText("Let's practice airport check-in. Could you start with what you want to say first?"))
