@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-05T08:37:47.818484+00:00",
+  "generated_at": "2026-06-05T14:12:52.378863+00:00",
   "mode": "fixture_fake",
   "external_services_used": false,
   "checks": {
@@ -9,6 +9,13 @@
       "fixture_id": "librispeech_dev-clean_1272-128104-0000",
       "expected": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL",
       "transcript": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL"
+    },
+    "asr_l2_arctic": {
+      "status": "passed",
+      "provider": "fake",
+      "count": 5,
+      "average_wer": 0.0,
+      "manual_annotation_rate": 0.15555555555555556
     },
     "grammar": {
       "status": "passed",

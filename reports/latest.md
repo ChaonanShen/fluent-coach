@@ -1,6 +1,6 @@
 # Evaluation Report
 
-Generated at: `2026-06-05T04:41:36.926285+00:00`
+Generated at: `2026-06-05T14:12:52.368962+00:00`
 
 ## ASR
 
@@ -8,6 +8,11 @@ Generated at: `2026-06-05T04:41:36.926285+00:00`
 - LibriSpeech WER: 0.0000
 - L2-ARCTIC count: 45
 - L2-ARCTIC WER: 0.0000
+- L2-ARCTIC manual annotation rate: 0.1556
+- L2-ARCTIC native languages: Arabic=3, Hindi=2, Korean=3, Mandarin=32, Spanish=2, Vietnamese=3
+- L2-ARCTIC TextGrid files available: 0/7
+- L2-ARCTIC parsed annotation intervals: 0
+- L2-ARCTIC mispronunciation hit rate: not_computed_no_textgrid
 
 ## Grammar
 

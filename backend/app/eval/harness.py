@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from backend.app.core.fixtures import load_generated_manifest
+from backend.app.eval.l2_arctic import summarize_l2_arctic_annotations
 from backend.app.eval.metrics import corpus_gleu, corpus_wer, mean_absolute_error, pearson_correlation
 from backend.app.services.asr import fake_asr
 from backend.app.services.grammar import grammar_service
@@ -41,6 +42,7 @@ def evaluate_asr() -> dict[str, Any]:
         "l2_arctic_wer": corpus_wer(l2_pairs),
         "l2_arctic_native_language_counts": _native_language_counts(l2_arctic),
         "l2_arctic_manual_annotation_rate": _manual_annotation_rate(l2_arctic),
+        "l2_arctic_annotation_stats": summarize_l2_arctic_annotations(l2_arctic),
     }
 
 
@@ -87,6 +89,7 @@ def evaluate_pronunciation() -> dict[str, Any]:
 
 def render_markdown(report: dict[str, Any]) -> str:
     asr = report["asr"]
+    l2_stats = asr["l2_arctic_annotation_stats"]
     grammar = report["grammar"]
     pronunciation = report["pronunciation"]
     lines = [
@@ -102,6 +105,12 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- L2-ARCTIC WER: {asr['l2_arctic_wer']:.4f}",
         f"- L2-ARCTIC manual annotation rate: {asr['l2_arctic_manual_annotation_rate']:.4f}",
         f"- L2-ARCTIC native languages: {_format_counts(asr['l2_arctic_native_language_counts'])}",
+        (
+            "- L2-ARCTIC TextGrid files available: "
+            f"{l2_stats['available_annotation_count']}/{l2_stats['annotated_manifest_count']}"
+        ),
+        f"- L2-ARCTIC parsed annotation intervals: {l2_stats['parsed_interval_count']}",
+        f"- L2-ARCTIC mispronunciation hit rate: {l2_stats['hit_rate_status']}",
         "",
         "## Grammar",
         "",

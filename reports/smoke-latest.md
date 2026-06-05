@@ -1,12 +1,13 @@
 # Smoke Report
 
-Generated at: `2026-06-05T08:37:47.818484+00:00`
+Generated at: `2026-06-05T14:12:52.378863+00:00`
 Mode: `fixture_fake`
 External services used: `false`
 
 ## Checks
 
 - ASR: passed (fake)
+- ASR L2-ARCTIC: passed (fake), avg WER 0.0000, count 5
 - Grammar: passed
 - Pronunciation: passed (mock)
 - Dialogue fixture: passed

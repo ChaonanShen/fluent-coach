@@ -1,10 +1,29 @@
 {
-  "generated_at": "2026-06-05T04:41:36.926285+00:00",
+  "generated_at": "2026-06-05T14:12:52.368962+00:00",
   "asr": {
     "librispeech_count": 30,
     "librispeech_wer": 0.0,
     "l2_arctic_count": 45,
-    "l2_arctic_wer": 0.0
+    "l2_arctic_wer": 0.0,
+    "l2_arctic_native_language_counts": {
+      "Arabic": 3,
+      "Hindi": 2,
+      "Korean": 3,
+      "Mandarin": 32,
+      "Spanish": 2,
+      "Vietnamese": 3
+    },
+    "l2_arctic_manual_annotation_rate": 0.15555555555555556,
+    "l2_arctic_annotation_stats": {
+      "annotated_manifest_count": 7,
+      "available_annotation_count": 0,
+      "available_annotation_rate": 0.0,
+      "parsed_interval_count": 0,
+      "non_empty_label_count": 0,
+      "suspected_issue_label_count": 0,
+      "mispronunciation_hit_rate": null,
+      "hit_rate_status": "not_computed_no_textgrid"
+    }
   },
   "grammar": {
     "jfleg_count": 160,
