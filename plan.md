@@ -273,3 +273,233 @@ WebSocket 事件：
 - 发音评测第一版只做统一接口 + Mock provider（speechocean762 真值回放），**仅跟读模式**，真实云与自由发言评测单独 PR。
 - 所有云服务错误以 `AnalysisError` 就地非弹窗展示并自动降级，不中断主对话。
 - 后端能力必须先能通过纯输入输出测试，再接前端。
+
+## 2026-06-05 执行进展更新
+
+本节用于记录原计划已经执行到哪里，以及从当前状态继续往最终可演示项目推进时，后续实际执行顺序是什么。上面的原始计划保留不改，用于回看项目是怎么一步步拆出来的。
+
+### 当前基线
+
+- `make test` 已通过。
+- 后端：73 passed，1 个 integration/manual 测试默认跳过。
+- 前端：4 passed。
+- UI 已能启动并完成基础 demo：选场景、开始会话、文本对话、纠错展示、Read Aloud 发音评测展示、Summary、Mistakes。
+- 本地 `.env` 已配置真实 LLM 和腾讯 SOE：
+  - `LLM_PROVIDER=openai_compatible`
+  - `LLM_MODEL=deepseek-v4-flash`
+  - `PRON_PROVIDER=tencent_soe`
+  - `ASR_PROVIDER=fake`
+  - `TTS_PROVIDER=browser`
+- 注意：当前后端默认不会自动读取 `.env`，直接 `make dev-backend` 时仍可能走代码默认 fake/mock；真实链路启动仍需要先 `source .env`。
+
+### 原计划完成度
+
+| 原计划项 | 当前状态 | 说明 |
+|---|---|---|
+| PR1 项目骨架 + 数据驱动测试框架 | 已完成 | 后端、前端、fixtures、Makefile、默认测试和评测脚本都已就位。 |
+| PR2 会话类数据模型 | 已完成 | `Scenario`、`Session`、`Turn` 已实现并有测试。 |
+| PR3 分析类数据模型 | 已完成 | `GrammarCorrection`、`PronunciationAssessment`、`SessionSummary`、`MistakeItem`、`AnalysisError` 已实现。 |
+| PR4 场景配置系统 | 已完成 | 三个场景、创建/结束 session、场景 API 已实现。 |
+| PR5 LLM 统一客户端 | 基本完成 | OpenAI-compatible adapter 和 fake client 已实现；还缺统一错误映射和启动时 `.env` 自动加载。 |
+| PR6 语法/表达纠错服务 | 基本完成 | fixture 优先、真实 LLM fallback 已实现；还需去掉前端重复调用并强化 schema/error handling。 |
+| PR7 语法纠错评测 harness | 已完成 | JFLEG fixture 评测流程已在报告中产出。 |
+| PR8 场景化对话回复服务 | 基本完成 | 文本回合已能走 fixture/LLM/fallback；还需让真实 LLM 成为自由输入主路径并优化 prompt。 |
+| PR9 SQLite 会话日志 | 已完成 | session、turn、grammar、pronunciation、mistake、analysis error 表已实现。 |
+| PR10 WebSocket 按轮协议 + FakeASR | 部分完成 | 后端 WS 协议和 FakeASR 已实现；前端当前发送的是模拟音频和 `expected_text`，不是真麦克风。 |
+| PR11 faster-whisper 真实适配 + ASR 评测 | 部分完成 | adapter 已有；还没完成真实浏览器录音转码后的 end-to-end smoke。 |
+| PR12 带口音 ASR / 误音检测评测 | 未完成 | 当前报告可用 fake ASR 跑通流程，但没有真实带口音 ASR/误音检测能力。 |
+| PR13 发音评测接口 + Mock provider | 已完成 | Mock provider 可按 SpeechOcean fixture 回放分数。 |
+| PR14 发音评测相关性评测 | 已完成 | fixture-backed 相关性/MAE 报告已可生成。 |
+| PR15 错题本 | 已完成 | 语法、表达、发音错题生成、合并、review 已实现。 |
+| PR16 异步分析编排 + 结果/错误回传 | 部分完成 | WS 已回传 grammar `analysis.result/error`；还不是真异步编排，也未覆盖真实 pronunciation error。 |
+| PR17 课后总结 | 部分完成 | Summary 已有；但当前主要基于语法重新计算，未聚合本 session 发音评测结果。 |
+| PR18 跨会话进度反馈 | 基本完成 | `/api/progress` 已有基础趋势；前端展示还比较弱。 |
+| PR19 前端骨架 + 场景选择 + 对话区/录音 | 部分完成 | 骨架、场景、对话已完成；录音仍是模拟。 |
+| PR20 纠错侧栏 + 错误就地展示 | 部分完成 | 基础纠错展示已完成；真实 provider 错误 inline 展示还需补齐。 |
+| PR21 跟读练习面板 | 部分完成 | UI 能展示评测结果；当前固定 fixture，不是用户现场录音。 |
+| PR22 课后总结 + 错题本面板 | 基本完成 | Summary 和 Mistakes 已展示；Progress 趋势展示还需加强。 |
+| PR23 轻量语音输出 + partial 滚动 | 基本完成 | 浏览器 TTS 和 partial 展示已有；partial 当前来自 fake/expected text。 |
+| PR24 评测与报告生成 | 部分完成 | 默认 fixture fake 报告已完成；真实服务 smoke、分段延迟报告还没做。 |
+| PR25 真实发音云服务适配器 | 部分完成 | Tencent SOE provider 和手动 smoke 已完成；还缺用户上传音频入口、错误映射、前端真实录音接入。 |
+| PR26 真实 TTS 云服务适配器 | 未完成 | 当前保留浏览器 TTS fallback，云 TTS 作为可选后置项。 |
+
+### 当前主要缺口
+
+1. 真实录音没有接入
+   - 前端 `Voice` 当前是模拟链路：发送 `expected_text` 和假字节。
+   - 需要换成 `getUserMedia` + `MediaRecorder` 真实录音。
+
+2. ASR 仍是 fake
+   - `.env` 当前 `ASR_PROVIDER=fake`。
+   - `FasterWhisperASR` 已有代码，但还没有和浏览器录音、ffmpeg 转码、WS 回合完整串起来。
+
+3. 跟读评测还在评 fixture
+   - Read Aloud 当前固定请求 `fixture_id=speechocean_000010113`。
+   - 即使 `PRON_PROVIDER=tencent_soe` 生效，评测的也是 fixture 音频，不是用户现场录音。
+
+4. `.env` 启动体验不完整
+   - 真实 key 已在本地 `.env`，但后端不会自动加载。
+   - 需要让 `make dev-backend` 的行为和本地配置一致，并在 `/api/health` 暴露非敏感 provider 状态。
+
+5. 真实 provider 错误映射不完整
+   - LLM JSON 解析已有 fallback。
+   - 腾讯 SOE、ASR、转码等错误还应统一变成 `AnalysisError`，前端 inline 展示，不中断主对话。
+
+6. 前端文本纠错重复调用
+   - `/api/sessions/{id}/turns/text` 后端内部已经做 grammar check。
+   - 前端 `sendTurn()` 又额外调用 `/api/grammar/check`，后续要去重。
+
+### 新的执行计划
+
+后续执行以“把现有 demo 变成真实可演示链路”为目标。保持原计划的测试原则：默认测试仍不访问真实云、不依赖麦克风、不依赖浏览器手动操作。
+
+#### P0：配置和状态可观测
+
+1. 后端自动加载项目根目录 `.env`。
+2. 扩展 `/api/health`，返回非敏感 provider 状态：
+   - `llm_provider`
+   - `llm_model`
+   - `asr_provider`
+   - `pronunciation_provider`
+   - `tts_provider`
+   - `external_services_enabled`
+3. README 更新真实链路启动方式。
+4. 保证 `make test` 默认仍不调用真实 LLM/腾讯云。
+
+验收：
+
+- 直接 `make dev-backend` 后，`/api/health` 能看到当前 provider 配置状态。
+- 输出中不包含 key、secret、完整 base URL 或其他敏感信息。
+
+#### P0：真实浏览器录音和音频落盘
+
+1. 前端把 `simulateVoiceTurn()` 替换为真实录音：
+   - `navigator.mediaDevices.getUserMedia({ audio: true })`
+   - `MediaRecorder`
+   - 按 chunk 发送到 `WS /ws/sessions/{id}/audio`
+2. UI 增加录音状态：
+   - idle
+   - recording
+   - processing
+   - error
+3. 后端把收到的音频按 session/turn 保存到 `.local/audio/`。
+4. `Turn` 记录 `mode=audio` 和 `audio_path`。
+5. 后端处理空音频、过短音频、非法格式，并返回清晰错误。
+
+验收：
+
+- 浏览器真实说一句话，后端能保存非空音频文件。
+- WS 不再依赖 `expected_text`。
+
+#### P0：音频转码和真实 ASR
+
+1. 引入 ffmpeg 转码流程：
+   - 浏览器常见 `webm/opus` 转 `16kHz mono wav`。
+   - 缺少 ffmpeg 时给出清晰错误。
+2. 启用 `ASR_PROVIDER=faster_whisper` 真实识别链路。
+3. 对缺依赖、模型加载失败、转写失败、超时做 `AnalysisError(stage=asr)`。
+4. 保留 `FakeASR` 用于默认测试。
+
+验收：
+
+- 真实麦克风录音能返回 `asr.final`。
+- ASR 文本进入 AI 回复和语法纠错。
+
+#### P0：真实 LLM 主路径与纠错去重
+
+1. 自由输入优先走真实 `openai_compatible` LLM。
+2. 保留 fixture 优先逻辑用于测试稳定性。
+3. 优化 dialogue prompt：
+   - 回复短。
+   - 保持场景角色。
+   - 推进当前目标。
+   - 不在 AI 回复里长篇讲语法。
+4. 强化 grammar JSON schema 解析和错误映射。
+5. 前端去掉对 `/api/grammar/check` 的重复调用，改用 `/turns/text` 产生的 analysis 或 WS `analysis.result`。
+
+验收：
+
+- 输入 fixture 之外的自然句子时，AI 回复不再总是固定 fallback。
+- LLM 失败时前端 inline 展示错误，主对话不中断。
+
+#### P0：真实跟读发音评测
+
+1. 新增用户音频评测入口，二选一：
+   - `POST /api/pronunciation/assess/upload`：multipart 上传 `reference_text` + audio。
+   - 或通过安全 `turn_id` 引用后端已落盘音频触发评测。
+2. 前端 Read Aloud 面板使用真实录音。
+3. 后端转 WAV 后调用 Tencent SOE。
+4. 映射腾讯 SOE 错误：
+   - 握手失败。
+   - 签名/鉴权失败。
+   - 超时。
+   - 音频格式错误。
+   - 服务限流。
+5. 发音低分单词继续进入错题本。
+
+验收：
+
+- 用户现场读参考句，腾讯 SOE 返回真实评分。
+- 评测失败只影响发音面板，不中断主对话。
+
+#### P1：Summary、Progress 和前端演示体验
+
+1. Summary 优先使用本 session 已有 analysis/pronunciation 结果，不再盲目重新跑 grammar check。
+2. Summary 加入本次发音分数和发音 top issues。
+3. Progress 前端展示历史趋势。
+4. 前端清理状态：
+   - 新 session 清空上一轮 partial/pronunciation/summary。
+   - End 后禁用录音和发送。
+   - 录音权限失败给清晰提示。
+5. Coach 面板统一渲染 correction、pronunciation、summary、mistakes、analysis error。
+
+验收：
+
+- 评委可以顺着 UI 完成：选场景 -> 录音对话 -> 跟读评测 -> 错题 -> 结束总结。
+
+#### P1：真实链路报告
+
+1. 保留默认 fixture fake report。
+2. 新增真实服务 smoke report，不影响默认 CI：
+   - LLM 成功率和平均延迟。
+   - ASR 一句话 smoke。
+   - 腾讯 SOE smoke。
+   - UI e2e smoke。
+3. 记录分段延迟：
+   - `end_turn -> asr.final`
+   - `asr.final -> reply.text`
+   - `reply.text -> tts_start`
+   - pronunciation upload -> final result
+
+验收：
+
+- 默认 `reports/latest.md` 仍是稳定、可复现的 fixture 指标。
+- 真实 smoke report 单独生成，失败时不影响默认测试。
+
+#### P2：可选后置项
+
+1. 云 TTS provider。
+2. 自由对话每轮自动发音评测。
+3. 更细的场景目标状态机和对话控制。
+
+### 后续 PR 切分
+
+1. PR-A：自动加载 `.env` + `/api/health` provider 状态。
+2. PR-B：前端真实 `MediaRecorder` 录音 + WS 发送真实音频。
+3. PR-C：后端音频落盘、ffmpeg 转 WAV、Turn 记录 `audio_path`。
+4. PR-D：`ASR_PROVIDER=faster_whisper` 真实链路 smoke。
+5. PR-E：文本对话去重纠错调用，统一 analysis 回传。
+6. PR-F：LLM 错误统一映射 `AnalysisError`。
+7. PR-G：跟读评测上传用户录音并调用 Tencent SOE。
+8. PR-H：Tencent SOE 错误映射和前端 inline 展示。
+9. PR-I：Summary 接入真实 analysis/pronunciation 结果。
+10. PR-J：真实服务 smoke report 和手动测试清单更新。
+
+### 后续执行注意事项
+
+- 原始计划保留作为历史，不再覆盖删除。
+- 每次推进新任务时，以本节“新的执行计划”为当前优先级。
+- 默认测试必须保持稳定、离线、可复现。
+- 真实 key 不能写进 README、plan、测试输出或报告。
+- 腾讯 SOE 是发音评测，不是 ASR；ASR provider 要单独处理。
+- 浏览器录音格式和腾讯/whisper 需要的 WAV 格式不同，转码链路是必须项。
