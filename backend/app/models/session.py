@@ -54,6 +54,7 @@ class Session(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     scenario_id: str = Field(min_length=1)
+    custom_scenario: Scenario | None = None
     status: SessionStatus = SessionStatus.ACTIVE
     created_at: datetime = Field(default_factory=utc_now)
     ended_at: datetime | None = None

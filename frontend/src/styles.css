@@ -19,11 +19,13 @@ body {
 }
 
 button,
+input,
 textarea {
   font: inherit;
 }
 
 button:disabled,
+input:disabled,
 textarea:disabled {
   cursor: not-allowed;
   opacity: 0.55;
@@ -195,7 +197,8 @@ h3 {
   text-transform: uppercase;
 }
 
-.scenario-select-label select {
+.scenario-select-label select,
+.scenario-select-label input {
   background: #ffffff;
   border: 1px solid #cbd4cf;
   border-radius: 6px;
@@ -203,6 +206,9 @@ h3 {
   font: inherit;
   min-height: 42px;
   padding: 8px 10px;
+}
+
+.scenario-select-label select {
   text-transform: none;
 }
 

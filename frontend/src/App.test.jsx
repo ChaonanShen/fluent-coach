@@ -28,10 +28,12 @@ const openingTurn = {
 
 let pronunciationUploadFails = false;
 let cloudTtsEnabled = false;
+let sessionRequestBodies = [];
 
 beforeEach(() => {
   pronunciationUploadFails = false;
   cloudTtsEnabled = false;
+  sessionRequestBodies = [];
   window.speechSynthesis = {
     cancel: vi.fn(),
     getVoices: vi.fn(() => [
@@ -129,10 +131,41 @@ beforeEach(() => {
       });
     }
     if (url === '/api/sessions') {
+      const requestBody = JSON.parse(options.body);
+      sessionRequestBodies.push(requestBody);
+      if (requestBody.scenario_id === 'custom') {
+        const customScenario = {
+          ...scenario,
+          id: 'custom_airport',
+          name: 'Custom',
+          user_role: `Learner practicing: ${requestBody.custom_topic}`,
+          opening_line: `Let's practice ${requestBody.custom_topic}. Could you start with what you want to say first?`,
+          conversation_goals: [`Practice a realistic conversation about ${requestBody.custom_topic}`],
+        };
+        return jsonResponse({
+          session: {
+            id: 'session_1',
+            scenario_id: 'custom_airport',
+            custom_scenario: customScenario,
+            status: 'active',
+            created_at: '2026-06-05T00:00:00Z',
+            ended_at: null,
+            turns: [{
+              ...openingTurn,
+              text: customScenario.opening_line,
+            }],
+          },
+          scenario: customScenario,
+          opening_line: customScenario.opening_line,
+          conversation_goals: customScenario.conversation_goals,
+          target_expressions: customScenario.target_expressions,
+        });
+      }
       return jsonResponse({
         session: {
           id: 'session_1',
           scenario_id: 'interview',
+          custom_scenario: null,
           status: 'active',
           created_at: '2026-06-05T00:00:00Z',
           ended_at: null,
@@ -274,6 +307,27 @@ test('loads scenarios and starts a session', async () => {
 
   expect(await screen.findByText(scenario.opening_line)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'End' })).toBeInTheDocument();
+});
+
+test('starts a custom scenario from the conversation toolbar', async () => {
+  render(<App />);
+
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Scenario' }), {
+    target: { value: 'custom' },
+  });
+  expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Custom scenario'), {
+    target: { value: 'airport check-in' },
+  });
+  expect(screen.getByText('Practice a realistic conversation about airport check-in')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+  expect(await screen.findByText("Let's practice airport check-in. Could you start with what you want to say first?"))
+    .toBeInTheDocument();
+  expect(sessionRequestBodies.at(-1)).toEqual({
+    scenario_id: 'custom',
+    custom_topic: 'airport check-in',
+  });
 });
 
 test('sends a text turn and shows correction feedback', async () => {

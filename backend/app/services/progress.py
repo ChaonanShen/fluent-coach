@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from backend.app.api import ProgressPoint, ProgressResponse
-from backend.app.services.scenarios import get_scenario
+from backend.app.services.scenarios import resolve_session_scenario
 from backend.app.services.storage import SQLiteLogStore, log_store
 from backend.app.services.summary import summary_service
 
@@ -13,7 +13,7 @@ class ProgressService:
     def get_progress(self) -> ProgressResponse:
         points: list[ProgressPoint] = []
         for session in sorted(self.storage.list_sessions(), key=lambda item: item.created_at):
-            scenario = get_scenario(session.scenario_id)
+            scenario = resolve_session_scenario(session)
             if scenario is None:
                 continue
             summary = summary_service.summarize(session=session, scenario=scenario)

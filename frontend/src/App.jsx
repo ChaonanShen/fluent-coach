@@ -24,6 +24,7 @@ async function request(path, options = {}) {
 export default function App() {
   const [scenarios, setScenarios] = useState([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState('');
+  const [customScenarioText, setCustomScenarioText] = useState('');
   const [session, setSession] = useState(null);
   const [inputText, setInputText] = useState('');
   const [latestCorrection, setLatestCorrection] = useState(null);
@@ -85,15 +86,29 @@ export default function App() {
     stopReadingStream();
   }, []);
 
-  const selectedScenario = useMemo(
-    () => scenarios.find((scenario) => scenario.id === selectedScenarioId),
-    [scenarios, selectedScenarioId],
-  );
+  const selectedScenario = useMemo(() => {
+    const scenario = scenarios.find((item) => item.id === selectedScenarioId);
+    if (scenario || selectedScenarioId !== 'custom') {
+      return scenario;
+    }
+    const topic = customScenarioText.trim();
+    return {
+      id: 'custom',
+      name: 'Custom',
+      user_role: topic ? `Custom practice: ${topic}` : 'Custom conversation practice',
+      conversation_goals: topic
+        ? [`Practice a realistic conversation about ${topic}`, 'Answer naturally and ask a follow-up question']
+        : ['Describe the scenario you want to practice'],
+    };
+  }, [customScenarioText, scenarios, selectedScenarioId]);
 
   const turns = session?.turns || [];
   const sessionEnded = session?.status === 'ended';
   const sessionActive = Boolean(session && !sessionEnded);
   const sessionActionLabel = sessionActive ? 'End' : 'Start';
+  const canStartSession = Boolean(
+    selectedScenarioId && (selectedScenarioId !== 'custom' || customScenarioText.trim().length >= 3),
+  );
 
   useEffect(() => {
     const list = messageListRef.current;
@@ -178,9 +193,13 @@ export default function App() {
     resetSessionDerivedState();
     setStatus('Starting');
     try {
+      const payload = { scenario_id: selectedScenarioId };
+      if (selectedScenarioId === 'custom') {
+        payload.custom_topic = customScenarioText.trim();
+      }
       const body = await request('/api/sessions', {
         method: 'POST',
-        body: JSON.stringify({ scenario_id: selectedScenarioId }),
+        body: JSON.stringify(payload),
       });
       setSession(body.session);
       await refreshMistakes();
@@ -667,14 +686,24 @@ export default function App() {
                     {scenario.name}
                   </option>
                 ))}
-                <option disabled value="custom">
+                <option value="custom">
                   Custom
                 </option>
               </select>
+              {selectedScenarioId === 'custom' ? (
+                <input
+                  aria-label="Custom scenario"
+                  disabled={sessionActive}
+                  maxLength={160}
+                  onChange={(event) => setCustomScenarioText(event.target.value)}
+                  placeholder="e.g. airport check-in"
+                  value={customScenarioText}
+                />
+              ) : null}
             </label>
             <button
               className={sessionActive ? 'secondary-action session-action' : 'primary-action session-action'}
-              disabled={!selectedScenarioId || status === 'Starting' || status === 'Ending'}
+              disabled={!canStartSession || status === 'Starting' || status === 'Ending'}
               onClick={sessionActive ? endSession : startSession}
               type="button"
             >

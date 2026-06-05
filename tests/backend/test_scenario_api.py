@@ -49,6 +49,41 @@ def test_create_session_rejects_unknown_scenario() -> None:
     assert response.json()["detail"] == "Unknown scenario"
 
 
+def test_create_custom_session_keeps_scenario_for_follow_up_calls() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/sessions",
+        json={"scenario_id": "custom", "custom_topic": "airport check-in"},
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    session_id = body["session"]["id"]
+    assert body["session"]["scenario_id"].startswith("custom_")
+    assert body["session"]["custom_scenario"]["user_role"] == "Learner practicing: airport check-in"
+    assert "airport check-in" in body["opening_line"]
+
+    turn_response = client.post(
+        f"/api/sessions/{session_id}/turns/text",
+        json={"text": "I need to check in for my flight to Seattle."},
+    )
+    assert turn_response.status_code == 200
+    assert turn_response.json()["ai_turn"]["speaker"] == "ai"
+
+    summary_response = client.get(f"/api/sessions/{session_id}/summary")
+    assert summary_response.status_code == 200
+    assert summary_response.json()["task_completion_rate"] > 0
+
+
+def test_create_custom_session_requires_topic() -> None:
+    client = TestClient(app)
+
+    response = client.post("/api/sessions", json={"scenario_id": "custom"})
+
+    assert response.status_code == 422
+
+
 def test_end_session_transitions_status() -> None:
     client = TestClient(app)
     created = client.post("/api/sessions", json={"scenario_id": "meeting"}).json()

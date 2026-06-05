@@ -23,6 +23,7 @@ class CreateSessionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     scenario_id: str = Field(min_length=1)
+    custom_topic: str | None = Field(default=None, min_length=3, max_length=160)
 
 
 class SessionResponse(BaseModel):

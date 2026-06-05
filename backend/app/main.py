@@ -46,7 +46,7 @@ from backend.app.services.grammar import grammar_service
 from backend.app.services.mistakes import mistake_service
 from backend.app.services.pronunciation import pronunciation_provider
 from backend.app.services.progress import progress_service
-from backend.app.services.scenarios import get_scenario, list_scenarios
+from backend.app.services.scenarios import get_scenario, list_scenarios, make_custom_scenario, resolve_session_scenario
 from backend.app.services.sessions import session_store
 from backend.app.services.storage import log_store
 from backend.app.services.summary import summary_service
@@ -71,10 +71,17 @@ def scenarios() -> ScenarioListResponse:
 
 @app.post("/api/sessions", response_model=SessionResponse, status_code=201)
 def create_session(request: CreateSessionRequest) -> SessionResponse:
-    scenario = get_scenario(request.scenario_id)
+    custom_scenario = None
+    if request.scenario_id == "custom":
+        if request.custom_topic is None or not request.custom_topic.strip():
+            raise HTTPException(status_code=422, detail="Custom topic is required")
+        scenario = make_custom_scenario(request.custom_topic)
+        custom_scenario = scenario
+    else:
+        scenario = get_scenario(request.scenario_id)
     if scenario is None:
         raise HTTPException(status_code=404, detail="Unknown scenario")
-    session = session_store.create(scenario)
+    session = session_store.create(scenario, custom_scenario=custom_scenario)
     return SessionResponse(
         session=session,
         scenario=scenario,
@@ -89,7 +96,7 @@ def end_session(session_id: str) -> SessionResponse:
     session = session_store.end(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Unknown session")
-    scenario = get_scenario(session.scenario_id)
+    scenario = resolve_session_scenario(session)
     if scenario is None:
         raise HTTPException(status_code=500, detail="Session references an unknown scenario")
     return SessionResponse(
@@ -121,7 +128,7 @@ def add_text_turn(session_id: str, request: TextTurnRequest) -> TextTurnResponse
     session = session_store.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Unknown session")
-    scenario = get_scenario(session.scenario_id)
+    scenario = resolve_session_scenario(session)
     if scenario is None:
         raise HTTPException(status_code=500, detail="Session references an unknown scenario")
     user_turn, ai_turn, reply = dialogue_service.add_text_turns(
@@ -216,7 +223,7 @@ def get_session_summary(session_id: str) -> SessionSummary:
     session = session_store.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Unknown session")
-    scenario = get_scenario(session.scenario_id)
+    scenario = resolve_session_scenario(session)
     if scenario is None:
         raise HTTPException(status_code=500, detail="Session references an unknown scenario")
     return summary_service.summarize(session=session, scenario=scenario)
@@ -273,7 +280,7 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
         await websocket.send_json({"type": "error", "code": "unknown_session", "message": "Unknown session"})
         await websocket.close()
         return
-    scenario = get_scenario(session.scenario_id)
+    scenario = resolve_session_scenario(session)
     if scenario is None:
         await websocket.send_json(
             {

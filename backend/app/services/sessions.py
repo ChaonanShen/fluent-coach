@@ -9,8 +9,8 @@ class SessionStore:
         self._sessions: dict[str, Session] = {}
         self._storage = storage
 
-    def create(self, scenario: Scenario) -> Session:
-        session = Session(scenario_id=scenario.id)
+    def create(self, scenario: Scenario, *, custom_scenario: Scenario | None = None) -> Session:
+        session = Session(scenario_id=scenario.id, custom_scenario=custom_scenario)
         session.add_turn(speaker=TurnSpeaker.AI, text=scenario.opening_line)
         self._sessions[session.id] = session
         if self._storage is not None:
