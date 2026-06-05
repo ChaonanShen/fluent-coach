@@ -1,10 +1,16 @@
+# Raw datasets are huge and never committed; they are regenerated locally.
 dataset/
+# Local secrets; only the template (.env.example) is tracked.
 .env
 .env.*
 !.env.example
+# Extracted fixtures are derived from the tracked bundle, so they stay ignored.
 fixtures/audio/
 fixtures/generated/
-fixture-subset.zip
+# fixture-subset.zip IS tracked on purpose: it is small and lets anyone run
+# the tests without downloading the raw datasets. Restore it with
+# `py scripts/extract_fixtures.py`.
+prepare_out.txt
 __pycache__/
 .pytest_cache/
 .ruff_cache/
