@@ -5,6 +5,7 @@ from backend.app.services.pronunciation import (
     build_tencent_signed_url,
     infer_voice_format,
     normalize_tencent_score,
+    tencent_signed_url_diagnostics,
 )
 
 
@@ -33,6 +34,31 @@ def test_build_tencent_signed_url_uses_expected_path_and_query(monkeypatch) -> N
     assert query["timestamp"] == ["1000"]
     assert query["nonce"] == ["42"]
     assert "signature" in query
+
+
+def test_tencent_signed_url_diagnostics_redacts_sensitive_values(monkeypatch) -> None:
+    monkeypatch.setenv("TENCENT_APP_ID", "123456")
+    monkeypatch.setenv("TENCENT_SECRET_ID", "secret-id")
+    monkeypatch.setenv("TENCENT_SECRET_KEY", "secret-key")
+
+    url = build_tencent_signed_url(
+        ref_text="HELLO WORLD",
+        voice_format=1,
+        timestamp=1000,
+        nonce=42,
+        voice_id="voice-1",
+    )
+
+    diagnostics = tencent_signed_url_diagnostics(url)
+
+    assert diagnostics["host"] == "soe.cloud.tencent.com"
+    assert diagnostics["path_shape"] == "/soe/api/<appid>"
+    assert diagnostics["has_signature"] is True
+    assert diagnostics["signature_chars"] > 0
+    assert diagnostics["has_secretid"] is True
+    assert diagnostics["ref_text_chars"] == len("HELLO WORLD")
+    assert "123456" not in str(diagnostics)
+    assert "secret-id" not in str(diagnostics)
 
 
 def test_tencent_result_maps_to_internal_pronunciation_model() -> None:

@@ -11,7 +11,7 @@ import uuid
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from backend.app.core.fixtures import load_generated_manifest, resolve_fixture_audio
 from backend.app.models import (
@@ -291,6 +291,44 @@ def build_tencent_signed_url(
     ).decode("utf-8")
     request_query = urlencode({**params, "signature": signature})
     return f"wss://{host}{path_with_appid}?{request_query}"
+
+
+def tencent_signed_url_diagnostics(url: str) -> dict[str, object]:
+    parsed = urlsplit(url)
+    query = parse_qs(parsed.query)
+
+    def first(name: str) -> str | None:
+        values = query.get(name)
+        return values[0] if values else None
+
+    return {
+        "scheme": parsed.scheme,
+        "host": parsed.netloc,
+        "path_shape": _redact_appid_path(parsed.path),
+        "query_keys": sorted(query.keys()),
+        "has_signature": bool(first("signature")),
+        "signature_chars": len(first("signature") or ""),
+        "has_secretid": bool(first("secretid")),
+        "ref_text_chars": len(first("ref_text") or ""),
+        "server_engine_type": first("server_engine_type"),
+        "eval_mode": first("eval_mode"),
+        "text_mode": first("text_mode"),
+        "voice_format": first("voice_format"),
+        "score_coeff": first("score_coeff"),
+        "timestamp_present": bool(first("timestamp")),
+        "expired_present": bool(first("expired")),
+        "nonce_present": bool(first("nonce")),
+        "voice_id_present": bool(first("voice_id")),
+    }
+
+
+def _redact_appid_path(path: str) -> str:
+    parts = path.strip("/").split("/")
+    if not parts:
+        return "/"
+    if parts[-1].isdigit():
+        parts[-1] = "<appid>"
+    return "/" + "/".join(parts)
 
 
 def require_env(name: str) -> str:

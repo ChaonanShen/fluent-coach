@@ -24,6 +24,8 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
+from backend.app.services.pronunciation import tencent_signed_url_diagnostics
+
 
 DEFAULT_WS_URL = "wss://soe.cloud.tencent.com/soe/api"
 DEFAULT_MANIFEST = Path("fixtures/generated/speechocean762_subset.json")
@@ -364,6 +366,42 @@ def print_assessment(result: object, raw_result: bool) -> None:
             print(f"    {text}: {accuracy:.2f}")
 
 
+def audio_diagnostics(audio_path: Path | None, voice_format: int | None) -> dict[str, object]:
+    if audio_path is None:
+        return {
+            "selected": False,
+            "voice_format": voice_format,
+        }
+    suffix = audio_path.suffix.lower()
+    return {
+        "selected": True,
+        "path_suffix": suffix,
+        "exists": audio_path.exists(),
+        "bytes": audio_path.stat().st_size if audio_path.exists() else None,
+        "voice_format": voice_format,
+        "looks_like_wav": _has_wav_header(audio_path),
+    }
+
+
+def print_safe_diagnostics(*, url: str, args: argparse.Namespace) -> None:
+    diagnostics = {
+        "signed_url": tencent_signed_url_diagnostics(url),
+        "audio": audio_diagnostics(args.audio, args.voice_format),
+        "fixture_id": args.fixture_id,
+        "ref_text_chars": len(args.ref_text or ""),
+        "timeout_seconds": args.timeout,
+        "result_timeout_seconds": args.result_timeout,
+    }
+    print("safe_diagnostics=" + json.dumps(diagnostics, ensure_ascii=False, indent=2))
+
+
+def _has_wav_header(audio_path: Path) -> bool:
+    if not audio_path.exists() or audio_path.stat().st_size < 12:
+        return False
+    header = audio_path.read_bytes()[:12]
+    return header[:4] == b"RIFF" and header[8:12] == b"WAVE"
+
+
 def summarize_response(
     label: str,
     message: dict[str, object],
@@ -434,6 +472,9 @@ def run(args: argparse.Namespace) -> int:
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 2
+
+    if args.verbose_safe:
+        print_safe_diagnostics(url=url, args=args)
 
     print("Connecting to Tencent SOE WebSocket...")
     print(f"host=soe.cloud.tencent.com voice_id={voice_id}")
@@ -513,6 +554,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--raw-result",
         action="store_true",
         help="Print the full Tencent assessment result JSON.",
+    )
+    parser.add_argument(
+        "--verbose-safe",
+        action="store_true",
+        help="Print redacted signing/audio diagnostics before connecting.",
     )
     parser.add_argument(
         "--server-engine-type",
