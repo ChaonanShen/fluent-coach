@@ -3,12 +3,14 @@ from fastapi.testclient import TestClient
 from pathlib import Path
 
 from backend.app.main import app
+from backend.app.services.analysis import analysis_store
 from backend.app.services.sessions import session_store
 
 
 @pytest.fixture(autouse=True)
 def clear_session_store() -> None:
     session_store.clear()
+    analysis_store.clear()
 
 
 def test_audio_websocket_returns_asr_and_reply_events() -> None:
@@ -111,6 +113,45 @@ def test_audio_websocket_transcribes_stored_audio_path(monkeypatch, tmp_path) ->
     assert seen_paths[0].suffix == ".wav"
     assert seen_paths[0].read_bytes() == b"fake-wav-audio"
     assert tmp_path in seen_paths[0].parents
+
+
+def test_audio_websocket_reports_asr_provider_error(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("APP_AUDIO_DIR", str(tmp_path))
+
+    class BrokenASR:
+        provider_name = "faster_whisper"
+
+        def partial(self, expected_text=None):
+            del expected_text
+            return ""
+
+        def transcribe(self, audio_bytes, expected_text=None):
+            del audio_bytes, expected_text
+            raise AssertionError("websocket should transcribe stored files")
+
+        def transcribe_file(self, audio_path, expected_text=None):
+            del audio_path, expected_text
+            raise RuntimeError("faster-whisper is not installed")
+
+    monkeypatch.setattr("backend.app.main.asr_provider", BrokenASR())
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json({"type": "start_turn", "mime_type": "audio/wav"})
+        websocket.receive_json()
+        websocket.send_bytes(b"fake-wav-audio")
+        websocket.send_json({"type": "end_turn"})
+        event = websocket.receive_json()
+
+    assert event["type"] == "analysis.error"
+    assert event["stage"] == "asr"
+    assert event["error"]["code"] == "provider_dependency_missing"
+    assert event["error"]["stage"] == "asr"
+
+    analysis = client.get(f"/api/sessions/{session_id}/analysis").json()
+    assert analysis["errors"][0]["code"] == "provider_dependency_missing"
 
 
 def test_audio_websocket_rejects_empty_audio_turn() -> None:

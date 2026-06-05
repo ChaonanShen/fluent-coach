@@ -15,6 +15,7 @@ DEFAULT_AUDIO_ROOT = Path(".local/audio")
 class StoredAudio:
     raw_path: Path
     wav_path: Path | None
+    conversion_error: str | None = None
 
     @property
     def preferred_path(self) -> Path:
@@ -35,15 +36,15 @@ def save_turn_audio(
     raw_path = session_dir / f"{uuid4()}.{suffix}"
     raw_path.write_bytes(audio_bytes)
 
-    wav_path = _convert_to_wav(raw_path)
-    return StoredAudio(raw_path=raw_path, wav_path=wav_path)
+    wav_path, conversion_error = _convert_to_wav(raw_path)
+    return StoredAudio(raw_path=raw_path, wav_path=wav_path, conversion_error=conversion_error)
 
 
-def _convert_to_wav(audio_path: Path) -> Path | None:
+def _convert_to_wav(audio_path: Path) -> tuple[Path | None, str | None]:
     if audio_path.suffix.lower() == ".wav":
-        return audio_path
+        return audio_path, None
     if shutil.which("ffmpeg") is None:
-        return None
+        return None, "ffmpeg_missing"
 
     wav_path = audio_path.with_suffix(".wav")
     completed = subprocess.run(
@@ -64,8 +65,8 @@ def _convert_to_wav(audio_path: Path) -> Path | None:
     )
     if completed.returncode != 0 or not wav_path.exists():
         wav_path.unlink(missing_ok=True)
-        return None
-    return wav_path
+        return None, "transcode_failed"
+    return wav_path, None
 
 
 def _suffix_for_mime_type(mime_type: str | None) -> str:

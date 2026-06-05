@@ -154,11 +154,14 @@ def assess_pronunciation(request: PronunciationAssessRequest) -> PronunciationAs
             fixture_id=request.fixture_id,
         )
     except RuntimeError as exc:
-        raise _provider_http_error(
+        error = _provider_analysis_error(
             stage=AnalysisStage.PRONUNCIATION,
             exc=exc,
             provider_name=_provider_name(pronunciation_provider),
-        ) from exc
+            fallback_applied=False,
+        )
+        _record_analysis_error_for_session(request.session_id, error)
+        raise _analysis_http_error(error) from exc
     if assessment is None:
         raise HTTPException(status_code=404, detail="Pronunciation fixture not found")
     log_store.save_pronunciation_assessment(assessment)
@@ -188,11 +191,14 @@ def assess_uploaded_pronunciation(request: PronunciationUploadRequest) -> Pronun
             audio_file=str(stored_audio.preferred_path.resolve()),
         )
     except RuntimeError as exc:
-        raise _provider_http_error(
+        error = _provider_analysis_error(
             stage=AnalysisStage.PRONUNCIATION,
             exc=exc,
             provider_name=_provider_name(pronunciation_provider),
-        ) from exc
+            fallback_applied=False,
+        )
+        _record_analysis_error_for_session(request.session_id, error)
+        raise _analysis_http_error(error) from exc
     if assessment is None:
         raise HTTPException(status_code=404, detail="Pronunciation assessment failed")
     log_store.save_pronunciation_assessment(assessment)
@@ -314,7 +320,70 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     audio_bytes=bytes(audio),
                     mime_type=audio_mime_type,
                 )
-                transcript = asr_provider.transcribe_file(stored_audio.preferred_path, expected_text)
+                if stored_audio.conversion_error and _provider_name(asr_provider) != "fake":
+                    error = _provider_analysis_error(
+                        stage=AnalysisStage.ASR,
+                        exc=RuntimeError(stored_audio.conversion_error),
+                        provider_name=_provider_name(asr_provider),
+                        fallback_applied=False,
+                    )
+                    analysis_store.add_error(session.id, error)
+                    await websocket.send_json(
+                        {
+                            "type": "analysis.error",
+                            "stage": "asr",
+                            "error": error.model_dump(mode="json"),
+                        }
+                    )
+                    audio.clear()
+                    expected_text = None
+                    audio_mime_type = None
+                    force_analysis_error = False
+                    continue
+                try:
+                    transcript = asr_provider.transcribe_file(stored_audio.preferred_path, expected_text)
+                except RuntimeError as exc:
+                    error = _provider_analysis_error(
+                        stage=AnalysisStage.ASR,
+                        exc=exc,
+                        provider_name=_provider_name(asr_provider),
+                        fallback_applied=False,
+                    )
+                    analysis_store.add_error(session.id, error)
+                    await websocket.send_json(
+                        {
+                            "type": "analysis.error",
+                            "stage": "asr",
+                            "error": error.model_dump(mode="json"),
+                        }
+                    )
+                    audio.clear()
+                    expected_text = None
+                    audio_mime_type = None
+                    force_analysis_error = False
+                    continue
+                if not transcript.strip():
+                    error = AnalysisError(
+                        stage=AnalysisStage.ASR,
+                        code="asr_no_speech",
+                        user_message_zh="没有识别到有效语音，请重新录制这一句。",
+                        severity=AnalysisErrorSeverity.WARNING,
+                        fallback_applied=False,
+                        provider=_provider_name(asr_provider),
+                    )
+                    analysis_store.add_error(session.id, error)
+                    await websocket.send_json(
+                        {
+                            "type": "analysis.error",
+                            "stage": "asr",
+                            "error": error.model_dump(mode="json"),
+                        }
+                    )
+                    audio.clear()
+                    expected_text = None
+                    audio_mime_type = None
+                    force_analysis_error = False
+                    continue
                 await websocket.send_json({"type": "asr.final", "text": transcript})
                 user_turn, ai_turn, reply = dialogue_service.add_text_turns(
                     session=session,
@@ -382,26 +451,30 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
         return
 
 
-def _provider_http_error(
+def _provider_analysis_error(
     *,
     stage: AnalysisStage,
     exc: RuntimeError,
     provider_name: str | None = None,
-) -> HTTPException:
+    fallback_applied: bool,
+) -> AnalysisError:
     code, user_message_zh = _classify_provider_error(
         stage=stage,
         provider_name=provider_name,
         exc=exc,
     )
-    error = AnalysisError(
+    return AnalysisError(
         stage=stage,
         code=code,
         user_message_zh=user_message_zh,
         severity=AnalysisErrorSeverity.WARNING,
-        fallback_applied=False,
+        fallback_applied=fallback_applied,
         provider=provider_name or stage.value,
         raw_code=type(exc).__name__,
     )
+
+
+def _analysis_http_error(error: AnalysisError) -> HTTPException:
     return HTTPException(status_code=502, detail=error.model_dump(mode="json"))
 
 
@@ -426,6 +499,15 @@ def _record_pronunciation_for_session(
     analysis_store.add_pronunciation_result(session_id, assessment)
 
 
+def _record_analysis_error_for_session(
+    session_id: str | None,
+    error: AnalysisError,
+) -> None:
+    if session_id is None:
+        return
+    analysis_store.add_error(session_id, error)
+
+
 def _classify_provider_error(
     *,
     stage: AnalysisStage,
@@ -434,7 +516,24 @@ def _classify_provider_error(
 ) -> tuple[str, str]:
     if stage == AnalysisStage.PRONUNCIATION and provider_name == "tencent_soe":
         return _classify_tencent_soe_error(exc)
+    if stage == AnalysisStage.ASR:
+        return _classify_asr_error(exc)
     return "provider_request_failed", "外部服务暂时不可用，请稍后重试。"
+
+
+def _classify_asr_error(exc: RuntimeError) -> tuple[str, str]:
+    message = str(exc).lower()
+    if "faster-whisper" in message or "not installed" in message:
+        return "provider_dependency_missing", "本地语音识别依赖缺失，请安装 faster-whisper 后重试。"
+    if "ffmpeg_missing" in message or "ffmpeg" in message:
+        return "provider_dependency_missing", "音频转码工具 ffmpeg 缺失，请安装后重试。"
+    if "transcode_failed" in message or any(token in message for token in ["decode", "codec", "invalid audio"]):
+        return "invalid_audio", "音频格式暂时无法识别，请重新录音后再试。"
+    if "model" in message or "no such file" in message or "not found" in message:
+        return "provider_model_unavailable", "本地 ASR 模型不可用，请检查模型路径。"
+    if "timeout" in message or "timed out" in message:
+        return "provider_timeout", "语音识别超时，请稍后重试。"
+    return "provider_request_failed", "语音识别暂时不可用，请稍后重试。"
 
 
 def _classify_tencent_soe_error(exc: RuntimeError) -> tuple[str, str]:

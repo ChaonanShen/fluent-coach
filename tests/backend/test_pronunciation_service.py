@@ -126,6 +126,34 @@ def test_pronunciation_assess_maps_provider_runtime_error(monkeypatch) -> None:
     assert detail["user_message_zh"]
 
 
+def test_pronunciation_provider_error_is_linked_to_session(monkeypatch) -> None:
+    class BrokenProvider:
+        provider_name = "tencent_soe"
+
+        def assess(self, **kwargs):
+            del kwargs
+            raise RuntimeError("Tencent SOE timed out waiting for final assessment result")
+
+    monkeypatch.setattr("backend.app.main.pronunciation_provider", BrokenProvider())
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    response = client.post(
+        "/api/pronunciation/assess",
+        json={
+            "reference_text": "THEN HE WENT TO THEME PARK",
+            "audio_file": "sample.wav",
+            "session_id": session_id,
+        },
+    )
+
+    assert response.status_code == 502
+    analysis = client.get(f"/api/sessions/{session_id}/analysis").json()
+    assert analysis["errors"][0]["stage"] == "pronunciation"
+    assert analysis["errors"][0]["code"] == "provider_timeout"
+
+
 @pytest.mark.parametrize(
     ("message", "expected_code"),
     [
