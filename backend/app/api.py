@@ -71,3 +71,27 @@ class SessionAnalysisResponse(BaseModel):
     session_id: str
     grammar_results: list[GrammarCorrection]
     errors: list[AnalysisError]
+
+
+class ProgressPoint(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    scenario_id: str
+    created_at: str
+    grammar_score: float | None
+    pronunciation_score: float | None
+    fluency_score: float | None
+    vocabulary_score: float | None
+    task_completion_rate: float
+
+
+class ProgressResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_count: int
+    average_grammar_score: float | None
+    average_fluency_score: float | None
+    average_vocabulary_score: float | None
+    average_task_completion_rate: float | None
+    trend: list[ProgressPoint]

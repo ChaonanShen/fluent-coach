@@ -7,6 +7,7 @@ from backend.app.api import (
     CreateSessionRequest,
     GrammarCheckRequest,
     MistakeListResponse,
+    ProgressResponse,
     PronunciationAssessRequest,
     ScenarioListResponse,
     SessionAnalysisResponse,
@@ -30,6 +31,7 @@ from backend.app.services.dialogue import dialogue_service
 from backend.app.services.grammar import grammar_service
 from backend.app.services.mistakes import mistake_service
 from backend.app.services.pronunciation import pronunciation_provider
+from backend.app.services.progress import progress_service
 from backend.app.services.scenarios import get_scenario, list_scenarios
 from backend.app.services.sessions import session_store
 from backend.app.services.storage import log_store
@@ -176,6 +178,11 @@ def review_mistake(mistake_id: str) -> MistakeItem:
     if mistake is None:
         raise HTTPException(status_code=404, detail="Unknown mistake")
     return mistake
+
+
+@app.get("/api/progress", response_model=ProgressResponse)
+def get_progress() -> ProgressResponse:
+    return progress_service.get_progress()
 
 
 @app.websocket("/ws/sessions/{session_id}/audio")
