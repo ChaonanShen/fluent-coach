@@ -146,11 +146,14 @@ def add_text_turn(session_id: str, request: TextTurnRequest) -> TextTurnResponse
 
 @app.post("/api/pronunciation/assess", response_model=PronunciationAssessment)
 def assess_pronunciation(request: PronunciationAssessRequest) -> PronunciationAssessment:
-    assessment = pronunciation_provider.assess(
-        reference_text=request.reference_text,
-        audio_file=request.audio_file,
-        fixture_id=request.fixture_id,
-    )
+    try:
+        assessment = pronunciation_provider.assess(
+            reference_text=request.reference_text,
+            audio_file=request.audio_file,
+            fixture_id=request.fixture_id,
+        )
+    except RuntimeError as exc:
+        raise _provider_http_error(stage=AnalysisStage.PRONUNCIATION, exc=exc) from exc
     if assessment is None:
         raise HTTPException(status_code=404, detail="Pronunciation fixture not found")
     log_store.save_pronunciation_assessment(assessment)
@@ -172,10 +175,13 @@ def assess_uploaded_pronunciation(request: PronunciationUploadRequest) -> Pronun
         audio_bytes=audio_bytes,
         mime_type=request.mime_type,
     )
-    assessment = pronunciation_provider.assess(
-        reference_text=request.reference_text,
-        audio_file=str(stored_audio.preferred_path.resolve()),
-    )
+    try:
+        assessment = pronunciation_provider.assess(
+            reference_text=request.reference_text,
+            audio_file=str(stored_audio.preferred_path.resolve()),
+        )
+    except RuntimeError as exc:
+        raise _provider_http_error(stage=AnalysisStage.PRONUNCIATION, exc=exc) from exc
     if assessment is None:
         raise HTTPException(status_code=404, detail="Pronunciation assessment failed")
     log_store.save_pronunciation_assessment(assessment)
@@ -362,3 +368,16 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                 )
     except (WebSocketDisconnect, json.JSONDecodeError):
         return
+
+
+def _provider_http_error(*, stage: AnalysisStage, exc: RuntimeError) -> HTTPException:
+    error = AnalysisError(
+        stage=stage,
+        code="provider_request_failed",
+        user_message_zh="外部服务暂时不可用，请稍后重试。",
+        severity=AnalysisErrorSeverity.WARNING,
+        fallback_applied=False,
+        provider=stage.value,
+        raw_code=type(exc).__name__,
+    )
+    return HTTPException(status_code=502, detail=error.model_dump(mode="json"))

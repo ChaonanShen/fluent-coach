@@ -10,7 +10,11 @@ async function request(path, options = {}) {
   });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(body.detail || `Request failed: ${response.status}`);
+    const detail = body.detail;
+    if (detail && typeof detail === 'object') {
+      throw new Error(detail.user_message_zh || detail.code || `Request failed: ${response.status}`);
+    }
+    throw new Error(detail || `Request failed: ${response.status}`);
   }
   return response.json();
 }

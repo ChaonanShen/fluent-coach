@@ -104,6 +104,27 @@ def test_pronunciation_assess_upload_rejects_invalid_base64() -> None:
     assert response.json()["detail"] == "Invalid audio_base64"
 
 
+def test_pronunciation_assess_maps_provider_runtime_error(monkeypatch) -> None:
+    class BrokenProvider:
+        def assess(self, **kwargs):
+            del kwargs
+            raise RuntimeError("provider timeout")
+
+    monkeypatch.setattr("backend.app.main.pronunciation_provider", BrokenProvider())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/pronunciation/assess",
+        json={"reference_text": "THEN HE WENT TO THEME PARK", "audio_file": "sample.wav"},
+    )
+
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert detail["stage"] == "pronunciation"
+    assert detail["code"] == "provider_request_failed"
+    assert detail["user_message_zh"]
+
+
 def test_pronunciation_assess_api_rejects_unknown_fixture() -> None:
     client = TestClient(app)
 
