@@ -503,3 +503,26 @@ WebSocket 事件：
 - 真实 key 不能写进 README、plan、测试输出或报告。
 - 腾讯 SOE 是发音评测，不是 ASR；ASR provider 要单独处理。
 - 浏览器录音格式和腾讯/whisper 需要的 WAV 格式不同，转码链路是必须项。
+
+### 2026-06-05 后续执行记录
+
+以下为基于“新的执行计划”已经完成的小步提交：
+
+| 提交 | 对应计划 | 状态 | 说明 |
+|---|---|---|---|
+| `1e57f7b` | PR-A | 已完成 | 后端自动加载 `.env`，`/api/health` 返回非敏感 provider 状态；默认测试禁用真实 provider。 |
+| `784e9f5` | PR-B | 已完成 | 前端 `Voice` 改为真实 `MediaRecorder` 录音，通过现有 WS 发送音频 chunk。 |
+| `4a421d4` | PR-C | 已完成 | 后端保存 WS 音频，尽力转 WAV，用户 turn 记录 `mode=audio` 和 `audio_path`。 |
+| `1e8a28e` | PR-D | 已完成基础 smoke | 增加 ASR provider smoke 脚本，`FasterWhisperASR` 支持直接转写 fixture 文件路径；本机未装 `faster-whisper`，真实模型 smoke 待依赖安装后执行。 |
+| `c04b19e` | PR-E | 已完成 | `/turns/text` 返回 `grammar_result`，前端不再重复调用 `/api/grammar/check`。 |
+| `799c15b` | PR-F | 已完成第一步 | LLM provider 异常统一映射为 `AnalysisError`，避免 provider 异常直接冒泡。 |
+| `f9740b8` | PR-G | 已完成后端入口 | 新增 `/api/pronunciation/assess/upload`，支持 `reference_text` + `audio_base64` + `mime_type`。 |
+| `3903904` | PR-G | 已完成前端入口 | Read Aloud 改为真实录音并上传用户音频进行评测。 |
+| `91882a9` | PR-H | 已完成第一步 | 发音 provider `RuntimeError` 映射为结构化 `AnalysisError`，前端可显示中文错误文案。 |
+
+当前仍未完成或需继续增强：
+
+- PR-D 的真实 faster-whisper smoke 还未在本机执行，因为当前环境未安装 `faster-whisper`，也没有系统 `ffmpeg`。
+- PR-H 目前只覆盖 provider `RuntimeError` 到 HTTP `AnalysisError`；腾讯 SOE 具体错误码细分、限流/超时/音频非法的 canonical code 还可继续细化。
+- PR-I 尚未开始：Summary 仍需优先使用 session 已有 analysis/pronunciation 结果，而不是重新跑 grammar。
+- PR-J 尚未开始：真实服务 smoke report 和手动测试清单还需补。
