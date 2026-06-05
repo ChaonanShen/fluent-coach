@@ -146,6 +146,7 @@ def add_text_turn(session_id: str, request: TextTurnRequest) -> TextTurnResponse
 
 @app.post("/api/pronunciation/assess", response_model=PronunciationAssessment)
 def assess_pronunciation(request: PronunciationAssessRequest) -> PronunciationAssessment:
+    _ensure_known_session(request.session_id)
     try:
         assessment = pronunciation_provider.assess(
             reference_text=request.reference_text,
@@ -161,12 +162,14 @@ def assess_pronunciation(request: PronunciationAssessRequest) -> PronunciationAs
     if assessment is None:
         raise HTTPException(status_code=404, detail="Pronunciation fixture not found")
     log_store.save_pronunciation_assessment(assessment)
+    _record_pronunciation_for_session(request.session_id, assessment)
     mistake_service.add_from_pronunciation(assessment)
     return assessment
 
 
 @app.post("/api/pronunciation/assess/upload", response_model=PronunciationAssessment)
 def assess_uploaded_pronunciation(request: PronunciationUploadRequest) -> PronunciationAssessment:
+    _ensure_known_session(request.session_id)
     try:
         audio_bytes = base64.b64decode(request.audio_base64, validate=True)
     except (binascii.Error, ValueError) as exc:
@@ -193,6 +196,7 @@ def assess_uploaded_pronunciation(request: PronunciationUploadRequest) -> Pronun
     if assessment is None:
         raise HTTPException(status_code=404, detail="Pronunciation assessment failed")
     log_store.save_pronunciation_assessment(assessment)
+    _record_pronunciation_for_session(request.session_id, assessment)
     mistake_service.add_from_pronunciation(assessment)
     return assessment
 
@@ -215,6 +219,7 @@ def get_session_analysis(session_id: str) -> SessionAnalysisResponse:
     return SessionAnalysisResponse(
         session_id=session_id,
         grammar_results=analysis_store.grammar_results(session_id),
+        pronunciation_results=analysis_store.pronunciation_results(session_id),
         errors=analysis_store.errors(session_id),
     )
 
@@ -403,6 +408,22 @@ def _provider_http_error(
 def _provider_name(provider: object) -> str | None:
     value = getattr(provider, "provider_name", None)
     return value if isinstance(value, str) and value else None
+
+
+def _ensure_known_session(session_id: str | None) -> None:
+    if session_id is None:
+        return
+    if session_store.get(session_id) is None:
+        raise HTTPException(status_code=404, detail="Unknown session")
+
+
+def _record_pronunciation_for_session(
+    session_id: str | None,
+    assessment: PronunciationAssessment,
+) -> None:
+    if session_id is None:
+        return
+    analysis_store.add_pronunciation_result(session_id, assessment)
 
 
 def _classify_provider_error(

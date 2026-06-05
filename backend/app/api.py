@@ -2,7 +2,15 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from backend.app.models import AnalysisError, GrammarCorrection, MistakeItem, Scenario, Session, Turn
+from backend.app.models import (
+    AnalysisError,
+    GrammarCorrection,
+    MistakeItem,
+    PronunciationAssessment,
+    Scenario,
+    Session,
+    Turn,
+)
 
 
 class ScenarioListResponse(BaseModel):
@@ -58,6 +66,7 @@ class PronunciationAssessRequest(BaseModel):
     reference_text: str | None = Field(default=None, min_length=1)
     audio_file: str | None = Field(default=None, min_length=1)
     fixture_id: str | None = Field(default=None, min_length=1)
+    session_id: str | None = Field(default=None, min_length=1)
 
 
 class PronunciationUploadRequest(BaseModel):
@@ -66,6 +75,7 @@ class PronunciationUploadRequest(BaseModel):
     reference_text: str = Field(min_length=1)
     audio_base64: str = Field(min_length=1)
     mime_type: str | None = Field(default=None, min_length=1)
+    session_id: str | None = Field(default=None, min_length=1)
 
 
 class MistakeListResponse(BaseModel):
@@ -79,6 +89,7 @@ class SessionAnalysisResponse(BaseModel):
 
     session_id: str
     grammar_results: list[GrammarCorrection]
+    pronunciation_results: list[PronunciationAssessment]
     errors: list[AnalysisError]
 
 

@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from backend.app.core.fixtures import load_generated_manifest
 from backend.app.main import app
 from backend.app.services.analysis import analysis_store
 from backend.app.services.sessions import session_store
@@ -28,7 +29,38 @@ def test_text_turn_records_analysis_result_for_session() -> None:
     assert body["session_id"] == session_id
     assert body["grammar_results"]
     assert body["grammar_results"][0]["corrected_text"] == "I have been working in this field for three years."
+    assert body["pronunciation_results"] == []
     assert body["errors"] == []
+
+
+def test_pronunciation_assessment_can_be_linked_to_session_analysis() -> None:
+    client = TestClient(app)
+    item = load_generated_manifest("speechocean762")["items"][0]
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    response = client.post(
+        "/api/pronunciation/assess",
+        json={"fixture_id": item["id"], "session_id": session_id},
+    )
+
+    assert response.status_code == 200
+    analysis = client.get(f"/api/sessions/{session_id}/analysis").json()
+    assert analysis["pronunciation_results"][0]["reference_text"] == item["transcript"]
+    assert analysis["pronunciation_results"][0]["provider"] == "mock"
+
+
+def test_pronunciation_assessment_rejects_unknown_session_link() -> None:
+    client = TestClient(app)
+    item = load_generated_manifest("speechocean762")["items"][0]
+
+    response = client.post(
+        "/api/pronunciation/assess",
+        json={"fixture_id": item["id"], "session_id": "not-found"},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Unknown session"
 
 
 def test_analysis_api_rejects_unknown_session() -> None:
