@@ -1,0 +1,11 @@
+from __future__ import annotations
+
+import os
+
+
+if os.environ.get("APP_TEST_REAL_PROVIDERS") != "1":
+    os.environ["APP_AUTO_LOAD_DOTENV"] = "0"
+    os.environ["LLM_PROVIDER"] = "fake"
+    os.environ["PRON_PROVIDER"] = "mock"
+    os.environ["ASR_PROVIDER"] = "fake"
+    os.environ["TTS_PROVIDER"] = "browser"

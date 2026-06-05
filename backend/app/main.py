@@ -1,5 +1,9 @@
 import json
 
+from backend.app.core.env import load_dotenv, provider_status
+
+load_dotenv()
+
 from fastapi import FastAPI, HTTPException
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
@@ -48,6 +52,7 @@ def health() -> dict[str, object]:
     return {
         "status": "ok",
         "fixtures": get_fixture_status(),
+        "providers": provider_status(),
     }
 
 

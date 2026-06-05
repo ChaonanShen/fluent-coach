@@ -12,3 +12,9 @@ def test_health_reports_ready_fixtures() -> None:
     body = response.json()
     assert body["status"] == "ok"
     assert body["fixtures"]["ready"] is True
+    assert body["providers"]["llm_provider"] == "fake"
+    assert body["providers"]["llm_model"] is None
+    assert body["providers"]["asr_provider"] == "fake"
+    assert body["providers"]["pronunciation_provider"] == "mock"
+    assert body["providers"]["tts_provider"] == "browser"
+    assert body["providers"]["external_services_enabled"] is False

@@ -120,13 +120,10 @@ http://localhost:5173/
 默认发音评测使用 `PRON_PROVIDER=mock`，从 SpeechOcean762 fixture 回放确定性分数，
 因此 `make test` 不访问外部服务。
 
-若要在本地后端启用真实腾讯云 SOE，请先把 `.env` 中的值导出到当前 shell，再启动后端：
+本地后端启动时会自动读取项目根目录 `.env`。若 `.env` 中配置了真实腾讯云 SOE，可直接启动：
 
 ```bash
-set -a
-source .env
-set +a
-PRON_PROVIDER=tencent_soe make dev-backend
+make dev-backend
 ```
 
 真实 provider 会使用：
@@ -165,13 +162,9 @@ TTS 默认使用 `TTS_PROVIDER=browser`，前端通过浏览器 `speechSynthesis
 默认 `LLM_PROVIDER=fake`，不会访问网络；fixture 命中时仍优先使用确定性样例，
 便于测试复现。
 
-启用真实大模型：
+启用真实大模型时，把 OpenAI-compatible 配置写入 `.env` 后启动后端：
 
 ```bash
-export LLM_PROVIDER=openai_compatible
-export LLM_BASE_URL=https://your-llm-compatible-endpoint/v1
-export LLM_API_KEY=your-api-key
-export LLM_MODEL=your-model-name
 make dev-backend
 ```
 
