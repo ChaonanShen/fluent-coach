@@ -523,13 +523,14 @@ WebSocket 事件：
 | `91d4ac4` | PR-D | 已完成模型目录准备 | 新增 `models/` 目录说明和忽略规则，README 记录本地模型路径与 V100/CUDA smoke 示例。 |
 | `e28bef4` | PR-D | 已完成真实 CUDA smoke | `models/faster-whisper-small.en/` 已落位，V100/CUDA 上通过 `scripts/test_asr_provider.py`。 |
 | `d349116` | PR-D2 | 已完成 | WebSocket 音频回合改为使用保存/转码后的 `stored_audio.preferred_path` 调用文件级 ASR，并补默认离线测试验证路径调用。 |
+| `f5d7ca8` | PR-H2 | 已完成后端分类 | 腾讯 SOE 发音评测失败映射为稳定 canonical code，覆盖配置缺失、鉴权失败、连接失败、超时、限流和音频格式错误；默认测试通过 mock provider 覆盖。 |
 
 当前仍未完成或需继续增强：
 
 - PR-D 的依赖已在当前环境安装：`faster-whisper` 作为本地 ASR 推理库，`ffmpeg` 作为音频解码/转码工具。
 - PR-D 的模型文件已放入 `models/faster-whisper-small.en/`，并已通过 V100/CUDA smoke：
   `CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/faster-whisper-small.en ASR_DEVICE=cuda ASR_COMPUTE_TYPE=float16 python3 scripts/test_asr_provider.py`。
-- PR-H 目前只覆盖 provider `RuntimeError` 到 HTTP `AnalysisError`；腾讯 SOE 具体错误码细分、限流/超时/音频非法的 canonical code 还可继续细化。
+- PR-H2 后端腾讯 SOE 错误分类已完成；前端 inline 展示已有基础能力，后续 PR-K 继续补权限失败、WS error、pronunciation 502 等 UI 状态测试。
 - PR-I 尚未开始：Summary 仍需优先使用 session 已有 analysis/pronunciation 结果，而不是重新跑 grammar。
 - PR-J 尚未开始：真实服务 smoke report 和手动测试清单还需补。
 
