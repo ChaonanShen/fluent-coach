@@ -474,10 +474,13 @@ export default function App() {
         setStatus('In session');
       }
       if (message.type === 'analysis.result') {
-        setLatestCorrection(message.result);
+        if (message.stage === 'pronunciation') {
+          setPronunciation(message.result);
+        } else {
+          setLatestCorrection(message.result);
+        }
         refreshMistakes().catch(() => {});
         refreshProgress().catch(() => {});
-        closeVoiceSocket();
       }
       if (message.type === 'debug.timing') {
         setLatestTiming({
@@ -496,9 +499,11 @@ export default function App() {
         voiceErrorRef.current = true;
         pushAnalysisError(detail);
         setError(detail.user_message_zh || message.message || 'Analysis error');
-        setStatus('Error');
+        if (detail.stage === 'asr' || message.type === 'error') {
+          setStatus('Error');
+          closeVoiceSocket();
+        }
         setVoiceState('idle');
-        closeVoiceSocket();
       }
     };
     websocket.onerror = () => {
@@ -819,6 +824,10 @@ export default function App() {
                 <div>
                   <dt>Grammar</dt>
                   <dd>{formatMs(latestTiming.timings.grammar_ms)}</dd>
+                </div>
+                <div>
+                  <dt>Pronunciation</dt>
+                  <dd>{formatMs(latestTiming.timings.pronunciation_ms)}</dd>
                 </div>
                 <div>
                   <dt>Total</dt>

@@ -3,7 +3,13 @@ import time
 from fastapi.testclient import TestClient
 from pathlib import Path
 
-from backend.app.models import CorrectionTiming, GrammarCorrection, GrammarSeverity
+from backend.app.models import (
+    CorrectionTiming,
+    GrammarCorrection,
+    GrammarSeverity,
+    PronunciationAssessment,
+    PronunciationIssue,
+)
 from backend.app.main import app
 from backend.app.services.dialogue import DialogueService
 from backend.app.services.llm import FakeLLMClient
@@ -156,6 +162,66 @@ def test_audio_websocket_streams_llm_reply_for_unmatched_text(monkeypatch) -> No
     assert done["type"] == "reply.done"
     assert done["text"] == "That sounds useful. What did you own?"
     assert "".join(chunks) == done["text"]
+
+
+def test_audio_websocket_runs_pronunciation_after_reply(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("APP_AUDIO_DIR", str(tmp_path))
+    monkeypatch.setenv("PRON_ASSESS_AUDIO_TURNS", "1")
+
+    class PronProvider:
+        provider_name = "mock-real"
+
+        def assess(self, *, reference_text=None, audio_file=None, fixture_id=None):
+            del fixture_id
+            assert reference_text == "I have worked on backend systems for three years."
+            assert audio_file is not None
+            return PronunciationAssessment(
+                provider=self.provider_name,
+                reference_text=reference_text,
+                audio_file=audio_file,
+                overall=72,
+                accuracy=70,
+                fluency=76,
+                words=[],
+                issues=[
+                    PronunciationIssue(
+                        kind="word_accuracy",
+                        target="systems",
+                        message_zh="systems 发音需要更清楚。",
+                        severity=GrammarSeverity.MINOR,
+                    )
+                ],
+            )
+
+    monkeypatch.setattr("backend.app.main.pronunciation_provider", PronProvider())
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json(
+            {
+                "type": "start_turn",
+                "expected_text": "I have worked on backend systems for three years.",
+                "mime_type": "audio/wav",
+            }
+        )
+        websocket.receive_json()
+        websocket.send_bytes(b"fake-wav-audio")
+        websocket.send_json({"type": "end_turn"})
+        websocket.receive_json()
+        reply = websocket.receive_json()
+        websocket.receive_json()
+        pending = websocket.receive_json()
+        events = [websocket.receive_json() for _ in range(4)]
+
+    assert reply["type"] == "reply.text"
+    assert pending["type"] == "analysis.pending"
+    assert pending["stages"] == ["grammar", "pronunciation"]
+    pronunciation = next(event for event in events if event.get("stage") == "pronunciation" and event["type"] == "analysis.result")
+    assert pronunciation["result"]["overall"] == 72
+    analysis = client.get(f"/api/sessions/{session_id}/analysis").json()
+    assert analysis["pronunciation_results"][0]["overall"] == 72
 
 
 def test_audio_websocket_saves_audio_turn_file(monkeypatch, tmp_path) -> None:

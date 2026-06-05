@@ -391,6 +391,21 @@ test('renders streaming voice reply deltas and finalizes the turn', async () => 
   expect(window.speechSynthesis.speak).toHaveBeenCalled();
 });
 
+test('renders pronunciation analysis from a voice turn', async () => {
+  const voice = installVoiceMocks({ voicePronunciationResult: true });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+
+  expect(await screen.findByText('Overall')).toBeInTheDocument();
+  expect(screen.getByText('SYSTEMS')).toHaveClass('low-word');
+});
+
 test('shows microphone permission errors clearly', async () => {
   const voice = installVoiceMocks({ getUserMediaError: new Error('Permission denied') });
   render(<App />);
@@ -625,6 +640,40 @@ function installVoiceMocks(options = {}) {
           },
         }),
       });
+      if (options.voicePronunciationResult) {
+        this.onmessage?.({
+          data: JSON.stringify({
+            type: 'debug.timing',
+            stage: 'pronunciation',
+            timings: {
+              pronunciation_ms: 222,
+            },
+          }),
+        });
+        this.onmessage?.({
+          data: JSON.stringify({
+            type: 'analysis.result',
+            stage: 'pronunciation',
+            result: {
+              id: 'assessment_voice_1',
+              provider: 'mock-real',
+              reference_text: 'I have worked on backend systems for three years.',
+              audio_file: '/tmp/audio.wav',
+              overall: 72,
+              accuracy: 70,
+              fluency: 75,
+              prosody: null,
+              completeness: null,
+              words: [
+                { word: 'I', accuracy: 95, fluency: null, phonemes: [], issue: null },
+                { word: 'SYSTEMS', accuracy: 40, fluency: null, phonemes: [], issue: 'low_accuracy' },
+              ],
+              issues: [],
+              created_at: '2026-06-05T00:00:07Z',
+            },
+          }),
+        });
+      }
     }
 
     close() {

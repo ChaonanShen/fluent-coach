@@ -2,6 +2,7 @@ import asyncio
 import base64
 import binascii
 import json
+import os
 import time
 
 from backend.app.core.env import load_dotenv, provider_status
@@ -514,7 +515,11 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                         "timings": timings,
                     }
                 )
-                await websocket.send_json({"type": "analysis.pending", "stages": ["grammar"]})
+                analysis_stages = ["grammar"]
+                assess_audio_pronunciation = _should_assess_audio_turn_pronunciation()
+                if assess_audio_pronunciation:
+                    analysis_stages.append("pronunciation")
+                await websocket.send_json({"type": "analysis.pending", "stages": analysis_stages})
                 asyncio.create_task(
                     _run_ws_grammar_analysis(
                         websocket=websocket,
@@ -526,6 +531,16 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                         timings=dict(timings),
                     )
                 )
+                if assess_audio_pronunciation:
+                    asyncio.create_task(
+                        _run_ws_pronunciation_analysis(
+                            websocket=websocket,
+                            session_id=session.id,
+                            reference_text=transcript,
+                            audio_file=str(stored_audio.preferred_path.resolve()),
+                            timings=dict(timings),
+                        )
+                    )
                 audio.clear()
                 expected_text = None
                 audio_mime_type = None
@@ -608,6 +623,90 @@ async def _run_ws_grammar_analysis(
     )
 
 
+async def _run_ws_pronunciation_analysis(
+    *,
+    websocket: WebSocket,
+    session_id: str,
+    reference_text: str,
+    audio_file: str,
+    timings: dict[str, float],
+) -> None:
+    pronunciation_started = time.perf_counter()
+    try:
+        assessment = await asyncio.to_thread(
+            pronunciation_provider.assess,
+            reference_text=reference_text,
+            audio_file=audio_file,
+        )
+    except RuntimeError as exc:
+        error = _provider_analysis_error(
+            stage=AnalysisStage.PRONUNCIATION,
+            exc=exc,
+            provider_name=_provider_name(pronunciation_provider),
+            fallback_applied=False,
+        )
+        analysis_store.add_error(session_id, error)
+        timings["pronunciation_ms"] = _elapsed_ms(pronunciation_started)
+        await _safe_send_json(
+            websocket,
+            {
+                "type": "debug.timing",
+                "stage": "pronunciation",
+                "timings": timings,
+            },
+        )
+        await _safe_send_json(
+            websocket,
+            {
+                "type": "analysis.error",
+                "stage": "pronunciation",
+                "error": error.model_dump(mode="json"),
+            },
+        )
+        return
+
+    timings["pronunciation_ms"] = _elapsed_ms(pronunciation_started)
+    await _safe_send_json(
+        websocket,
+        {
+            "type": "debug.timing",
+            "stage": "pronunciation",
+            "timings": timings,
+        },
+    )
+    if assessment is None:
+        error = AnalysisError(
+            stage=AnalysisStage.PRONUNCIATION,
+            code="pronunciation_unavailable",
+            user_message_zh="本轮语音暂时无法生成发音评测，已保留对话结果。",
+            severity=AnalysisErrorSeverity.INFO,
+            fallback_applied=True,
+            provider=_provider_name(pronunciation_provider),
+        )
+        analysis_store.add_error(session_id, error)
+        await _safe_send_json(
+            websocket,
+            {
+                "type": "analysis.error",
+                "stage": "pronunciation",
+                "error": error.model_dump(mode="json"),
+            },
+        )
+        return
+
+    log_store.save_pronunciation_assessment(assessment)
+    analysis_store.add_pronunciation_result(session_id, assessment)
+    mistake_service.add_from_pronunciation(assessment)
+    await _safe_send_json(
+        websocket,
+        {
+            "type": "analysis.result",
+            "stage": "pronunciation",
+            "result": assessment.model_dump(mode="json"),
+        },
+    )
+
+
 async def _safe_send_json(websocket: WebSocket, payload: dict[str, object]) -> bool:
     try:
         await websocket.send_json(payload)
@@ -675,6 +774,15 @@ def _record_analysis_error_for_session(
 
 def _elapsed_ms(started: float) -> float:
     return round((time.perf_counter() - started) * 1000.0, 1)
+
+
+def _should_assess_audio_turn_pronunciation() -> bool:
+    configured = os.environ.get("PRON_ASSESS_AUDIO_TURNS", "").strip().lower()
+    if configured in {"1", "true", "yes", "on"}:
+        return True
+    if configured in {"0", "false", "no", "off"}:
+        return False
+    return _provider_name(pronunciation_provider) not in {None, "mock"}
 
 
 def _classify_provider_error(
