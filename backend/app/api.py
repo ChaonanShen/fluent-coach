@@ -95,3 +95,18 @@ class ProgressResponse(BaseModel):
     average_vocabulary_score: float | None
     average_task_completion_rate: float | None
     trend: list[ProgressPoint]
+
+
+class TTSRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    text: str = Field(min_length=1)
+
+
+class TTSResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str
+    text: str
+    audio_url: str | None
+    fallback_applied: bool

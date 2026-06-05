@@ -122,3 +122,20 @@ PRON_PROVIDER=tencent_soe make dev-backend
 
 默认测试仍应保持 mock；真实腾讯链路可用
 `python3 scripts/test_tencent_soe.py` 做手动 smoke test。
+
+## ASR / TTS Provider
+
+默认 ASR 使用 `ASR_PROVIDER=fake`，用于稳定测试 WebSocket 协议与对话链路。
+若要启用本地 faster-whisper：
+
+```bash
+make install-backend
+python3 -m pip install -e ".[asr]"
+ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=small make dev-backend
+```
+
+真实 ASR 集成测试默认不会运行；需要显式执行 integration marker。
+
+TTS 默认使用 `TTS_PROVIDER=browser`，前端通过浏览器 `speechSynthesis`
+播放 AI 回复。后端 `/api/tts/synthesize` 当前返回 browser fallback 元数据，
+方便后续替换成真实云 TTS provider。

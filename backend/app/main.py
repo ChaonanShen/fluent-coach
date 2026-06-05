@@ -14,6 +14,8 @@ from backend.app.api import (
     SessionResponse,
     TextTurnRequest,
     TextTurnResponse,
+    TTSRequest,
+    TTSResponse,
 )
 from backend.app.core.fixtures import get_fixture_status
 from backend.app.models import (
@@ -26,7 +28,7 @@ from backend.app.models import (
     SessionSummary,
 )
 from backend.app.services.analysis import analysis_store
-from backend.app.services.asr import fake_asr
+from backend.app.services.asr import asr_provider
 from backend.app.services.dialogue import dialogue_service
 from backend.app.services.grammar import grammar_service
 from backend.app.services.mistakes import mistake_service
@@ -36,6 +38,7 @@ from backend.app.services.scenarios import get_scenario, list_scenarios
 from backend.app.services.sessions import session_store
 from backend.app.services.storage import log_store
 from backend.app.services.summary import summary_service
+from backend.app.services.tts import tts_provider
 
 app = FastAPI(title="XEngineer AI English Speaking Coach", version="0.1.0")
 
@@ -185,6 +188,17 @@ def get_progress() -> ProgressResponse:
     return progress_service.get_progress()
 
 
+@app.post("/api/tts/synthesize", response_model=TTSResponse)
+def synthesize_tts(request: TTSRequest) -> TTSResponse:
+    result = tts_provider.synthesize(request.text)
+    return TTSResponse(
+        provider=result.provider,
+        text=result.text,
+        audio_url=result.audio_url,
+        fallback_applied=result.fallback_applied,
+    )
+
+
 @app.websocket("/ws/sessions/{session_id}/audio")
 async def session_audio(websocket: WebSocket, session_id: str) -> None:
     await websocket.accept()
@@ -225,9 +239,9 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                 expected_text = event.get("expected_text")
                 force_analysis_error = bool(event.get("force_analysis_error", False))
                 audio.clear()
-                await websocket.send_json({"type": "asr.partial", "text": fake_asr.partial(expected_text)})
+                await websocket.send_json({"type": "asr.partial", "text": asr_provider.partial(expected_text)})
             elif event_type == "end_turn":
-                transcript = fake_asr.transcribe(bytes(audio), expected_text)
+                transcript = asr_provider.transcribe(bytes(audio), expected_text)
                 await websocket.send_json({"type": "asr.final", "text": transcript})
                 user_turn, ai_turn, reply = dialogue_service.add_text_turns(
                     session=session,
