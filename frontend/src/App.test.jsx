@@ -208,6 +208,21 @@ test('records read aloud audio and uploads it for assessment', async () => {
   expect(global.fetch).toHaveBeenCalledWith('/api/pronunciation/assess/upload', expect.any(Object));
 });
 
+test('links read aloud assessment to the active session', async () => {
+  const voice = installVoiceMocks();
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(await screen.findByRole('button', { name: 'Record Reading' }));
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
+
+  expect(await screen.findByText('Overall')).toBeInTheDocument();
+  const uploadCall = global.fetch.mock.calls.find(([url]) => url === '/api/pronunciation/assess/upload');
+  expect(JSON.parse(uploadCall[1].body).session_id).toBe('session_1');
+});
+
 test('records microphone audio over the session websocket', async () => {
   const voice = installVoiceMocks();
   render(<App />);

@@ -272,6 +272,7 @@ export default function App() {
         reference_text: 'THEN HE WENT TO THEME PARK',
         audio_base64: await blobToBase64(audio),
         mime_type: audio.type || mimeType || 'audio/webm',
+        ...(session?.id ? { session_id: session.id } : {}),
       }),
     });
     setPronunciation(assessment);
