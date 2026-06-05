@@ -385,7 +385,9 @@ test('records read aloud audio and uploads it for assessment', async () => {
   await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
   fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
 
+  expect(screen.getByRole('heading', { name: 'Pronunciation' })).toBeInTheDocument();
   expect(await screen.findByText('Overall')).toBeInTheDocument();
+  expect(screen.getByText('Low-score words')).toBeInTheDocument();
   expect(screen.getByText('THEME')).toHaveClass('low-word');
   expect(global.fetch).toHaveBeenCalledWith('/api/pronunciation/assess/upload', expect.any(Object));
 });
@@ -449,9 +451,9 @@ test('records microphone audio over the session websocket', async () => {
 
   expect(await screen.findByText('Thanks for sharing that project. What impact did it have?')).toBeInTheDocument();
   expect(screen.getByText('I have worked on backend systems for three years.')).toBeInTheDocument();
-  expect(screen.getByText('Timing')).toBeInTheDocument();
-  expect(screen.getByText('123 ms')).toBeInTheDocument();
-  expect(await screen.findByText('TTS')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Timing' })).not.toBeInTheDocument();
+  expect(screen.getByText(/Timing:.*ASR 123 ms/)).toBeInTheDocument();
+  expect(await screen.findByText(/TTS \d+ ms/)).toBeInTheDocument();
   await waitFor(() => {
     expect(voice.sentMessages.some((payload) => payload instanceof ArrayBuffer)).toBe(true);
     expect(voice.sentMessages.some((payload) => eventType(payload) === 'start_turn')).toBe(true);

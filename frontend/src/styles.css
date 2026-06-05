@@ -336,6 +336,14 @@ h3 {
   margin-top: 12px;
 }
 
+.score-label {
+  color: #63726d;
+  font-size: 0.76rem;
+  font-weight: 750;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
 .word-score-list {
   display: flex;
   flex-wrap: wrap;
@@ -452,6 +460,15 @@ h3 {
   font-size: 0.86rem;
   font-weight: 700;
   min-height: 34px;
+}
+
+.timing-footnote {
+  border-top: 1px solid #edf1ee;
+  color: #8a9992;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  margin: 8px 0 0;
+  padding-top: 12px;
 }
 
 @media (max-width: 920px) {

@@ -840,7 +840,7 @@ export default function App() {
         <aside className="coach-panel">
           <h2>Coach</h2>
           <section className="coach-block">
-            <h3>Read Aloud</h3>
+            <h3>Pronunciation</h3>
             <p className="read-reference">THEN HE WENT TO THEME PARK</p>
             <button
               className="secondary-action assess-action"
@@ -866,6 +866,7 @@ export default function App() {
                     <dd>{Math.round(pronunciation.fluency)}</dd>
                   </div>
                 </dl>
+                <p className="score-label">Low-score words</p>
                 <div className="word-score-list">
                   {pronunciation.words.map((word) => (
                     <span className={word.accuracy < 60 ? 'low-word' : ''} key={word.word}>
@@ -942,38 +943,6 @@ export default function App() {
             </section>
           ) : null}
 
-          {latestTiming ? (
-            <section className="coach-block">
-              <h3>Timing</h3>
-              <dl>
-                <div>
-                  <dt>ASR</dt>
-                  <dd>{formatMs(latestTiming.timings.asr_ms)}</dd>
-                </div>
-                <div>
-                  <dt>Reply</dt>
-                  <dd>{formatMs(latestTiming.timings.dialogue_reply_ms)}</dd>
-                </div>
-                <div>
-                  <dt>Grammar</dt>
-                  <dd>{formatMs(latestTiming.timings.grammar_ms)}</dd>
-                </div>
-                <div>
-                  <dt>Pronunciation</dt>
-                  <dd>{formatMs(latestTiming.timings.pronunciation_ms)}</dd>
-                </div>
-                <div>
-                  <dt>Total</dt>
-                  <dd>{formatMs(latestTiming.timings.end_turn_to_reply_text_ms)}</dd>
-                </div>
-                <div>
-                  <dt>TTS</dt>
-                  <dd>{formatMs(latestTiming.timings.reply_text_to_tts_start_ms)}</dd>
-                </div>
-              </dl>
-            </section>
-          ) : null}
-
           <section className="coach-block">
             <h3>Progress</h3>
             {progress?.session_count ? (
@@ -1017,6 +986,8 @@ export default function App() {
               <p>No saved mistakes yet.</p>
             )}
           </section>
+
+          {latestTiming ? <p className="timing-footnote">{formatTimingSummary(latestTiming.timings)}</p> : null}
         </aside>
       </section>
     </main>
@@ -1090,6 +1061,19 @@ function formatScore(value) {
 
 function formatMs(value) {
   return value === null || value === undefined ? '-' : `${Math.round(value)} ms`;
+}
+
+function formatTimingSummary(timings) {
+  const items = [
+    ['ASR', timings.asr_ms],
+    ['Reply', timings.dialogue_reply_ms],
+    ['Grammar', timings.grammar_ms],
+    ['Pronunciation', timings.pronunciation_ms],
+    ['TTS', timings.reply_text_to_tts_start_ms],
+  ]
+    .filter(([, value]) => value !== null && value !== undefined)
+    .map(([label, value]) => `${label} ${formatMs(value)}`);
+  return items.length ? `Timing: ${items.join(' · ')}` : 'Timing: waiting for measurements';
 }
 
 function nowMs() {
