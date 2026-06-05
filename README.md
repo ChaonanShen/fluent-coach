@@ -96,6 +96,25 @@ GET /api/health
 
 前端开发服务由 Vite 启动，`/api` 和 `/ws` 会代理到本地 FastAPI 后端。
 
+### 从本地电脑访问服务器上的开发服务
+
+如果服务跑在远程服务器上，`10.x.x.x` 这类地址通常是服务器内网地址，
+本地电脑不能直接访问。推荐用 SSH 端口转发：
+
+```bash
+ssh -L 5173:127.0.0.1:5173 -L 8000:127.0.0.1:8000 <user>@<server-public-ip>
+```
+
+然后在本地浏览器打开：
+
+```text
+http://localhost:5173/
+```
+
+前端的 `/api` 和 `/ws` 会由 Vite 代理到服务器上的后端。若不用 SSH
+转发而是直接用公网 IP 访问，需要在云服务器安全组/防火墙开放 `5173`
+端口；通常不需要把 `8000` 暴露给公网。
+
 ## 发音评测 Provider
 
 默认发音评测使用 `PRON_PROVIDER=mock`，从 SpeechOcean762 fixture 回放确定性分数，
@@ -139,3 +158,22 @@ ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=small make dev-backend
 TTS 默认使用 `TTS_PROVIDER=browser`，前端通过浏览器 `speechSynthesis`
 播放 AI 回复。后端 `/api/tts/synthesize` 当前返回 browser fallback 元数据，
 方便后续替换成真实云 TTS provider。
+
+## LLM Provider
+
+语法/表达纠错和场景对话回复都支持接 OpenAI-compatible 大模型接口。
+默认 `LLM_PROVIDER=fake`，不会访问网络；fixture 命中时仍优先使用确定性样例，
+便于测试复现。
+
+启用真实大模型：
+
+```bash
+export LLM_PROVIDER=openai_compatible
+export LLM_BASE_URL=https://your-llm-compatible-endpoint/v1
+export LLM_API_KEY=your-api-key
+export LLM_MODEL=your-model-name
+make dev-backend
+```
+
+要求接口兼容 `/chat/completions`。真实 LLM 只在 fixture 未命中的自由输入上调用；
+JSON 解析失败会降级为当前 fallback，不中断对话。

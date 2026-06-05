@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 from backend.app.core.fixtures import load_text_fixture
 from backend.app.main import app
 from backend.app.services.dialogue import dialogue_service
+from backend.app.services.dialogue import DialogueService
+from backend.app.services.llm import FakeLLMClient
 from backend.app.services.scenarios import get_scenario
 from backend.app.services.sessions import session_store
 
@@ -56,6 +58,34 @@ def test_text_turn_api_appends_user_and_ai_turns() -> None:
     assert len(body["session"]["turns"]) == 3
     assert body["current_goal"]
     assert body["next_intent"] == "continue_fixture_dialogue"
+
+
+def test_dialogue_service_uses_llm_for_unmatched_text() -> None:
+    scenario = get_scenario("interview")
+    assert scenario is not None
+    session = session_store.create(scenario)
+    service = DialogueService(
+        FakeLLMClient(
+            responses=[
+                """
+                {
+                  "reply_text": "That sounds useful. What was your specific contribution?",
+                  "current_goal": "Explain one relevant project or achievement",
+                  "next_intent": "ask_for_specific_contribution"
+                }
+                """
+            ]
+        )
+    )
+
+    reply = service.generate_reply(
+        session=session,
+        scenario=scenario,
+        user_text="I built an internal platform at my last company.",
+    )
+
+    assert reply.text == "That sounds useful. What was your specific contribution?"
+    assert reply.next_intent == "ask_for_specific_contribution"
 
 
 def test_text_turn_api_uses_fallback_for_unmatched_text() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from typing import Protocol
 
@@ -68,6 +69,31 @@ class OpenAICompatibleLLMClient:
         response.raise_for_status()
         payload = response.json()
         return str(payload["choices"][0]["message"]["content"])
+
+
+def create_llm_client_from_env() -> LLMClient | None:
+    provider = os.environ.get("LLM_PROVIDER", "fake").strip().lower()
+    if provider in {"", "fake", "none", "disabled"}:
+        return None
+    if provider != "openai_compatible":
+        raise RuntimeError(f"Unsupported LLM_PROVIDER: {provider}")
+
+    base_url = os.environ.get("LLM_BASE_URL", "").strip()
+    api_key = os.environ.get("LLM_API_KEY", "").strip()
+    model = os.environ.get("LLM_MODEL", "").strip()
+    if not base_url or not api_key or not model:
+        raise RuntimeError(
+            "LLM_PROVIDER=openai_compatible requires LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL."
+        )
+    timeout = float(os.environ.get("LLM_TIMEOUT_SECONDS", "30") or 30)
+    return OpenAICompatibleLLMClient(
+        LLMConfig(
+            base_url=base_url,
+            api_key=api_key,
+            model=model,
+            timeout_seconds=timeout,
+        )
+    )
 
 
 class StructuredJSONResult(BaseModel):

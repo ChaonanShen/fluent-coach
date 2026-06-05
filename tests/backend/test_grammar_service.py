@@ -2,6 +2,8 @@ from fastapi.testclient import TestClient
 
 from backend.app.core.fixtures import load_text_fixture
 from backend.app.main import app
+from backend.app.services.llm import FakeLLMClient
+from backend.app.services.grammar import GrammarCorrectionService
 from backend.app.models import CorrectionTiming
 from backend.app.services.grammar import grammar_service
 
@@ -51,6 +53,42 @@ def test_grammar_service_returns_noop_for_unknown_sentence() -> None:
     assert correction.corrected_text == correction.user_text
     assert correction.issues == []
     assert correction.correction_timing == CorrectionTiming.DELAYED_SUMMARY
+
+
+def test_grammar_service_uses_llm_for_unmatched_sentence() -> None:
+    service = GrammarCorrectionService(
+        FakeLLMClient(
+            responses=[
+                """
+                {
+                  "corrected_text": "I am interested in this role.",
+                  "better_expression": "I am very interested in this role because it matches my experience.",
+                  "issues": [
+                    {
+                      "error_type": "word_choice",
+                      "original_span": "interest",
+                      "corrected_span": "interested",
+                      "severity": "major",
+                      "explanation_zh": "这里需要形容词 interested。"
+                    }
+                  ],
+                  "overall_severity": "major",
+                  "correction_timing": "after_turn",
+                  "naturalness_reason_zh": "面试场景下应更具体说明动机。"
+                }
+                """
+            ]
+        )
+    )
+
+    correction = service.check(
+        scenario_id="interview",
+        user_text="I am interest in this role.",
+        conversation_context=[],
+    )
+
+    assert correction.corrected_text == "I am interested in this role."
+    assert correction.issues[0].error_type == "word_choice"
 
 
 def test_grammar_check_api_returns_correction() -> None:

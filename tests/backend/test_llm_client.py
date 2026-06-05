@@ -7,6 +7,7 @@ from backend.app.services.llm import (
     LLMMessage,
     OpenAICompatibleLLMClient,
     StructuredJSONCaller,
+    create_llm_client_from_env,
 )
 
 
@@ -81,3 +82,20 @@ def test_openai_compatible_client_posts_chat_completion_payload() -> None:
     assert captured["url"] == "https://llm.example.test/v1/chat/completions"
     assert captured["auth"] == "Bearer test-key"
     assert b'"model":"test-model"' in captured["payload"]
+
+
+def test_llm_factory_defaults_to_disabled(monkeypatch) -> None:
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+
+    assert create_llm_client_from_env() is None
+
+
+def test_llm_factory_builds_openai_compatible_client(monkeypatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "openai_compatible")
+    monkeypatch.setenv("LLM_BASE_URL", "https://llm.example.test/v1")
+    monkeypatch.setenv("LLM_API_KEY", "test-key")
+    monkeypatch.setenv("LLM_MODEL", "test-model")
+
+    client = create_llm_client_from_env()
+
+    assert isinstance(client, OpenAICompatibleLLMClient)

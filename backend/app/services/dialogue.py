@@ -5,6 +5,8 @@ from typing import Any
 
 from backend.app.core.fixtures import load_text_fixture
 from backend.app.models import Scenario, Session, Turn, TurnSpeaker
+from backend.app.services.llm import LLMClient, LLMMessage, StructuredJSONCaller, create_llm_client_from_env
+from backend.app.models import AnalysisStage
 
 
 @lru_cache(maxsize=1)
@@ -25,6 +27,9 @@ class DialogueReply:
 
 
 class DialogueService:
+    def __init__(self, llm_client: LLMClient | None = None) -> None:
+        self.llm_client = llm_client
+
     def generate_reply(
         self,
         *,
@@ -43,6 +48,16 @@ class DialogueService:
                 current_goal=current_goal,
                 next_intent="continue_fixture_dialogue",
             )
+
+        if self.llm_client is not None:
+            llm_reply = self._generate_with_llm(
+                session=session,
+                scenario=scenario,
+                user_text=user_text,
+                current_goal=current_goal,
+            )
+            if llm_reply is not None:
+                return llm_reply
 
         return DialogueReply(
             text=self._fallback_reply(scenario),
@@ -94,5 +109,54 @@ class DialogueService:
             return "Thanks for the update. What is the main risk we should track next?"
         return "Thanks. Could you tell me a little more?"
 
+    def _generate_with_llm(
+        self,
+        *,
+        session: Session,
+        scenario: Scenario,
+        user_text: str,
+        current_goal: str,
+    ) -> DialogueReply | None:
+        caller = StructuredJSONCaller(self.llm_client, stage=AnalysisStage.GRAMMAR)
+        history = [
+            {"speaker": turn.speaker.value, "text": turn.text}
+            for turn in session.turns[-8:]
+        ]
+        result = caller.call(
+            [
+                LLMMessage(
+                    role="system",
+                    content=(
+                        "You are the AI role in an English speaking practice scenario. "
+                        "Continue the conversation naturally. Do not teach grammar in the reply. "
+                        "Return JSON only with keys: reply_text, current_goal, next_intent."
+                    ),
+                ),
+                LLMMessage(
+                    role="user",
+                    content=(
+                        f"scenario_id: {scenario.id}\n"
+                        f"ai_role: {scenario.ai_role}\n"
+                        f"user_role: {scenario.user_role}\n"
+                        f"conversation_goals: {scenario.conversation_goals}\n"
+                        f"target_expressions: {scenario.target_expressions}\n"
+                        f"current_goal: {current_goal}\n"
+                        f"history: {history}\n"
+                        f"latest_user_text: {user_text}"
+                    ),
+                ),
+            ]
+        )
+        if result.data is None:
+            return None
+        reply_text = str(result.data.get("reply_text") or "").strip()
+        if not reply_text:
+            return None
+        return DialogueReply(
+            text=reply_text,
+            current_goal=str(result.data.get("current_goal") or current_goal),
+            next_intent=str(result.data.get("next_intent") or "continue_conversation"),
+        )
 
-dialogue_service = DialogueService()
+
+dialogue_service = DialogueService(create_llm_client_from_env())
