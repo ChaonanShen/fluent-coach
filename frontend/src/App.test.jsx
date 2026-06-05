@@ -567,6 +567,25 @@ test('shows websocket analysis errors inline', async () => {
   expect(screen.getAllByText('语音识别暂时不可用，请稍后重试。').length).toBeGreaterThan(0);
 });
 
+test('clears previous turn issues when a new voice turn starts', async () => {
+  const failedVoice = installVoiceMocks({ websocketAnalysisError: true });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+  await waitFor(() => expect(failedVoice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+  expect(await screen.findByText('asr')).toBeInTheDocument();
+
+  const cleanVoice = installVoiceMocks();
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(cleanVoice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  expect(screen.queryByText('asr')).not.toBeInTheDocument();
+  expect(screen.queryByText('语音识别暂时不可用，请稍后重试。')).not.toBeInTheDocument();
+});
+
 function jsonResponse(body) {
   return Promise.resolve({
     ok: true,

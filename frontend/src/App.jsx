@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -137,7 +137,7 @@ export default function App() {
 
   const latestTurnText = turns.at(-1)?.text || '';
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const list = messageListRef.current;
     if (!list || !messageListShouldFollowRef.current) {
       return;
@@ -147,13 +147,14 @@ export default function App() {
         return;
       }
       list.scrollTop = list.scrollHeight;
+      messageListShouldFollowRef.current = true;
     };
-    if (typeof window.requestAnimationFrame === 'function') {
-      const frameId = window.requestAnimationFrame(scrollToBottom);
-      return () => window.cancelAnimationFrame(frameId);
+    scrollToBottom();
+    if (typeof window.requestAnimationFrame !== 'function') {
+      return;
     }
-    const timeoutId = window.setTimeout(scrollToBottom, 0);
-    return () => window.clearTimeout(timeoutId);
+    const frameId = window.requestAnimationFrame(scrollToBottom);
+    return () => window.cancelAnimationFrame(frameId);
   }, [latestTurnText, mainView, turns.length]);
 
   async function refreshMistakes() {
@@ -176,6 +177,13 @@ export default function App() {
       return;
     }
     setAnalysisErrors((current) => [detail, ...current].slice(0, 5));
+  }
+
+  function resetCurrentTurnFeedback() {
+    setLatestCorrection(null);
+    setPronunciation(null);
+    setAnalysisErrors([]);
+    setLatestTiming(null);
   }
 
   function handleRequestError(err, fallbackMessage = 'Request failed.') {
@@ -283,6 +291,7 @@ export default function App() {
       return;
     }
     messageListShouldFollowRef.current = true;
+    resetCurrentTurnFeedback();
     setError('');
     setStatus('Sending');
     setInputText('');
@@ -348,6 +357,7 @@ export default function App() {
     }
     setError('');
     setPronunciation(null);
+    setAnalysisErrors([]);
     setStatus('Requesting mic');
     readingCanceledRef.current = false;
     try {
@@ -464,6 +474,7 @@ export default function App() {
     }
     setError('');
     setPartialText('');
+    resetCurrentTurnFeedback();
     setStatus('Requesting mic');
     voiceCanceledRef.current = false;
     voiceErrorRef.current = false;
