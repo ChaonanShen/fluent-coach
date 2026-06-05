@@ -32,6 +32,11 @@ beforeEach(() => {
   pronunciationUploadFails = false;
   window.speechSynthesis = {
     cancel: vi.fn(),
+    getVoices: vi.fn(() => [
+      { name: 'Compact Voice', lang: 'en-US' },
+      { name: 'Google US English', lang: 'en-US' },
+      { name: 'Mandarin', lang: 'zh-CN' },
+    ]),
     speak: vi.fn(),
   };
   window.SpeechSynthesisUtterance = vi.fn(function utterance(text) {
@@ -259,6 +264,10 @@ test('sends a text turn and shows correction feedback', async () => {
   expect(screen.getByText('I have been working in this field for three years.')).toBeInTheDocument();
   expect(global.fetch).not.toHaveBeenCalledWith('/api/grammar/check', expect.any(Object));
   expect(window.speechSynthesis.speak).toHaveBeenCalled();
+  const utterance = window.speechSynthesis.speak.mock.calls.at(-1)[0];
+  expect(utterance.lang).toBe('en-US');
+  expect(utterance.rate).toBe(0.94);
+  expect(utterance.voice.name).toBe('Google US English');
 });
 
 test('reviews a saved mistake', async () => {

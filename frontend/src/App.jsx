@@ -137,7 +137,15 @@ export default function App() {
       return;
     }
     window.speechSynthesis.cancel();
-    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = 'en-US';
+    utterance.rate = 0.94;
+    utterance.pitch = 1;
+    const voice = chooseEnglishVoice(window.speechSynthesis.getVoices?.() || []);
+    if (voice) {
+      utterance.voice = voice;
+    }
+    window.speechSynthesis.speak(utterance);
   }
 
   async function startSession() {
@@ -818,4 +826,27 @@ async function blobToBase64(blob) {
 
 function formatScore(value) {
   return value === null || value === undefined ? '-' : Math.round(value);
+}
+
+function chooseEnglishVoice(voices) {
+  const englishVoices = voices.filter((voice) => voice.lang?.toLowerCase().startsWith('en'));
+  if (!englishVoices.length) {
+    return null;
+  }
+  const preferredNameParts = [
+    'natural',
+    'neural',
+    'online',
+    'google',
+    'microsoft',
+    'samantha',
+    'daniel',
+    'karen',
+  ];
+  return (
+    englishVoices.find((voice) => {
+      const name = voice.name.toLowerCase();
+      return preferredNameParts.some((part) => name.includes(part));
+    }) || englishVoices[0]
+  );
 }
