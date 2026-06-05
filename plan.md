@@ -522,7 +522,8 @@ WebSocket 事件：
 
 当前仍未完成或需继续增强：
 
-- PR-D 的真实 faster-whisper smoke 还未在本机执行，因为当前环境未安装 `faster-whisper`，也没有系统 `ffmpeg`。
+- PR-D 的依赖已在当前环境安装：`faster-whisper` 作为本地 ASR 推理库，`ffmpeg` 作为音频解码/转码工具。
+- PR-D 的真实 faster-whisper smoke 尚未完成；模型文件应由维护者手动下载，然后通过 `ASR_MODEL_SIZE=/path/to/local/model` 指向本地模型目录，避免运行时依赖外网下载。
 - PR-H 目前只覆盖 provider `RuntimeError` 到 HTTP `AnalysisError`；腾讯 SOE 具体错误码细分、限流/超时/音频非法的 canonical code 还可继续细化。
 - PR-I 尚未开始：Summary 仍需优先使用 session 已有 analysis/pronunciation 结果，而不是重新跑 grammar。
 - PR-J 尚未开始：真实服务 smoke report 和手动测试清单还需补。

@@ -142,18 +142,33 @@ make dev-backend
 ## ASR / TTS Provider
 
 默认 ASR 使用 `ASR_PROVIDER=fake`，用于稳定测试 WebSocket 协议与对话链路。
-若要启用本地 faster-whisper：
+真实本地 ASR 使用额外依赖：
+
+- `faster-whisper`：本地 Whisper ASR 推理库，用来把语音转文字。
+- `ffmpeg`：音频解码/转码工具，用来把浏览器录音的 `webm/opus` 等格式转为
+  ASR 和腾讯 SOE 更稳定的 `16kHz mono wav`。
+
+安装方式：
 
 ```bash
 make install-backend
 python3 -m pip install -e ".[asr]"
-ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=small make dev-backend
+conda install -y ffmpeg
 ```
 
 可先用 fixture 音频做本地 smoke test：
 
 ```bash
 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=tiny python3 scripts/test_asr_provider.py
+```
+
+`faster-whisper` 首次使用模型名（如 `tiny`、`small`）时会尝试下载模型。
+如果服务器不能访问外网，推荐手动下载 faster-whisper 兼容模型目录，然后把
+`ASR_MODEL_SIZE` 设置为本地模型目录路径，例如：
+
+```bash
+ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/path/to/faster-whisper-small make dev-backend
+ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/path/to/faster-whisper-small python3 scripts/test_asr_provider.py
 ```
 
 真实 ASR 集成测试默认不会运行；需要显式执行 integration marker。
