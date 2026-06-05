@@ -923,3 +923,83 @@ WebSocket 事件：
      - 发音评测区有 `Pronunciation` 标题。
      - Timing 只在底部浅色显示。
      - Mistakes 不直接出现在右栏，点击入口进入错题本视图。
+
+### 2026-06-05 固定应用式布局与对话真实感优化计划
+
+> 说明：本节基于上一轮 UI 精简后的进一步计划。目标是让页面更像一个固定高度的应用界面，而不是普通网页向下撑开。
+
+#### 目标
+
+- 左侧对话框减少 UI 标签感，提升真实对话感。
+- 右侧 Coach 信息更紧凑，不让分数和 timing 抢占空间。
+- 点击 Start 后 AI 开场白也要朗读，和后续 AI 回复行为一致。
+- 浏览器页面本身不滚动；左侧消息区和右侧 Coach 栏各自内部滚动。
+- End 后 Summary 变多时不拉长左侧对话框。
+
+#### PR 拆分
+
+1. **PR-UI-A：精简对话区 chrome**
+   - 功能描述：
+     - 去掉左侧顶部 `Conversation` 标题。
+     - 去掉消息气泡中的 `AI` / `You` 标签。
+     - 点击 Start 后自动朗读后端返回的 opening line。
+   - 实现思路：
+     - 删除 conversation toolbar 中的标题节点，仅保留 Scenario 选择与 Start/End。
+     - 删除 message speaker `<span>` 渲染和对应 CSS。
+     - `startSession()` 成功后从 `body.opening_line` 或第一条 AI turn 取文本，调用现有 `speak()`。
+   - 测试方式：
+     - 前端测试断言不显示 `Conversation`、`AI`、`You` 标签。
+     - 前端测试断言 Start 后 `speechSynthesis.speak` 被调用，且文本为 opening line。
+     - 执行 `cd frontend && npm test -- --run`。
+
+2. **PR-UI-B：压缩 Coach 反馈展示**
+   - 功能描述：
+     - Pronunciation 中 `Overall` / `Accuracy` / `Fluency` 改为一行紧凑展示。
+     - Timing 改为底部弱化多行格式：
+
+       ```text
+       Timing:
+         ASR xxx ms
+         Reply xxx ms
+         Grammar xxx ms
+         Pronunciation xxx ms
+         TTS xxx ms
+       ```
+
+   - 实现思路：
+     - 用 compact score row 替代 pronunciation 的三行 `dl`。
+     - `formatTimingRows()` 返回有值的 timing 项，JSX 渲染为小号浅色列表。
+   - 测试方式：
+     - 前端测试断言 pronunciation 分数存在于 compact 区域。
+     - 前端测试断言 Timing 显示多行文本，且不作为大块 `coach-block` 标题。
+     - 执行 `cd frontend && npm test -- --run`。
+
+3. **PR-UI-C：固定页面高度和内部滚动**
+   - 功能描述：
+     - 桌面端浏览器页面本身保持一屏，不因对话、Summary 或 Issues 增多而整体滚动。
+     - 左侧消息区内部滚动，Send/Record 始终可见。
+     - 右侧 Coach 栏内部滚动，不拉长左侧对话框。
+   - 实现思路：
+     - `body` / `#root` / `.app-shell` 使用 `height: 100vh`，桌面端 `overflow: hidden`。
+     - `.app-shell` 使用 flex column，`.workspace` 占满剩余高度并设置 `min-height: 0`。
+     - `.conversation-panel` 和 `.coach-panel` 高度受 workspace 约束。
+     - `.message-list` 使用 `flex: 1; min-height: 0; overflow-y: auto`。
+     - `.coach-panel` 使用 `overflow-y: auto; min-height: 0`。
+     - 移动端恢复普通文档流或降低固定限制，避免两栏堆叠后高度过小。
+   - 测试方式：
+     - 前端测试继续覆盖核心交互。
+     - 手动检查桌面端：
+       - 页面本身不滚动。
+       - 左侧消息区可独立滚动。
+       - 右侧 Coach 可独立滚动。
+       - End 后 Summary 不拉长左栏。
+     - 执行 `cd frontend && npm test -- --run`。
+
+#### 验收标准
+
+- 页面顶部和对话区没有多余的 `Conversation`、`AI`、`You` 文本标签。
+- Start 后第一句开场白会朗读。
+- Pronunciation 分数紧凑显示在一行。
+- Timing 是底部浅色多行调试文本。
+- 桌面浏览器页面本身不需要滚动；只允许消息区和 Coach 栏内部滚动。
+- 小屏下仍能正常访问内容，不因固定高度导致不可用。
