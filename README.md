@@ -150,6 +150,12 @@ python3 -m pip install -e ".[asr]"
 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=small make dev-backend
 ```
 
+可先用 fixture 音频做本地 smoke test：
+
+```bash
+ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=tiny python3 scripts/test_asr_provider.py
+```
+
 真实 ASR 集成测试默认不会运行；需要显式执行 integration marker。
 
 TTS 默认使用 `TTS_PROVIDER=browser`，前端通过浏览器 `speechSynthesis`

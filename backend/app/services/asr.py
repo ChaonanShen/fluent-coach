@@ -52,13 +52,16 @@ class FasterWhisperASR:
 
     def transcribe(self, audio_bytes: bytes, expected_text: str | None = None) -> str:
         del expected_text
-        model = self._load_model()
         audio_path = _write_temp_audio(audio_bytes)
         try:
-            segments, _info = model.transcribe(str(audio_path), beam_size=1)
-            return " ".join(segment.text.strip() for segment in segments if segment.text.strip())
+            return self.transcribe_file(audio_path)
         finally:
             audio_path.unlink(missing_ok=True)
+
+    def transcribe_file(self, audio_path: Path) -> str:
+        model = self._load_model()
+        segments, _info = model.transcribe(str(audio_path), beam_size=1)
+        return " ".join(segment.text.strip() for segment in segments if segment.text.strip())
 
     def _load_model(self):
         if self._model is not None:
