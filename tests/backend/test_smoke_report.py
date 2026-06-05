@@ -17,6 +17,8 @@ def test_fixture_smoke_report_uses_fake_providers() -> None:
     assert report["external_services_used"] is False
     assert report["checks"]["asr"]["status"] == "passed"
     assert report["checks"]["asr"]["provider"] == "fake"
+    assert report["checks"]["asr_l2_arctic"]["status"] == "passed"
+    assert report["checks"]["asr_l2_arctic"]["average_wer"] == 0
     assert report["checks"]["pronunciation"]["status"] == "passed"
     assert report["checks"]["pronunciation"]["provider"] == "mock"
     assert report["latency_ms"]["end_turn_to_asr_final"] is None
@@ -27,6 +29,7 @@ def test_smoke_report_renders_markdown() -> None:
 
     assert "# Smoke Report" in markdown
     assert "External services used: `false`" in markdown
+    assert "ASR L2-ARCTIC" in markdown
     assert "end_turn -> asr.final" in markdown
     assert "Manual UI Checklist" in markdown
 
@@ -38,6 +41,7 @@ def test_real_smoke_report_skips_fake_providers() -> None:
     assert report["external_services_used"] is False
     assert report["checks"]["llm"]["status"] == "skipped"
     assert report["checks"]["asr"]["status"] == "skipped"
+    assert report["checks"]["asr_l2_arctic"]["status"] == "skipped"
     assert report["checks"]["pronunciation"]["status"] == "skipped"
     assert report["latency_ms"]["end_turn_to_asr_final"] is None
 

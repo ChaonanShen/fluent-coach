@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import time
+import os
 import re
+import time
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,6 +17,7 @@ from backend.app.services.pronunciation import MockPronunciationProvider
 
 def run_fixture_smoke_report() -> dict[str, Any]:
     asr = _smoke_asr()
+    asr_l2_arctic = _smoke_l2_arctic_fixture_asr()
     grammar = _smoke_grammar()
     pronunciation = _smoke_pronunciation()
     dialogue = _smoke_dialogue_fixture()
@@ -25,6 +27,7 @@ def run_fixture_smoke_report() -> dict[str, Any]:
         "external_services_used": False,
         "checks": {
             "asr": asr,
+            "asr_l2_arctic": asr_l2_arctic,
             "grammar": grammar,
             "pronunciation": pronunciation,
             "dialogue_fixture": dialogue,
@@ -51,6 +54,7 @@ def run_real_smoke_report() -> dict[str, Any]:
     status = provider_status()
     llm = _smoke_real_llm(status)
     asr = _smoke_real_asr(status)
+    asr_l2_arctic = _smoke_real_l2_arctic_asr(status)
     pronunciation = _smoke_real_pronunciation(status)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -60,6 +64,7 @@ def run_real_smoke_report() -> dict[str, Any]:
         "checks": {
             "llm": llm,
             "asr": asr,
+            "asr_l2_arctic": asr_l2_arctic,
             "pronunciation": pronunciation,
             "ui_manual": {
                 "status": "not_run",
@@ -96,6 +101,7 @@ def render_smoke_markdown(report: dict[str, Any]) -> str:
         "",
         *(_check_line("LLM", checks.get("llm"))),
         f"- ASR: {checks['asr']['status']} ({checks['asr']['provider']})",
+        *(_check_line("ASR L2-ARCTIC", checks.get("asr_l2_arctic"))),
         *(_check_line("Grammar", checks.get("grammar"))),
         f"- Pronunciation: {checks['pronunciation']['status']} ({checks['pronunciation']['provider']})",
         *(_check_line("Dialogue fixture", checks.get("dialogue_fixture"))),
@@ -127,6 +133,22 @@ def _smoke_asr() -> dict[str, Any]:
         "fixture_id": item["id"],
         "expected": item["transcript"],
         "transcript": transcript,
+    }
+
+
+def _smoke_l2_arctic_fixture_asr() -> dict[str, Any]:
+    items = load_generated_manifest("l2_arctic")["items"]
+    pairs = [
+        (item["transcript"], FakeASR().transcribe(b"", expected_text=item["transcript"]))
+        for item in items[:5]
+    ]
+    average_wer = sum(word_error_rate(expected, transcript) for expected, transcript in pairs) / len(pairs)
+    return {
+        "status": "passed" if average_wer == 0 else "failed",
+        "provider": "fake",
+        "count": len(pairs),
+        "average_wer": average_wer,
+        "manual_annotation_rate": _manual_annotation_rate(items),
     }
 
 
@@ -236,6 +258,47 @@ def _smoke_real_asr(status: dict[str, object]) -> dict[str, Any]:
         )
 
 
+def _smoke_real_l2_arctic_asr(status: dict[str, object]) -> dict[str, Any]:
+    if status["asr_provider"] in {"fake", "none", "disabled"}:
+        return {"status": "skipped", "provider": status["asr_provider"], "reason": "ASR_PROVIDER is not real"}
+    items = load_generated_manifest("l2_arctic")["items"]
+    limit = max(1, int(os.environ.get("SMOKE_L2_ARCTIC_LIMIT", "3") or 3))
+    selected = items[:limit]
+    started = time.perf_counter()
+    try:
+        from backend.app.services.asr import create_asr_provider
+
+        provider = create_asr_provider()
+        results: list[dict[str, Any]] = []
+        for item in selected:
+            audio_path = resolve_fixture_audio(item["audio_file"])
+            transcript = provider.transcribe_file(audio_path)
+            results.append(
+                {
+                    "fixture_id": item["id"],
+                    "native_language": item.get("native_language"),
+                    "has_manual_annotation": item.get("has_manual_annotation") is True,
+                    "wer": word_error_rate(item["transcript"], transcript),
+                }
+            )
+        average_wer = sum(item["wer"] for item in results) / len(results)
+        return {
+            "status": "passed" if results and all(item["wer"] <= 1.0 for item in results) else "failed",
+            "provider": status["asr_provider"],
+            "count": len(results),
+            "latency_ms": _elapsed_ms(started),
+            "average_wer": average_wer,
+            "manual_annotation_rate": _manual_annotation_rate(items),
+            "results": results,
+        }
+    except Exception as exc:  # pragma: no cover - real provider smoke is environment-dependent.
+        return _failed_real_check(
+            provider=str(status["asr_provider"]),
+            started=started,
+            exc=exc,
+        )
+
+
 def _smoke_real_pronunciation(status: dict[str, object]) -> dict[str, Any]:
     if status["pronunciation_provider"] in {"mock", "none", "disabled"}:
         return {
@@ -316,10 +379,22 @@ def _check_line(label: str, check: object) -> list[str]:
     if not isinstance(check, dict):
         return []
     suffix = f" ({check['provider']})" if "provider" in check else ""
-    return [f"- {label}: {check.get('status')}{suffix}"]
+    detail = ""
+    if "average_wer" in check:
+        detail = f", avg WER {float(check['average_wer']):.4f}"
+    if "count" in check:
+        detail = f"{detail}, count {check['count']}"
+    return [f"- {label}: {check.get('status')}{suffix}{detail}"]
 
 
 def _format_latency(value: object) -> str:
     if value is None:
         return "not measured"
     return f"{float(value):.1f} ms"
+
+
+def _manual_annotation_rate(items: list[dict[str, Any]]) -> float:
+    if not items:
+        return 0.0
+    annotated = sum(1 for item in items if item.get("has_manual_annotation") is True)
+    return annotated / len(items)

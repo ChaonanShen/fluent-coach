@@ -125,6 +125,8 @@ python3 scripts/run_smoke_report.py --mode real
 
 真实报告输出到 `reports/smoke-real-latest.json` 和
 `reports/smoke-real-latest.md`，记录 LLM、ASR、腾讯 SOE 的状态与分段延迟。
+真实 ASR smoke 会额外抽测少量 L2-ARCTIC 口音样本并记录平均 WER；可用
+`SMOKE_L2_ARCTIC_LIMIT` 调整样本数。
 默认测试和默认 smoke report 仍不访问真实服务。
 
 ### 从本地电脑访问服务器上的开发服务
