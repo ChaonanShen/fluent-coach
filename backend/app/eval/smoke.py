@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -279,7 +280,7 @@ def _failed_real_check(
         "provider": provider,
         "latency_ms": _elapsed_ms(started),
         "error_type": type(exc).__name__,
-        "error": str(exc)[:240],
+        "error": _safe_error_message(exc),
     }
     if fixture_id is not None:
         payload["fixture_id"] = fixture_id
@@ -288,6 +289,13 @@ def _failed_real_check(
 
 def _elapsed_ms(started: float) -> float:
     return round((time.perf_counter() - started) * 1000.0, 1)
+
+
+def _safe_error_message(exc: Exception) -> str:
+    message = str(exc)
+    message = re.sub(r"https?://\S+", "[redacted-url]", message)
+    message = re.sub(r"wss?://\S+", "[redacted-url]", message)
+    return message[:240]
 
 
 def _provider_markdown_lines(status: object) -> list[str]:

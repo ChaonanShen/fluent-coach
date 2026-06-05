@@ -2,7 +2,12 @@ import json
 import subprocess
 import sys
 
-from backend.app.eval.smoke import render_smoke_markdown, run_fixture_smoke_report, run_real_smoke_report
+from backend.app.eval.smoke import (
+    _failed_real_check,
+    render_smoke_markdown,
+    run_fixture_smoke_report,
+    run_real_smoke_report,
+)
 
 
 def test_fixture_smoke_report_uses_fake_providers() -> None:
@@ -43,6 +48,17 @@ def test_real_smoke_report_renders_provider_status() -> None:
     assert "Mode: `real_provider_smoke`" in markdown
     assert "## Providers" in markdown
     assert "- LLM: fake" in markdown
+
+
+def test_real_smoke_report_redacts_error_urls() -> None:
+    check = _failed_real_check(
+        provider="openai_compatible",
+        started=0.0,
+        exc=RuntimeError("request failed for https://example.test/v1/chat/completions with 401"),
+    )
+
+    assert "https://example.test" not in check["error"]
+    assert "[redacted-url]" in check["error"]
 
 
 def test_smoke_report_script_writes_outputs(tmp_path) -> None:
