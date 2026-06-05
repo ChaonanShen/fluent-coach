@@ -39,7 +39,7 @@ export default function App() {
   const [readingState, setReadingState] = useState('idle');
   const [summary, setSummary] = useState(null);
   const [summaryState, setSummaryState] = useState('idle');
-  const [progress, setProgress] = useState(null);
+  const [mainView, setMainView] = useState('practice');
   const [analysisErrors, setAnalysisErrors] = useState([]);
   const [latestTiming, setLatestTiming] = useState(null);
   const [status, setStatus] = useState('Loading scenarios');
@@ -75,7 +75,6 @@ export default function App() {
         setSelectedScenarioId(scenarioBody.scenarios[0]?.id || '');
         setMistakes(mistakeBody.mistakes);
         setStatus('Ready');
-        refreshProgress().catch(() => {});
       })
       .catch((err) => {
         if (!active) {
@@ -132,11 +131,6 @@ export default function App() {
   async function refreshMistakes() {
     const body = await request('/api/mistakes');
     setMistakes(body.mistakes);
-  }
-
-  async function refreshProgress() {
-    const body = await request('/api/progress');
-    setProgress(body);
   }
 
   function resetSessionDerivedState() {
@@ -242,7 +236,6 @@ export default function App() {
       });
       setSession(body.session);
       await refreshMistakes();
-      await refreshProgress().catch(() => {});
       setStatus('In session');
     } catch (err) {
       handleRequestError(err);
@@ -291,7 +284,6 @@ export default function App() {
       setSession(ended.session);
       setSummary(sessionSummary);
       await refreshMistakes();
-      await refreshProgress().catch(() => {});
       setSummaryState('ready');
       setStatus('Ended');
     } catch (err) {
@@ -413,7 +405,6 @@ export default function App() {
     });
     setPronunciation(assessment);
     await refreshMistakes();
-    await refreshProgress().catch(() => {});
     setReadingState('idle');
     setStatus(sessionEnded ? 'Ended' : session ? 'In session' : 'Ready');
     stopReadingStream();
@@ -561,7 +552,6 @@ export default function App() {
           setLatestCorrection(message.result);
         }
         refreshMistakes().catch(() => {});
-        refreshProgress().catch(() => {});
       }
       if (message.type === 'debug.timing') {
         mergeTiming(message.stage, message.timings || {});
@@ -743,6 +733,45 @@ export default function App() {
       };
     }
     return streamingReplyRef.current.id;
+  }
+
+  if (mainView === 'mistakes') {
+    return (
+      <main className="app-shell">
+        <header className="topbar">
+          <div>
+            <h1>Mistake Book</h1>
+          </div>
+          <button className="secondary-action topbar-action" onClick={() => setMainView('practice')} type="button">
+            Back to Practice
+          </button>
+        </header>
+
+        {error ? <p className="inline-error">{error}</p> : null}
+
+        <section className="mistake-book" aria-label="Mistake Book">
+          {mistakes.length ? (
+            <div className="mistake-list">
+              {mistakes.map((mistake) => (
+                <article className="mistake-item" key={mistake.id}>
+                  <div>
+                    <span>{mistake.type}</span>
+                    <p>{mistake.wrong}</p>
+                    <strong>{mistake.correct}</strong>
+                    {mistake.explanation_zh ? <p className="mistake-explanation">{mistake.explanation_zh}</p> : null}
+                  </div>
+                  <button className="review-button" onClick={() => reviewMistake(mistake.id)} type="button">
+                    Review {mistake.review_count}
+                  </button>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <p>No saved mistakes yet.</p>
+          )}
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -944,47 +973,10 @@ export default function App() {
           ) : null}
 
           <section className="coach-block">
-            <h3>Progress</h3>
-            {progress?.session_count ? (
-              <dl>
-                <div>
-                  <dt>Sessions</dt>
-                  <dd>{progress.session_count}</dd>
-                </div>
-                <div>
-                  <dt>Grammar avg</dt>
-                  <dd>{formatScore(progress.average_grammar_score)}</dd>
-                </div>
-                <div>
-                  <dt>Pronunciation avg</dt>
-                  <dd>{formatScore(progress.average_pronunciation_score)}</dd>
-                </div>
-              </dl>
-            ) : (
-              <p>No completed practice history yet.</p>
-            )}
-          </section>
-
-          <section className="coach-block">
-            <h3>Mistakes</h3>
-            {mistakes.length ? (
-              <div className="mistake-list">
-                {mistakes.slice(0, 5).map((mistake) => (
-                  <article className="mistake-item" key={mistake.id}>
-                    <div>
-                      <span>{mistake.type}</span>
-                      <p>{mistake.wrong}</p>
-                      <strong>{mistake.correct}</strong>
-                    </div>
-                    <button className="review-button" onClick={() => reviewMistake(mistake.id)} type="button">
-                      Review {mistake.review_count}
-                    </button>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <p>No saved mistakes yet.</p>
-            )}
+            <h3>Mistake Book</h3>
+            <button className="secondary-action mistake-book-action" onClick={() => setMainView('mistakes')} type="button">
+              Mistake Book{mistakes.length ? ` (${mistakes.length})` : ''}
+            </button>
           </section>
 
           {latestTiming ? <p className="timing-footnote">{formatTimingSummary(latestTiming.timings)}</p> : null}
@@ -1053,10 +1045,6 @@ async function playCloudAudio(result) {
   const mimeType = result.mime_type || 'audio/mpeg';
   const audio = new Audio(`data:${mimeType};base64,${result.audio_base64}`);
   await audio.play();
-}
-
-function formatScore(value) {
-  return value === null || value === undefined ? '-' : Math.round(value);
 }
 
 function formatMs(value) {

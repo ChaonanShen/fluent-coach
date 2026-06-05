@@ -73,28 +73,6 @@ beforeEach(() => {
         ],
       });
     }
-    if (url === '/api/progress') {
-      return jsonResponse({
-        session_count: 2,
-        average_grammar_score: 88,
-        average_pronunciation_score: 72,
-        average_fluency_score: 75,
-        average_vocabulary_score: 80,
-        average_task_completion_rate: 0.5,
-        trend: [
-          {
-            session_id: 'session_old_1',
-            scenario_id: 'interview',
-            created_at: '2026-06-05T00:00:00Z',
-            grammar_score: 88,
-            pronunciation_score: 72,
-            fluency_score: 75,
-            vocabulary_score: 80,
-            task_completion_rate: 0.5,
-          },
-        ],
-      });
-    }
     if (url === '/api/tts/synthesize') {
       if (cloudTtsEnabled) {
         return jsonResponse({
@@ -302,9 +280,10 @@ test('loads scenarios and starts a session', async () => {
   expect(screen.queryByText('XEngineer')).not.toBeInTheDocument();
   expect(screen.queryByText('Candidate')).not.toBeInTheDocument();
   expect(screen.queryByText('Introduce professional background clearly')).not.toBeInTheDocument();
-  expect(screen.getByText('am working')).toBeInTheDocument();
-  expect(screen.getByText('Sessions')).toBeInTheDocument();
-  expect(screen.getByText('72')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Mistake Book (1)' })).toBeInTheDocument();
+  expect(screen.queryByText('am working')).not.toBeInTheDocument();
+  expect(screen.queryByText('Progress')).not.toBeInTheDocument();
+  expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Conversation history')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
@@ -371,10 +350,16 @@ test('plays cloud TTS audio when the backend returns audio', async () => {
 test('reviews a saved mistake', async () => {
   render(<App />);
 
+  fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (1)' }));
+  expect(await screen.findByRole('heading', { name: 'Mistake Book' })).toBeInTheDocument();
+  expect(screen.getByText('am working')).toBeInTheDocument();
+  expect(screen.getByText('时态错误。')).toBeInTheDocument();
   const review = await screen.findByRole('button', { name: 'Review 0' });
   fireEvent.click(review);
 
   expect(await screen.findByRole('button', { name: 'Review 1' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Back to Practice' }));
+  expect(await screen.findByRole('heading', { name: 'Speaking Coach' })).toBeInTheDocument();
 });
 
 test('records read aloud audio and uploads it for assessment', async () => {

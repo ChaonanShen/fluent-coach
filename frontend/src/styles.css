@@ -98,7 +98,8 @@ h3 {
 }
 
 .conversation-panel,
-.coach-panel {
+.coach-panel,
+.mistake-book {
   background: #ffffff;
   border: 1px solid #dbe1dd;
   border-radius: 8px;
@@ -332,6 +333,10 @@ h3 {
   width: 100%;
 }
 
+.mistake-book-action {
+  width: 100%;
+}
+
 .pronunciation-result {
   margin-top: 12px;
 }
@@ -422,6 +427,11 @@ h3 {
   gap: 10px;
 }
 
+.mistake-book {
+  margin: 0 auto;
+  max-width: 860px;
+}
+
 .mistake-item {
   border: 1px solid #e3e8e4;
   border-radius: 8px;
@@ -451,6 +461,12 @@ h3 {
   color: #1f5d4b;
 }
 
+.mistake-explanation {
+  color: #63726d;
+  font-size: 0.9rem;
+  margin-top: 8px;
+}
+
 .review-button {
   background: #f8faf8;
   border: 1px solid #cbd4cf;
@@ -460,6 +476,10 @@ h3 {
   font-size: 0.86rem;
   font-weight: 700;
   min-height: 34px;
+}
+
+.topbar-action {
+  min-width: 150px;
 }
 
 .timing-footnote {
