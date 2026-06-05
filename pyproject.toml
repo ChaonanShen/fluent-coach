@@ -1,0 +1,29 @@
+[project]
+name = "xengineer-speaking-coach"
+version = "0.1.0"
+description = "AI English speaking coach demo backend and test harness."
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.111,<1",
+    "httpx>=0.27,<1",
+    "uvicorn[standard]>=0.30,<1",
+    "pydantic>=2,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests/backend"]
+pythonpath = ["."]
+markers = [
+    "unit: deterministic tests that do not call external services",
+    "integration: tests that may call real ASR, LLM, or cloud services",
+    "manual: documented manual verification checks",
+]
+addopts = "-m 'not integration and not manual'"
+
+[tool.setuptools.packages.find]
+include = ["backend*"]

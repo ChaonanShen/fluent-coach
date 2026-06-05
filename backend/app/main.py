@@ -1,0 +1,285 @@
+import json
+
+from fastapi import FastAPI, HTTPException
+from starlette.websockets import WebSocket, WebSocketDisconnect
+
+from backend.app.api import (
+    CreateSessionRequest,
+    GrammarCheckRequest,
+    MistakeListResponse,
+    PronunciationAssessRequest,
+    ScenarioListResponse,
+    SessionAnalysisResponse,
+    SessionResponse,
+    TextTurnRequest,
+    TextTurnResponse,
+)
+from backend.app.core.fixtures import get_fixture_status
+from backend.app.models import (
+    AnalysisError,
+    AnalysisErrorSeverity,
+    AnalysisStage,
+    GrammarCorrection,
+    MistakeItem,
+    PronunciationAssessment,
+    SessionSummary,
+)
+from backend.app.services.analysis import analysis_store
+from backend.app.services.asr import fake_asr
+from backend.app.services.dialogue import dialogue_service
+from backend.app.services.grammar import grammar_service
+from backend.app.services.mistakes import mistake_service
+from backend.app.services.pronunciation import pronunciation_provider
+from backend.app.services.scenarios import get_scenario, list_scenarios
+from backend.app.services.sessions import session_store
+from backend.app.services.storage import log_store
+from backend.app.services.summary import summary_service
+
+app = FastAPI(title="XEngineer AI English Speaking Coach", version="0.1.0")
+
+
+@app.get("/api/health")
+def health() -> dict[str, object]:
+    return {
+        "status": "ok",
+        "fixtures": get_fixture_status(),
+    }
+
+
+@app.get("/api/scenarios", response_model=ScenarioListResponse)
+def scenarios() -> ScenarioListResponse:
+    return ScenarioListResponse(scenarios=list(list_scenarios()))
+
+
+@app.post("/api/sessions", response_model=SessionResponse, status_code=201)
+def create_session(request: CreateSessionRequest) -> SessionResponse:
+    scenario = get_scenario(request.scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=404, detail="Unknown scenario")
+    session = session_store.create(scenario)
+    return SessionResponse(
+        session=session,
+        scenario=scenario,
+        opening_line=scenario.opening_line,
+        conversation_goals=scenario.conversation_goals,
+        target_expressions=scenario.target_expressions,
+    )
+
+
+@app.post("/api/sessions/{session_id}/end", response_model=SessionResponse)
+def end_session(session_id: str) -> SessionResponse:
+    session = session_store.end(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Unknown session")
+    scenario = get_scenario(session.scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=500, detail="Session references an unknown scenario")
+    return SessionResponse(
+        session=session,
+        scenario=scenario,
+        opening_line=scenario.opening_line,
+        conversation_goals=scenario.conversation_goals,
+        target_expressions=scenario.target_expressions,
+    )
+
+
+@app.post("/api/grammar/check", response_model=GrammarCorrection)
+def check_grammar(request: GrammarCheckRequest) -> GrammarCorrection:
+    scenario = get_scenario(request.scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=404, detail="Unknown scenario")
+    correction = grammar_service.check(
+        scenario_id=request.scenario_id,
+        user_text=request.user_text,
+        conversation_context=request.conversation_context,
+    )
+    log_store.save_grammar_correction(correction)
+    mistake_service.add_from_grammar(correction)
+    return correction
+
+
+@app.post("/api/sessions/{session_id}/turns/text", response_model=TextTurnResponse)
+def add_text_turn(session_id: str, request: TextTurnRequest) -> TextTurnResponse:
+    session = session_store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Unknown session")
+    scenario = get_scenario(session.scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=500, detail="Session references an unknown scenario")
+    user_turn, ai_turn, reply = dialogue_service.add_text_turns(
+        session=session,
+        scenario=scenario,
+        user_text=request.text,
+    )
+    correction = grammar_service.check(
+        scenario_id=scenario.id,
+        user_text=request.text,
+        conversation_context=[turn.text for turn in session.turns],
+    )
+    log_store.save_grammar_correction(correction)
+    mistake_service.add_from_grammar(correction)
+    analysis_store.add_grammar_result(session.id, correction)
+    session_store.save(session)
+    return TextTurnResponse(
+        session=session,
+        user_turn=user_turn,
+        ai_turn=ai_turn,
+        current_goal=reply.current_goal,
+        next_intent=reply.next_intent,
+    )
+
+
+@app.post("/api/pronunciation/assess", response_model=PronunciationAssessment)
+def assess_pronunciation(request: PronunciationAssessRequest) -> PronunciationAssessment:
+    assessment = pronunciation_provider.assess(
+        reference_text=request.reference_text,
+        audio_file=request.audio_file,
+        fixture_id=request.fixture_id,
+    )
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Pronunciation fixture not found")
+    log_store.save_pronunciation_assessment(assessment)
+    mistake_service.add_from_pronunciation(assessment)
+    return assessment
+
+
+@app.get("/api/sessions/{session_id}/summary", response_model=SessionSummary)
+def get_session_summary(session_id: str) -> SessionSummary:
+    session = session_store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Unknown session")
+    scenario = get_scenario(session.scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=500, detail="Session references an unknown scenario")
+    return summary_service.summarize(session=session, scenario=scenario)
+
+
+@app.get("/api/sessions/{session_id}/analysis", response_model=SessionAnalysisResponse)
+def get_session_analysis(session_id: str) -> SessionAnalysisResponse:
+    if session_store.get(session_id) is None:
+        raise HTTPException(status_code=404, detail="Unknown session")
+    return SessionAnalysisResponse(
+        session_id=session_id,
+        grammar_results=analysis_store.grammar_results(session_id),
+        errors=analysis_store.errors(session_id),
+    )
+
+
+@app.get("/api/mistakes", response_model=MistakeListResponse)
+def list_mistakes() -> MistakeListResponse:
+    return MistakeListResponse(mistakes=mistake_service.list())
+
+
+@app.post("/api/mistakes/{mistake_id}/review", response_model=MistakeItem)
+def review_mistake(mistake_id: str) -> MistakeItem:
+    mistake = mistake_service.review(mistake_id)
+    if mistake is None:
+        raise HTTPException(status_code=404, detail="Unknown mistake")
+    return mistake
+
+
+@app.websocket("/ws/sessions/{session_id}/audio")
+async def session_audio(websocket: WebSocket, session_id: str) -> None:
+    await websocket.accept()
+    session = session_store.get(session_id)
+    if session is None:
+        await websocket.send_json({"type": "error", "code": "unknown_session", "message": "Unknown session"})
+        await websocket.close()
+        return
+    scenario = get_scenario(session.scenario_id)
+    if scenario is None:
+        await websocket.send_json(
+            {
+                "type": "error",
+                "code": "unknown_scenario",
+                "message": "Session references an unknown scenario",
+            }
+        )
+        await websocket.close()
+        return
+
+    expected_text: str | None = None
+    force_analysis_error = False
+    audio = bytearray()
+    try:
+        while True:
+            message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                return
+            if message.get("bytes") is not None:
+                audio.extend(message["bytes"])
+                continue
+            raw_text = message.get("text")
+            if raw_text is None:
+                continue
+            event = json.loads(raw_text)
+            event_type = event.get("type")
+            if event_type == "start_turn":
+                expected_text = event.get("expected_text")
+                force_analysis_error = bool(event.get("force_analysis_error", False))
+                audio.clear()
+                await websocket.send_json({"type": "asr.partial", "text": fake_asr.partial(expected_text)})
+            elif event_type == "end_turn":
+                transcript = fake_asr.transcribe(bytes(audio), expected_text)
+                await websocket.send_json({"type": "asr.final", "text": transcript})
+                user_turn, ai_turn, reply = dialogue_service.add_text_turns(
+                    session=session,
+                    scenario=scenario,
+                    user_text=transcript,
+                )
+                session_store.save(session)
+                await websocket.send_json(
+                    {
+                        "type": "reply.text",
+                        "text": ai_turn.text,
+                        "turn_id": ai_turn.id,
+                        "user_turn_id": user_turn.id,
+                        "current_goal": reply.current_goal,
+                        "next_intent": reply.next_intent,
+                    }
+                )
+                await websocket.send_json({"type": "analysis.pending", "stages": ["grammar"]})
+                if force_analysis_error:
+                    error = AnalysisError(
+                        stage=AnalysisStage.GRAMMAR,
+                        code="forced_analysis_error",
+                        user_message_zh="语法分析暂时不可用，已保留本轮对话。",
+                        severity=AnalysisErrorSeverity.WARNING,
+                        fallback_applied=True,
+                    )
+                    analysis_store.add_error(session.id, error)
+                    await websocket.send_json(
+                        {
+                            "type": "analysis.error",
+                            "error": error.model_dump(mode="json"),
+                        }
+                    )
+                else:
+                    correction = grammar_service.check(
+                        scenario_id=scenario.id,
+                        user_text=transcript,
+                        conversation_context=[turn.text for turn in session.turns],
+                    )
+                    log_store.save_grammar_correction(correction)
+                    mistake_service.add_from_grammar(correction)
+                    analysis_store.add_grammar_result(session.id, correction)
+                    await websocket.send_json(
+                        {
+                            "type": "analysis.result",
+                            "stage": "grammar",
+                            "result": correction.model_dump(mode="json"),
+                        }
+                    )
+                audio.clear()
+                expected_text = None
+                force_analysis_error = False
+            else:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "code": "unknown_event",
+                        "message": f"Unknown event type: {event_type}",
+                    }
+                )
+    except (WebSocketDisconnect, json.JSONDecodeError):
+        return

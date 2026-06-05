@@ -64,3 +64,61 @@ py scripts/prepare_fixtures.py --bundle-zip fixture-subset.zip
 > 注意：L2-ARCTIC 外层 zip 内含各说话人的子 zip（`ABA.zip` 等），SpeechOcean762 的 `scores.json` 在 `resource/` 下需与 `WAVE/` 同级——若是全新原始包，解压后可能需要按这两点调整目录再加 `--skip-extract` 重扫。生成 zip 后改用 `extract_fixtures.py` 即可，无需再碰原始数据。
 
 更新样本的流程：放好原始数据 → `prepare_fixtures.py` 生成新 `fixture-subset.zip` → 提交该 zip。
+
+## 本地开发命令
+
+首次运行先安装依赖：
+
+```bash
+make install-backend
+make install-frontend
+```
+
+常用命令：
+
+```bash
+make test
+make test-backend
+make test-frontend
+make dev-backend
+make dev-frontend
+```
+
+`make test` 会先检查 `fixtures/generated/` 与 `fixtures/audio/public/` 是否存在。
+若缺失且项目根目录有 `fixture-subset.zip`，会自动调用
+`scripts/extract_fixtures.py` 还原测试数据。
+
+后端开发服务默认监听 `http://127.0.0.1:8000`，健康检查接口：
+
+```text
+GET /api/health
+```
+
+前端开发服务由 Vite 启动，`/api` 和 `/ws` 会代理到本地 FastAPI 后端。
+
+## 发音评测 Provider
+
+默认发音评测使用 `PRON_PROVIDER=mock`，从 SpeechOcean762 fixture 回放确定性分数，
+因此 `make test` 不访问外部服务。
+
+若要在本地后端启用真实腾讯云 SOE，请先把 `.env` 中的值导出到当前 shell，再启动后端：
+
+```bash
+set -a
+source .env
+set +a
+PRON_PROVIDER=tencent_soe make dev-backend
+```
+
+真实 provider 会使用：
+
+- `TENCENT_APP_ID`
+- `TENCENT_SECRET_ID`
+- `TENCENT_SECRET_KEY`
+- `TENCENT_SOE_WS_URL`
+- `TENCENT_SOE_SERVER_ENGINE_TYPE`
+- `TENCENT_SOE_EVAL_MODE`
+- `TENCENT_SOE_SCORE_COEFF`
+
+默认测试仍应保持 mock；真实腾讯链路可用
+`python3 scripts/test_tencent_soe.py` 做手动 smoke test。

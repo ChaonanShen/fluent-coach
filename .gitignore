@@ -14,3 +14,11 @@ prepare_out.txt
 __pycache__/
 .pytest_cache/
 .ruff_cache/
+.venv/
+*.egg-info/
+.local/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+coverage/
+htmlcov/
