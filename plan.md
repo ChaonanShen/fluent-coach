@@ -622,6 +622,7 @@ WebSocket 事件：
 2. **界面需要简化**
    - 现象：当前左/中/右三栏偏复杂。
    - 期望：去掉左侧 scenario 栏，把场景选择放到 Conversation 栏顶部，作为选择框：`Job Interview` / `Restaurant Ordering` / `Work Meeting` / 自选。
+   - Start 和 End 合并为 Conversation 顶部的同一个会话按钮：未开始时显示 `Start`，点击后创建会话并变成 `End`；点击 `End` 结束会话后再变回 `Start`。
 
 3. **AI 回复朗读声音生硬**
    - 现象：浏览器 `speechSynthesis` 声音不像真人，听感不流畅。
@@ -701,10 +702,12 @@ WebSocket 事件：
    - 目标：去掉左侧 scenario 栏。
    - 实现：
      - Conversation 顶部增加 scenario select。
+     - Conversation 顶部增加一个会话状态按钮：`Start` / `End` 复用同一位置和控件，避免左栏 Start 与中栏 End 分散。
      - 支持 `custom` 自选场景入口：第一版可作为文本输入生成临时 scenario，或先展示 disabled/coming state 但不破坏现有三场景。
      - Coach 保持右栏；移动端仍单列。
    - 测试：
      - 选择不同 scenario 后新 session 使用对应场景。
+     - Start 后按钮文案变为 End；End 后 session 结束、按钮文案变回 Start。
      - 新 session 清理旧状态。
 
 7. **PR-U2：聊天气泡与固定滚动对话区**
