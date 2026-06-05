@@ -448,6 +448,7 @@ test('records microphone audio over the session websocket', async () => {
   expect(screen.getByText('I have worked on backend systems for three years.')).toBeInTheDocument();
   expect(screen.getByText('Timing')).toBeInTheDocument();
   expect(screen.getByText('123 ms')).toBeInTheDocument();
+  expect(await screen.findByText('TTS')).toBeInTheDocument();
   await waitFor(() => {
     expect(voice.sentMessages.some((payload) => payload instanceof ArrayBuffer)).toBe(true);
     expect(voice.sentMessages.some((payload) => eventType(payload) === 'start_turn')).toBe(true);

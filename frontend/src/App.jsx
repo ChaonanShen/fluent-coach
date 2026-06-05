@@ -150,10 +150,27 @@ export default function App() {
     setError(err.message || fallbackMessage);
   }
 
-  async function speak(text) {
+  function mergeTiming(stage, timings) {
+    setLatestTiming((current) => ({
+      stage,
+      timings: {
+        ...(current?.timings || {}),
+        ...timings,
+      },
+    }));
+  }
+
+  function recordTtsStart(replyReadyAt) {
+    mergeTiming('tts', {
+      reply_text_to_tts_start_ms: Math.max(0, nowMs() - replyReadyAt),
+    });
+  }
+
+  async function speak(text, options = {}) {
     if (!text) {
       return;
     }
+    const replyReadyAt = options.replyReadyAt ?? nowMs();
     try {
       const result = await request('/api/tts/synthesize', {
         method: 'POST',
@@ -161,15 +178,16 @@ export default function App() {
       });
       if (result.audio_base64) {
         await playCloudAudio(result);
+        recordTtsStart(replyReadyAt);
         return;
       }
     } catch {
       // Browser speech remains the local fallback when cloud TTS is unavailable.
     }
-    speakWithBrowser(text);
+    speakWithBrowser(text, replyReadyAt);
   }
 
-  function speakWithBrowser(text) {
+  function speakWithBrowser(text, replyReadyAt) {
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
       return;
     }
@@ -182,7 +200,17 @@ export default function App() {
     if (voice) {
       utterance.voice = voice;
     }
+    let started = false;
+    utterance.onstart = () => {
+      started = true;
+      recordTtsStart(replyReadyAt);
+    };
     window.speechSynthesis.speak(utterance);
+    window.setTimeout(() => {
+      if (!started) {
+        recordTtsStart(replyReadyAt);
+      }
+    }, 0);
   }
 
   async function startSession() {
@@ -227,7 +255,7 @@ export default function App() {
       });
       setSession(turnBody.session);
       setLatestCorrection(turnBody.grammar_result);
-      speak(turnBody.ai_turn?.text || turnBody.session.turns.at(-1)?.text).catch(() => {});
+      speak(turnBody.ai_turn?.text || turnBody.session.turns.at(-1)?.text, { replyReadyAt: nowMs() }).catch(() => {});
       await refreshMistakes();
       setStatus('In session');
     } catch (err) {
@@ -465,6 +493,7 @@ export default function App() {
         }));
       }
       if (message.type === 'reply.text') {
+        const replyReadyAt = nowMs();
         setSession((current) => appendTurn(current, {
           id: message.turn_id,
           session_id: session.id,
@@ -475,7 +504,7 @@ export default function App() {
           audio_path: null,
           asr_confidence: null,
         }));
-        speak(message.text).catch(() => {});
+        speak(message.text, { replyReadyAt }).catch(() => {});
         setVoiceState('idle');
         setStatus('In session');
       }
@@ -494,6 +523,7 @@ export default function App() {
         streamingReplyRef.current.text = (streamingReplyRef.current.text || '') + message.text;
       }
       if (message.type === 'reply.done') {
+        const replyReadyAt = nowMs();
         const streamId = ensureStreamingReplyId();
         const finalText = message.text || streamingReplyRef.current?.text || '';
         setSession((current) => replaceTurnIdAndText(current, streamId, {
@@ -507,7 +537,7 @@ export default function App() {
           asr_confidence: null,
         }));
         streamingReplyRef.current = null;
-        speak(finalText).catch(() => {});
+        speak(finalText, { replyReadyAt }).catch(() => {});
         setVoiceState('idle');
         setStatus('In session');
       }
@@ -521,10 +551,7 @@ export default function App() {
         refreshProgress().catch(() => {});
       }
       if (message.type === 'debug.timing') {
-        setLatestTiming({
-          stage: message.stage,
-          timings: message.timings || {},
-        });
+        mergeTiming(message.stage, message.timings || {});
       }
       if (message.type === 'error' || message.type === 'analysis.error') {
         const detail = message.error || {
@@ -881,6 +908,10 @@ export default function App() {
                   <dt>Total</dt>
                   <dd>{formatMs(latestTiming.timings.end_turn_to_reply_text_ms)}</dd>
                 </div>
+                <div>
+                  <dt>TTS</dt>
+                  <dd>{formatMs(latestTiming.timings.reply_text_to_tts_start_ms)}</dd>
+                </div>
               </dl>
             </section>
           ) : null}
@@ -1001,6 +1032,10 @@ function formatScore(value) {
 
 function formatMs(value) {
   return value === null || value === undefined ? '-' : `${Math.round(value)} ms`;
+}
+
+function nowMs() {
+  return window.performance?.now?.() ?? Date.now();
 }
 
 function chooseEnglishVoice(voices) {
