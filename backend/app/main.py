@@ -153,7 +153,11 @@ def assess_pronunciation(request: PronunciationAssessRequest) -> PronunciationAs
             fixture_id=request.fixture_id,
         )
     except RuntimeError as exc:
-        raise _provider_http_error(stage=AnalysisStage.PRONUNCIATION, exc=exc) from exc
+        raise _provider_http_error(
+            stage=AnalysisStage.PRONUNCIATION,
+            exc=exc,
+            provider_name=_provider_name(pronunciation_provider),
+        ) from exc
     if assessment is None:
         raise HTTPException(status_code=404, detail="Pronunciation fixture not found")
     log_store.save_pronunciation_assessment(assessment)
@@ -181,7 +185,11 @@ def assess_uploaded_pronunciation(request: PronunciationUploadRequest) -> Pronun
             audio_file=str(stored_audio.preferred_path.resolve()),
         )
     except RuntimeError as exc:
-        raise _provider_http_error(stage=AnalysisStage.PRONUNCIATION, exc=exc) from exc
+        raise _provider_http_error(
+            stage=AnalysisStage.PRONUNCIATION,
+            exc=exc,
+            provider_name=_provider_name(pronunciation_provider),
+        ) from exc
     if assessment is None:
         raise HTTPException(status_code=404, detail="Pronunciation assessment failed")
     log_store.save_pronunciation_assessment(assessment)
@@ -369,14 +377,57 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
         return
 
 
-def _provider_http_error(*, stage: AnalysisStage, exc: RuntimeError) -> HTTPException:
+def _provider_http_error(
+    *,
+    stage: AnalysisStage,
+    exc: RuntimeError,
+    provider_name: str | None = None,
+) -> HTTPException:
+    code, user_message_zh = _classify_provider_error(
+        stage=stage,
+        provider_name=provider_name,
+        exc=exc,
+    )
     error = AnalysisError(
         stage=stage,
-        code="provider_request_failed",
-        user_message_zh="外部服务暂时不可用，请稍后重试。",
+        code=code,
+        user_message_zh=user_message_zh,
         severity=AnalysisErrorSeverity.WARNING,
         fallback_applied=False,
-        provider=stage.value,
+        provider=provider_name or stage.value,
         raw_code=type(exc).__name__,
     )
     return HTTPException(status_code=502, detail=error.model_dump(mode="json"))
+
+
+def _provider_name(provider: object) -> str | None:
+    value = getattr(provider, "provider_name", None)
+    return value if isinstance(value, str) and value else None
+
+
+def _classify_provider_error(
+    *,
+    stage: AnalysisStage,
+    provider_name: str | None,
+    exc: RuntimeError,
+) -> tuple[str, str]:
+    if stage == AnalysisStage.PRONUNCIATION and provider_name == "tencent_soe":
+        return _classify_tencent_soe_error(exc)
+    return "provider_request_failed", "外部服务暂时不可用，请稍后重试。"
+
+
+def _classify_tencent_soe_error(exc: RuntimeError) -> tuple[str, str]:
+    message = str(exc).lower()
+    if "missing required env var" in message:
+        return "provider_config_missing", "腾讯云发音评测配置缺失，请检查服务配置。"
+    if any(token in message for token in ["auth", "signature", "secret", "unauthorized", "forbidden", "401", "403"]):
+        return "provider_auth_failed", "腾讯云发音评测鉴权失败，请检查密钥和签名配置。"
+    if any(token in message for token in ["rate limit", "rate_limited", "too many", "throttle", "limit exceeded"]):
+        return "provider_rate_limited", "腾讯云发音评测请求过于频繁，请稍后重试。"
+    if any(token in message for token in ["timeout", "timed out"]):
+        return "provider_timeout", "腾讯云发音评测超时，请稍后重试。"
+    if any(token in message for token in ["audio", "voice_format", "format", "codec"]):
+        return "invalid_audio", "音频格式暂时无法评测，请重新录音后再试。"
+    if any(token in message for token in ["handshake", "websocket upgrade", "connection closed"]):
+        return "provider_handshake_failed", "腾讯云发音评测连接失败，请稍后重试。"
+    return "provider_request_failed", "腾讯云发音评测暂时不可用，请稍后重试。"

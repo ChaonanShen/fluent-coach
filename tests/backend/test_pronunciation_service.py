@@ -1,6 +1,7 @@
 import base64
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from backend.app.core.fixtures import load_generated_manifest
@@ -122,6 +123,46 @@ def test_pronunciation_assess_maps_provider_runtime_error(monkeypatch) -> None:
     detail = response.json()["detail"]
     assert detail["stage"] == "pronunciation"
     assert detail["code"] == "provider_request_failed"
+    assert detail["user_message_zh"]
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_code"),
+    [
+        ("Missing required env var: TENCENT_SECRET_KEY", "provider_config_missing"),
+        ("Tencent SOE handshake failed: {'code': 401, 'message': 'signature invalid'}", "provider_auth_failed"),
+        ("Tencent SOE timed out waiting for final assessment result", "provider_timeout"),
+        ("Tencent SOE assessment failed: {'message': 'rate limit exceeded'}", "provider_rate_limited"),
+        ("Tencent SOE assessment failed: {'message': 'audio format invalid'}", "invalid_audio"),
+        ("WebSocket upgrade failed: HTTP/1.1 502 Bad Gateway", "provider_handshake_failed"),
+    ],
+)
+def test_pronunciation_assess_classifies_tencent_provider_errors(
+    monkeypatch,
+    message: str,
+    expected_code: str,
+) -> None:
+    class BrokenTencentProvider:
+        provider_name = "tencent_soe"
+
+        def assess(self, **kwargs):
+            del kwargs
+            raise RuntimeError(message)
+
+    monkeypatch.setattr("backend.app.main.pronunciation_provider", BrokenTencentProvider())
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/pronunciation/assess",
+        json={"reference_text": "THEN HE WENT TO THEME PARK", "audio_file": "sample.wav"},
+    )
+
+    assert response.status_code == 502
+    detail = response.json()["detail"]
+    assert detail["stage"] == "pronunciation"
+    assert detail["code"] == expected_code
+    assert detail["provider"] == "tencent_soe"
+    assert detail["raw_code"] == "RuntimeError"
     assert detail["user_message_zh"]
 
 
