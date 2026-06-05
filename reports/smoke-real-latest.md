@@ -1,6 +1,6 @@
 # Smoke Report
 
-Generated at: `2026-06-05T08:35:50.614991+00:00`
+Generated at: `2026-06-05T14:18:18.921268+00:00`
 Mode: `real_provider_smoke`
 External services used: `true`
 
@@ -15,15 +15,16 @@ External services used: `true`
 
 - LLM: passed (openai_compatible)
 - ASR: passed (faster_whisper)
+- ASR L2-ARCTIC: passed (faster_whisper), avg WER 0.0909, count 2
 - Pronunciation: passed (tencent_soe)
 - UI manual: not_run
 
 ## Latency
 
-- end_turn -> asr.final: 4656.8 ms
-- asr.final -> reply.text: 1234.0 ms
+- end_turn -> asr.final: 4358.0 ms
+- asr.final -> reply.text: 1498.0 ms
 - reply.text -> tts_start: not measured
-- pronunciation upload -> result: 1050.7 ms
+- pronunciation upload -> result: 1111.3 ms
 
 ## Manual UI Checklist
 
