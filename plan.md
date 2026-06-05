@@ -528,6 +528,7 @@ WebSocket 事件：
 | `9e4d46f` | PR-G2 | 已完成前端传参 | Read Aloud 在 active session 下上传 `session_id`，无 session 时保持原独立评测请求。 |
 | `d3bb415` | PR-I | 已完成 Summary 第一版 | Summary 优先使用 session 已有 grammar/pronunciation analysis；发音结果进入 `pronunciation_score`、`top_issues` 和 `next_drills`，无已有 grammar 时保留 fallback。 |
 | `877a7a7` | PR-J | 已完成离线骨架 | 新增 fixture-backed smoke report 和脚本，默认覆盖 ASR、Grammar、Pronunciation、dialogue fixture、UI 手动清单与延迟字段占位，不访问真实服务。 |
+| `1167e08` | PR-K | 已完成第一步 | End session 后禁用文本发送、语音 Record 和 Read Aloud，前端测试覆盖 ended session 控件状态。 |
 
 当前仍未完成或需继续增强：
 
