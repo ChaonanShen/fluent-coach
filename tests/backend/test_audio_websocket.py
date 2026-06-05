@@ -40,6 +40,40 @@ def test_audio_websocket_returns_asr_and_reply_events() -> None:
     assert reply["next_intent"] == "continue_fixture_dialogue"
 
 
+def test_audio_websocket_emits_reply_and_grammar_timings() -> None:
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json(
+            {
+                "type": "start_turn",
+                "expected_text": "I have worked on backend systems for three years.",
+            }
+        )
+        websocket.receive_json()
+        websocket.send_bytes(b"fake-audio-chunk")
+        websocket.send_json({"type": "end_turn"})
+        websocket.receive_json()
+        websocket.receive_json()
+        reply_timing = websocket.receive_json()
+        pending = websocket.receive_json()
+        grammar_timing = websocket.receive_json()
+
+    assert reply_timing["type"] == "debug.timing"
+    assert reply_timing["stage"] == "reply"
+    assert reply_timing["timings"]["audio_total_ms"] >= 0
+    assert reply_timing["timings"]["asr_ms"] >= 0
+    assert reply_timing["timings"]["dialogue_reply_ms"] >= 0
+    assert reply_timing["timings"]["end_turn_to_asr_final_ms"] >= 0
+    assert reply_timing["timings"]["end_turn_to_reply_text_ms"] >= 0
+    assert pending["type"] == "analysis.pending"
+    assert grammar_timing["type"] == "debug.timing"
+    assert grammar_timing["stage"] == "grammar"
+    assert grammar_timing["timings"]["grammar_ms"] >= 0
+
+
 def test_audio_websocket_saves_audio_turn_file(monkeypatch, tmp_path) -> None:
     monkeypatch.setenv("APP_AUDIO_DIR", str(tmp_path))
     client = TestClient(app)
@@ -143,8 +177,11 @@ def test_audio_websocket_reports_asr_provider_error(monkeypatch, tmp_path) -> No
         websocket.receive_json()
         websocket.send_bytes(b"fake-wav-audio")
         websocket.send_json({"type": "end_turn"})
+        timing = websocket.receive_json()
         event = websocket.receive_json()
 
+    assert timing["type"] == "debug.timing"
+    assert timing["stage"] == "asr"
     assert event["type"] == "analysis.error"
     assert event["stage"] == "asr"
     assert event["error"]["code"] == "provider_dependency_missing"
@@ -183,8 +220,11 @@ def test_audio_websocket_reports_missing_ffmpeg_for_real_asr(monkeypatch, tmp_pa
         websocket.receive_json()
         websocket.send_bytes(b"fake-webm-audio")
         websocket.send_json({"type": "end_turn"})
+        timing = websocket.receive_json()
         event = websocket.receive_json()
 
+    assert timing["type"] == "debug.timing"
+    assert timing["stage"] == "asr"
     assert event["type"] == "analysis.error"
     assert event["stage"] == "asr"
     assert event["error"]["code"] == "provider_dependency_missing"
@@ -219,8 +259,11 @@ def test_audio_websocket_reports_empty_asr_transcript(monkeypatch, tmp_path) -> 
         websocket.receive_json()
         websocket.send_bytes(b"fake-wav-audio")
         websocket.send_json({"type": "end_turn"})
+        timing = websocket.receive_json()
         event = websocket.receive_json()
 
+    assert timing["type"] == "debug.timing"
+    assert timing["stage"] == "asr"
     assert event["type"] == "analysis.error"
     assert event["stage"] == "asr"
     assert event["error"]["code"] == "asr_no_speech"

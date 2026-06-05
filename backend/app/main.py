@@ -1,6 +1,7 @@
 import base64
 import binascii
 import json
+import time
 
 from backend.app.core.env import load_dotenv, provider_status
 
@@ -303,6 +304,7 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                 audio.clear()
                 await websocket.send_json({"type": "asr.partial", "text": asr_provider.partial(expected_text)})
             elif event_type == "end_turn":
+                turn_timing_started = time.perf_counter()
                 if not audio:
                     await websocket.send_json(
                         {
@@ -320,7 +322,13 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     audio_bytes=bytes(audio),
                     mime_type=audio_mime_type,
                 )
+                timings = {
+                    "audio_write_ms": stored_audio.raw_write_ms,
+                    "audio_transcode_ms": stored_audio.transcode_ms,
+                    "audio_total_ms": stored_audio.total_ms,
+                }
                 if stored_audio.conversion_error and _provider_name(asr_provider) != "fake":
+                    timings["end_turn_to_error_ms"] = _elapsed_ms(turn_timing_started)
                     error = _provider_analysis_error(
                         stage=AnalysisStage.ASR,
                         exc=RuntimeError(stored_audio.conversion_error),
@@ -328,6 +336,13 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                         fallback_applied=False,
                     )
                     analysis_store.add_error(session.id, error)
+                    await websocket.send_json(
+                        {
+                            "type": "debug.timing",
+                            "stage": "asr",
+                            "timings": timings,
+                        }
+                    )
                     await websocket.send_json(
                         {
                             "type": "analysis.error",
@@ -341,8 +356,11 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     force_analysis_error = False
                     continue
                 try:
+                    asr_started = time.perf_counter()
                     transcript = asr_provider.transcribe_file(stored_audio.preferred_path, expected_text)
+                    timings["asr_ms"] = _elapsed_ms(asr_started)
                 except RuntimeError as exc:
+                    timings["end_turn_to_error_ms"] = _elapsed_ms(turn_timing_started)
                     error = _provider_analysis_error(
                         stage=AnalysisStage.ASR,
                         exc=exc,
@@ -350,6 +368,13 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                         fallback_applied=False,
                     )
                     analysis_store.add_error(session.id, error)
+                    await websocket.send_json(
+                        {
+                            "type": "debug.timing",
+                            "stage": "asr",
+                            "timings": timings,
+                        }
+                    )
                     await websocket.send_json(
                         {
                             "type": "analysis.error",
@@ -363,6 +388,7 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     force_analysis_error = False
                     continue
                 if not transcript.strip():
+                    timings["end_turn_to_error_ms"] = _elapsed_ms(turn_timing_started)
                     error = AnalysisError(
                         stage=AnalysisStage.ASR,
                         code="asr_no_speech",
@@ -372,6 +398,13 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                         provider=_provider_name(asr_provider),
                     )
                     analysis_store.add_error(session.id, error)
+                    await websocket.send_json(
+                        {
+                            "type": "debug.timing",
+                            "stage": "asr",
+                            "timings": timings,
+                        }
+                    )
                     await websocket.send_json(
                         {
                             "type": "analysis.error",
@@ -385,6 +418,8 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     force_analysis_error = False
                     continue
                 await websocket.send_json({"type": "asr.final", "text": transcript})
+                timings["end_turn_to_asr_final_ms"] = _elapsed_ms(turn_timing_started)
+                dialogue_started = time.perf_counter()
                 user_turn, ai_turn, reply = dialogue_service.add_text_turns(
                     session=session,
                     scenario=scenario,
@@ -392,6 +427,7 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     user_mode="audio",
                     user_audio_path=str(stored_audio.preferred_path),
                 )
+                timings["dialogue_reply_ms"] = _elapsed_ms(dialogue_started)
                 session_store.save(session)
                 await websocket.send_json(
                     {
@@ -403,7 +439,16 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                         "next_intent": reply.next_intent,
                     }
                 )
+                timings["end_turn_to_reply_text_ms"] = _elapsed_ms(turn_timing_started)
+                await websocket.send_json(
+                    {
+                        "type": "debug.timing",
+                        "stage": "reply",
+                        "timings": timings,
+                    }
+                )
                 await websocket.send_json({"type": "analysis.pending", "stages": ["grammar"]})
+                grammar_started = time.perf_counter()
                 if force_analysis_error:
                     error = AnalysisError(
                         stage=AnalysisStage.GRAMMAR,
@@ -413,6 +458,14 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                         fallback_applied=True,
                     )
                     analysis_store.add_error(session.id, error)
+                    timings["grammar_ms"] = _elapsed_ms(grammar_started)
+                    await websocket.send_json(
+                        {
+                            "type": "debug.timing",
+                            "stage": "grammar",
+                            "timings": timings,
+                        }
+                    )
                     await websocket.send_json(
                         {
                             "type": "analysis.error",
@@ -428,6 +481,14 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     log_store.save_grammar_correction(correction)
                     mistake_service.add_from_grammar(correction)
                     analysis_store.add_grammar_result(session.id, correction)
+                    timings["grammar_ms"] = _elapsed_ms(grammar_started)
+                    await websocket.send_json(
+                        {
+                            "type": "debug.timing",
+                            "stage": "grammar",
+                            "timings": timings,
+                        }
+                    )
                     await websocket.send_json(
                         {
                             "type": "analysis.result",
@@ -506,6 +567,10 @@ def _record_analysis_error_for_session(
     if session_id is None:
         return
     analysis_store.add_error(session_id, error)
+
+
+def _elapsed_ms(started: float) -> float:
+    return round((time.perf_counter() - started) * 1000.0, 1)
 
 
 def _classify_provider_error(
