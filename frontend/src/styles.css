@@ -222,6 +222,7 @@ h3 {
   border-top: 1px solid #edf1ee;
   display: grid;
   gap: 10px;
+  grid-template-columns: 1fr auto auto;
   margin-top: 16px;
   padding-top: 16px;
 }
@@ -233,12 +234,28 @@ h3 {
   padding: 12px;
   resize: vertical;
   width: 100%;
+  grid-column: 1 / -1;
 }
 
 .turn-form .primary-action {
   justify-self: end;
   margin-top: 0;
   width: 120px;
+}
+
+.voice-action {
+  justify-self: end;
+  width: 92px;
+}
+
+.partial-line {
+  background: #f8faf8;
+  border: 1px solid #dbe1dd;
+  border-radius: 8px;
+  color: #49606a;
+  line-height: 1.45;
+  margin: 12px 0 0;
+  padding: 10px 12px;
 }
 
 .coach-block {
@@ -259,6 +276,46 @@ h3 {
 .corrected {
   color: #1f5d4b;
   font-weight: 750;
+}
+
+.read-reference {
+  background: #f8faf8;
+  border: 1px solid #e3e8e4;
+  border-radius: 8px;
+  color: #26343b;
+  font-weight: 750;
+  line-height: 1.35;
+  margin-bottom: 10px;
+  padding: 10px;
+}
+
+.assess-action {
+  width: 100%;
+}
+
+.pronunciation-result {
+  margin-top: 12px;
+}
+
+.word-score-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.word-score-list span {
+  border: 1px solid #ccd5d0;
+  border-radius: 999px;
+  color: #2f4e47;
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 5px 8px;
+}
+
+.word-score-list .low-word {
+  background: #fff1ea;
+  border-color: #e2a785;
+  color: #7c3217;
 }
 
 .coach-panel dl {

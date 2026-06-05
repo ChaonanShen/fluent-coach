@@ -27,6 +27,13 @@ const openingTurn = {
 };
 
 beforeEach(() => {
+  window.speechSynthesis = {
+    cancel: vi.fn(),
+    speak: vi.fn(),
+  };
+  window.SpeechSynthesisUtterance = vi.fn(function utterance(text) {
+    this.text = text;
+  });
   global.fetch = vi.fn(async (url, options = {}) => {
     if (url === '/api/scenarios') {
       return jsonResponse({ scenarios: [scenario] });
@@ -142,6 +149,25 @@ beforeEach(() => {
         created_at: '2026-06-05T00:00:03Z',
       });
     }
+    if (url === '/api/pronunciation/assess') {
+      return jsonResponse({
+        id: 'assessment_1',
+        provider: 'mock',
+        reference_text: 'THEN HE WENT TO THEME PARK',
+        audio_file: 'audio/public/speechocean762_subset/speechocean_000010113.wav',
+        overall: 50,
+        accuracy: 60,
+        fluency: 90,
+        prosody: 80,
+        completeness: 100,
+        words: [
+          { word: 'THEN', accuracy: 100, fluency: null, phonemes: [], issue: null },
+          { word: 'THEME', accuracy: 20, fluency: null, phonemes: [], issue: 'low_accuracy' },
+        ],
+        issues: [],
+        created_at: '2026-06-05T00:00:05Z',
+      });
+    }
     throw new Error(`Unhandled request: ${url}`);
   });
 });
@@ -173,6 +199,7 @@ test('sends a text turn and shows correction feedback', async () => {
   expect(await screen.findByText('Great. Which project is most relevant to this role?')).toBeInTheDocument();
   expect(screen.getByText('I have been working in this field for three years.')).toBeInTheDocument();
   await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/grammar/check', expect.any(Object)));
+  expect(window.speechSynthesis.speak).toHaveBeenCalled();
 });
 
 test('reviews a saved mistake', async () => {
@@ -182,6 +209,15 @@ test('reviews a saved mistake', async () => {
   fireEvent.click(review);
 
   expect(await screen.findByRole('button', { name: 'Review 1' })).toBeInTheDocument();
+});
+
+test('runs read aloud assessment', async () => {
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Assess Reading' }));
+
+  expect(await screen.findByText('Overall')).toBeInTheDocument();
+  expect(screen.getByText('THEME')).toHaveClass('low-word');
 });
 
 function jsonResponse(body) {

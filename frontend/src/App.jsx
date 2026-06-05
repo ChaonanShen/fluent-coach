@@ -22,6 +22,8 @@ export default function App() {
   const [inputText, setInputText] = useState('');
   const [latestCorrection, setLatestCorrection] = useState(null);
   const [mistakes, setMistakes] = useState([]);
+  const [pronunciation, setPronunciation] = useState(null);
+  const [partialText, setPartialText] = useState('');
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState('Loading scenarios');
   const [error, setError] = useState('');
@@ -61,6 +63,14 @@ export default function App() {
   async function refreshMistakes() {
     const body = await request('/api/mistakes');
     setMistakes(body.mistakes);
+  }
+
+  function speak(text) {
+    if (!text || !window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+      return;
+    }
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
   }
 
   async function startSession() {
@@ -111,6 +121,7 @@ export default function App() {
       ]);
       setSession(turnBody.session);
       setLatestCorrection(correctionBody);
+      speak(turnBody.ai_turn?.text || turnBody.session.turns.at(-1)?.text);
       await refreshMistakes();
       setStatus('In session');
     } catch (err) {
@@ -152,6 +163,86 @@ export default function App() {
     } catch (err) {
       setError(err.message);
     }
+  }
+
+  async function assessReading() {
+    setError('');
+    setStatus('Assessing');
+    try {
+      const assessment = await request('/api/pronunciation/assess', {
+        method: 'POST',
+        body: JSON.stringify({ fixture_id: 'speechocean_000010113' }),
+      });
+      setPronunciation(assessment);
+      await refreshMistakes();
+      setStatus(sessionEnded ? 'Ended' : session ? 'In session' : 'Ready');
+    } catch (err) {
+      setError(err.message);
+      setStatus('Error');
+    }
+  }
+
+  function simulateVoiceTurn() {
+    if (!session || sessionEnded) {
+      return;
+    }
+    const expectedText = inputText.trim() || 'I am working in this field since three years.';
+    setError('');
+    setPartialText('');
+    setStatus('Listening');
+    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const websocket = new WebSocket(`${scheme}://${window.location.host}/ws/sessions/${session.id}/audio`);
+    websocket.onopen = () => {
+      websocket.send(JSON.stringify({ type: 'start_turn', expected_text: expectedText }));
+      websocket.send(new Uint8Array([1, 2, 3, 4]));
+      websocket.send(JSON.stringify({ type: 'end_turn' }));
+    };
+    websocket.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'asr.partial') {
+        setPartialText(message.text);
+      }
+      if (message.type === 'asr.final') {
+        setPartialText(message.text);
+        setSession((current) => appendTurn(current, {
+          id: message.user_turn_id || `local-user-${Date.now()}`,
+          session_id: session.id,
+          speaker: 'user',
+          text: message.text,
+          created_at: new Date().toISOString(),
+          mode: 'audio',
+          audio_path: null,
+          asr_confidence: null,
+        }));
+      }
+      if (message.type === 'reply.text') {
+        setSession((current) => appendTurn(current, {
+          id: message.turn_id,
+          session_id: session.id,
+          speaker: 'ai',
+          text: message.text,
+          created_at: new Date().toISOString(),
+          mode: 'text',
+          audio_path: null,
+          asr_confidence: null,
+        }));
+        speak(message.text);
+      }
+      if (message.type === 'analysis.result') {
+        setLatestCorrection(message.result);
+        refreshMistakes().catch(() => {});
+      }
+      if (message.type === 'error' || message.type === 'analysis.error') {
+        setError(message.message || message.error?.user_message_zh || 'Analysis error');
+      }
+    };
+    websocket.onerror = () => {
+      setError('Voice connection failed.');
+      setStatus('Error');
+    };
+    websocket.onclose = () => {
+      setStatus(sessionEnded ? 'Ended' : 'In session');
+    };
   }
 
   return (
@@ -232,11 +323,47 @@ export default function App() {
             <button className="primary-action" disabled={!session || !inputText.trim() || sessionEnded} type="submit">
               Send
             </button>
+            <button className="secondary-action voice-action" disabled={!session || sessionEnded} onClick={simulateVoiceTurn} type="button">
+              Voice
+            </button>
           </form>
+          {partialText ? <p className="partial-line">Partial: {partialText}</p> : null}
         </section>
 
         <aside className="coach-panel">
           <h2>Coach</h2>
+          <section className="coach-block">
+            <h3>Read Aloud</h3>
+            <p className="read-reference">THEN HE WENT TO THEME PARK</p>
+            <button className="secondary-action assess-action" onClick={assessReading} type="button">
+              Assess Reading
+            </button>
+            {pronunciation ? (
+              <div className="pronunciation-result">
+                <dl>
+                  <div>
+                    <dt>Overall</dt>
+                    <dd>{Math.round(pronunciation.overall)}</dd>
+                  </div>
+                  <div>
+                    <dt>Accuracy</dt>
+                    <dd>{Math.round(pronunciation.accuracy)}</dd>
+                  </div>
+                  <div>
+                    <dt>Fluency</dt>
+                    <dd>{Math.round(pronunciation.fluency)}</dd>
+                  </div>
+                </dl>
+                <div className="word-score-list">
+                  {pronunciation.words.map((word) => (
+                    <span className={word.accuracy < 60 ? 'low-word' : ''} key={word.word}>
+                      {word.word}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </section>
           {latestCorrection?.issues?.length ? (
             <section className="coach-block">
               <h3>Correction</h3>
@@ -300,4 +427,17 @@ export default function App() {
       </section>
     </main>
   );
+}
+
+function appendTurn(session, turn) {
+  if (!session) {
+    return session;
+  }
+  if (session.turns.some((existing) => existing.id === turn.id)) {
+    return session;
+  }
+  return {
+    ...session,
+    turns: [...session.turns, turn],
+  };
 }
