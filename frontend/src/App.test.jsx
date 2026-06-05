@@ -174,6 +174,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 test('loads scenarios and starts a session', async () => {
@@ -220,9 +221,146 @@ test('runs read aloud assessment', async () => {
   expect(screen.getByText('THEME')).toHaveClass('low-word');
 });
 
+test('records microphone audio over the session websocket', async () => {
+  const voice = installVoiceMocks();
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+
+  expect(await screen.findByText('Thanks for sharing that project. What impact did it have?')).toBeInTheDocument();
+  expect(screen.getByText('I have worked on backend systems for three years.')).toBeInTheDocument();
+  await waitFor(() => {
+    expect(voice.sentMessages.some((payload) => payload instanceof ArrayBuffer)).toBe(true);
+    expect(voice.sentMessages.some((payload) => eventType(payload) === 'start_turn')).toBe(true);
+    expect(voice.sentMessages.some((payload) => eventType(payload) === 'end_turn')).toBe(true);
+  });
+  expect(window.speechSynthesis.speak).toHaveBeenCalled();
+});
+
 function jsonResponse(body) {
   return Promise.resolve({
     ok: true,
     json: () => Promise.resolve(body),
   });
+}
+
+function installVoiceMocks() {
+  const sentMessages = [];
+  const getUserMedia = vi.fn(async () => ({
+    getTracks: () => [{ stop: vi.fn() }],
+  }));
+
+  Object.defineProperty(window.navigator, 'mediaDevices', {
+    configurable: true,
+    value: { getUserMedia },
+  });
+
+  class FakeMediaRecorder {
+    constructor(stream) {
+      this.stream = stream;
+      this.state = 'inactive';
+    }
+
+    start() {
+      this.state = 'recording';
+    }
+
+    requestData() {
+      this.ondataavailable?.({
+        data: {
+          size: 11,
+          arrayBuffer: () => Promise.resolve(new Uint8Array([1, 2, 3, 4]).buffer),
+        },
+      });
+    }
+
+    stop() {
+      this.state = 'inactive';
+      this.onstop?.();
+    }
+  }
+
+  class FakeWebSocket {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSED = 3;
+
+    constructor(url) {
+      this.url = url;
+      this.readyState = FakeWebSocket.CONNECTING;
+      setTimeout(() => {
+        this.readyState = FakeWebSocket.OPEN;
+        this.onopen?.();
+      }, 0);
+    }
+
+    send(payload) {
+      sentMessages.push(payload);
+      if (eventType(payload) === 'start_turn') {
+        setTimeout(() => {
+          this.onmessage?.({
+            data: JSON.stringify({ type: 'asr.partial', text: 'I have worked on' }),
+          });
+        }, 0);
+      }
+      if (eventType(payload) === 'end_turn') {
+        setTimeout(() => {
+          this.onmessage?.({
+            data: JSON.stringify({
+              type: 'asr.final',
+              text: 'I have worked on backend systems for three years.',
+              user_turn_id: 'turn_user_voice_1',
+            }),
+          });
+          this.onmessage?.({
+            data: JSON.stringify({
+              type: 'reply.text',
+              text: 'Thanks for sharing that project. What impact did it have?',
+              turn_id: 'turn_ai_voice_1',
+            }),
+          });
+          this.onmessage?.({
+            data: JSON.stringify({
+              type: 'analysis.result',
+              stage: 'grammar',
+              result: {
+                id: 'correction_voice_1',
+                scenario_id: 'interview',
+                user_text: 'I have worked on backend systems for three years.',
+                corrected_text: 'I have worked on backend systems for three years.',
+                better_expression: null,
+                issues: [],
+                overall_severity: 'minor',
+                correction_timing: 'delayed_summary',
+                naturalness_reason_zh: null,
+                created_at: '2026-06-05T00:00:06Z',
+              },
+            }),
+          });
+        }, 0);
+      }
+    }
+
+    close() {
+      this.readyState = FakeWebSocket.CLOSED;
+      this.onclose?.();
+    }
+  }
+
+  vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
+  vi.stubGlobal('WebSocket', FakeWebSocket);
+
+  return { getUserMedia, sentMessages };
+}
+
+function eventType(payload) {
+  if (typeof payload !== 'string') {
+    return null;
+  }
+  return JSON.parse(payload).type;
 }

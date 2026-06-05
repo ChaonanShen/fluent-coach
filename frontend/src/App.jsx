@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -24,9 +24,15 @@ export default function App() {
   const [mistakes, setMistakes] = useState([]);
   const [pronunciation, setPronunciation] = useState(null);
   const [partialText, setPartialText] = useState('');
+  const [voiceState, setVoiceState] = useState('idle');
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState('Loading scenarios');
   const [error, setError] = useState('');
+  const mediaRecorderRef = useRef(null);
+  const voiceWebSocketRef = useRef(null);
+  const voiceStreamRef = useRef(null);
+  const pendingAudioSendsRef = useRef([]);
+  const voiceCanceledRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -50,6 +56,12 @@ export default function App() {
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => () => {
+    voiceCanceledRef.current = true;
+    closeVoiceSocket();
+    stopVoiceStream();
   }, []);
 
   const selectedScenario = useMemo(
@@ -182,20 +194,59 @@ export default function App() {
     }
   }
 
-  function simulateVoiceTurn() {
+  async function startVoiceTurn() {
     if (!session || sessionEnded) {
       return;
     }
-    const expectedText = inputText.trim() || 'I am working in this field since three years.';
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      setError('Microphone recording is not supported in this browser.');
+      setStatus('Error');
+      return;
+    }
     setError('');
     setPartialText('');
-    setStatus('Listening');
+    setStatus('Requesting mic');
+    voiceCanceledRef.current = false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      voiceStreamRef.current = stream;
+      openVoiceSocket(stream);
+    } catch (err) {
+      setError(err?.message || 'Microphone permission was denied.');
+      setStatus('Error');
+      setVoiceState('idle');
+      stopVoiceStream();
+    }
+  }
+
+  function openVoiceSocket(stream) {
     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const websocket = new WebSocket(`${scheme}://${window.location.host}/ws/sessions/${session.id}/audio`);
+    voiceWebSocketRef.current = websocket;
     websocket.onopen = () => {
-      websocket.send(JSON.stringify({ type: 'start_turn', expected_text: expectedText }));
-      websocket.send(new Uint8Array([1, 2, 3, 4]));
-      websocket.send(JSON.stringify({ type: 'end_turn' }));
+      websocket.send(JSON.stringify({ type: 'start_turn' }));
+      const recorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+      pendingAudioSendsRef.current = [];
+      recorder.ondataavailable = (event) => queueAudioChunk(event.data);
+      recorder.onerror = () => {
+        setError('Recording failed.');
+        cancelVoiceTurn();
+      };
+      recorder.onstop = () => {
+        if (!voiceCanceledRef.current) {
+          finishVoiceTurn().catch((err) => {
+            setError(err.message);
+            setStatus('Error');
+            setVoiceState('idle');
+            closeVoiceSocket();
+            stopVoiceStream();
+          });
+        }
+      };
+      recorder.start(250);
+      setVoiceState('recording');
+      setStatus('Recording');
     };
     websocket.onmessage = (event) => {
       const message = JSON.parse(event.data);
@@ -231,18 +282,104 @@ export default function App() {
       if (message.type === 'analysis.result') {
         setLatestCorrection(message.result);
         refreshMistakes().catch(() => {});
+        closeVoiceSocket();
       }
       if (message.type === 'error' || message.type === 'analysis.error') {
         setError(message.message || message.error?.user_message_zh || 'Analysis error');
+        closeVoiceSocket();
       }
     };
     websocket.onerror = () => {
       setError('Voice connection failed.');
       setStatus('Error');
+      setVoiceState('idle');
+      stopVoiceStream();
     };
     websocket.onclose = () => {
+      voiceWebSocketRef.current = null;
+      mediaRecorderRef.current = null;
+      pendingAudioSendsRef.current = [];
+      stopVoiceStream();
+      setVoiceState('idle');
       setStatus(sessionEnded ? 'Ended' : 'In session');
     };
+  }
+
+  function stopVoiceTurn() {
+    if (voiceState !== 'recording') {
+      return;
+    }
+    setVoiceState('processing');
+    setStatus('Processing');
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') {
+      finishVoiceTurn().catch((err) => {
+        setError(err.message);
+        setStatus('Error');
+        setVoiceState('idle');
+      });
+      return;
+    }
+    if (recorder.requestData) {
+      recorder.requestData();
+    }
+    recorder.stop();
+  }
+
+  function cancelVoiceTurn() {
+    voiceCanceledRef.current = true;
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+    closeVoiceSocket();
+    stopVoiceStream();
+    mediaRecorderRef.current = null;
+    pendingAudioSendsRef.current = [];
+    setVoiceState('idle');
+    setStatus(sessionEnded ? 'Ended' : session ? 'In session' : 'Ready');
+  }
+
+  function queueAudioChunk(blob) {
+    if (!blob?.size) {
+      return;
+    }
+    const sendPromise = blob.arrayBuffer().then((buffer) => {
+      const websocket = voiceWebSocketRef.current;
+      if (websocket?.readyState === WebSocket.OPEN && buffer.byteLength > 0) {
+        websocket.send(buffer);
+      }
+    });
+    pendingAudioSendsRef.current = [...pendingAudioSendsRef.current, sendPromise];
+    sendPromise.finally(() => {
+      pendingAudioSendsRef.current = pendingAudioSendsRef.current.filter((item) => item !== sendPromise);
+    });
+  }
+
+  async function finishVoiceTurn() {
+    await Promise.allSettled(pendingAudioSendsRef.current);
+    const websocket = voiceWebSocketRef.current;
+    if (!websocket || websocket.readyState !== WebSocket.OPEN) {
+      throw new Error('Voice connection closed before the turn finished.');
+    }
+    websocket.send(JSON.stringify({ type: 'end_turn' }));
+    stopVoiceStream();
+  }
+
+  function closeVoiceSocket() {
+    const websocket = voiceWebSocketRef.current;
+    if (websocket && websocket.readyState === WebSocket.OPEN) {
+      websocket.close();
+    }
+  }
+
+  function stopVoiceStream() {
+    const stream = voiceStreamRef.current;
+    if (!stream) {
+      return;
+    }
+    stream.getTracks().forEach((track) => track.stop());
+    voiceStreamRef.current = null;
   }
 
   return (
@@ -323,8 +460,13 @@ export default function App() {
             <button className="primary-action" disabled={!session || !inputText.trim() || sessionEnded} type="submit">
               Send
             </button>
-            <button className="secondary-action voice-action" disabled={!session || sessionEnded} onClick={simulateVoiceTurn} type="button">
-              Voice
+            <button
+              className="secondary-action voice-action"
+              disabled={!session || sessionEnded || voiceState === 'processing'}
+              onClick={voiceState === 'recording' ? stopVoiceTurn : startVoiceTurn}
+              type="button"
+            >
+              {voiceState === 'recording' ? 'Stop' : voiceState === 'processing' ? 'Wait' : 'Record'}
             </button>
           </form>
           {partialText ? <p className="partial-line">Partial: {partialText}</p> : null}
