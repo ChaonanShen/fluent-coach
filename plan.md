@@ -6,7 +6,8 @@
 
 默认原则：
 
-- 实时主链路只负责：录音、ASR（partial/final）、生成回复、展示回复。
+- 实时主链路只负责：录音、按轮整句 ASR、生成/流式返回 AI 回复、展示回复。
+- **实时性优先级已确定**：只有 LLM 对话回复需要返回流式；ASR 采用一轮结束后整句识别；语法纠错、发音评测和错题生成都做旁路异步，不阻塞对话。
 - 学习分析旁路异步负责：语法纠错、表达优化、发音评测、课后总结、错题本。
 - **测试从第一天搭起、伴随全程**：每个能测的模块都自带数据驱动测试；只能手动测的，写进「手动测试清单」并写明步骤与判定标准。
 - 测试默认不依赖前端、不依赖真实 LLM、不依赖真实发音云服务。
@@ -673,6 +674,7 @@ WebSocket 事件：
      - OpenAI-compatible client 增加 streaming adapter。
      - WS 新增事件：`reply.delta`、`reply.done`。
      - 前端边收到边展示 AI 气泡文本；`reply.done` 后再触发 TTS。
+     - 这里的流式是“返回流式”：请求仍一次发送当前 session 上下文和本轮用户文本，服务端逐段返回模型输出。
      - FakeLLMClient 保持确定性 streaming 测试。
    - 测试：
      - fake streaming 多段 delta 顺序合并成最终 turn。
@@ -726,6 +728,7 @@ WebSocket 事件：
    - 实现：
      - 每个 audio turn 可配置是否触发 pronunciation task。
      - 默认可先只对短音频启用；超长音频跳过并提示。
+     - 腾讯 SOE 不进入主链路实时路径；按完整录音异步评测即可，不要求流式传输或实时中间结果。
      - 结果通过 `analysis.result stage=pronunciation` 进入 Coach 和 mistakes。
    - 测试：
      - Fake provider 验证 reply 先返回，pronunciation 后返回。
@@ -782,7 +785,7 @@ WebSocket 事件：
 
 当前仍待继续：
 
-- 真正连续流式 ASR partial 仍未实现；当前是浏览器 VAD 自动断句 + `end_turn` 后识别。
+- 真正连续流式 ASR partial 明确不作为当前目标；当前采用浏览器 VAD 自动断句 + `end_turn` 后整句识别，这是产品上接受的方案。
 - PR-L5 后续：真实云 TTS 代码入口已完成；当前 browser TTS 在 Edge/Chrome 下听感可接受，演示避免使用 QQ 浏览器。
 - PR-Eval2 后续：完整 TextGrid 误音命中率需要原始 L2-ARCTIC TextGrid 文件和一个实时误音 detector；当前默认报告只统计 readiness，避免假算。
 - 更细的场景目标状态机仍未做，当前 custom scenario 是主题驱动的临时场景。

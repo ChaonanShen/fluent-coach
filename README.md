@@ -216,6 +216,18 @@ CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/
 
 真实 ASR 集成测试默认不会运行；需要显式执行 integration marker。
 
+当前实时链路的产品决策：
+
+- 浏览器录音仍按 WebSocket chunk 上传，但后端等一轮语音结束后再用
+  faster-whisper 做整句识别；不追求边说边改写 ASR partial，避免重复推理和
+  GPU 延迟抖动。
+- AI 对话回复是唯一需要强实时感的主路径：LLM 使用返回流式，前端收到
+  `reply.delta` 就展示文本，`reply.done` 后落库并触发朗读。
+- 语法纠错、错题生成和发音评测都走旁路异步；哪个分析先完成就先显示，
+  不阻塞 AI 回复。
+- 腾讯 SOE 用于发音评测，不作为主对话实时链路；当前按完整录音评测即可，
+  不要求流式上传或实时中间结果。
+
 TTS 默认使用 `TTS_PROVIDER=browser`，前端通过浏览器 `speechSynthesis`
 播放 AI 回复，并优先选择更自然的英文 voice。也可以启用 OpenAI-compatible
 语音接口，后端会调用 `/audio/speech` 并把音频以 base64 返回给前端播放：
@@ -251,4 +263,5 @@ make dev-backend
 要求接口兼容 `/chat/completions`。真实 LLM 只在 fixture 未命中的自由输入上调用；
 JSON 解析失败会降级为当前 fallback，不中断对话。语音 WebSocket 链路支持
 `reply.delta` / `reply.done` 流式回复；不支持流式的 provider 会回退到
-一次性 `reply.text`。
+一次性 `reply.text`。这里的“流式”指服务端返回流式，输入仍是一次发送当前
+session 上下文和本轮用户文本。
