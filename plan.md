@@ -522,6 +522,7 @@ WebSocket 事件：
 | `f20f674` | PR-D | 已完成依赖记录 | README 和计划记录 `faster-whisper`、`ffmpeg` 的用途、安装方式和手动模型下载要求。 |
 | `91d4ac4` | PR-D | 已完成模型目录准备 | 新增 `models/` 目录说明和忽略规则，README 记录本地模型路径与 V100/CUDA smoke 示例。 |
 | `e28bef4` | PR-D | 已完成真实 CUDA smoke | `models/faster-whisper-small.en/` 已落位，V100/CUDA 上通过 `scripts/test_asr_provider.py`。 |
+| `d349116` | PR-D2 | 已完成 | WebSocket 音频回合改为使用保存/转码后的 `stored_audio.preferred_path` 调用文件级 ASR，并补默认离线测试验证路径调用。 |
 
 当前仍未完成或需继续增强：
 
