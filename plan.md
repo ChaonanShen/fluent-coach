@@ -756,3 +756,24 @@ WebSocket 事件：
 - 对话区固定高度、气泡样式、默认滚动到底部。
 - TTS 听感优先使用真实 provider 或更自然 browser voice，不再只依赖默认系统朗读。
 - 默认 `make test` 仍离线稳定；真实服务测试只显式运行。
+
+#### v3 执行记录
+
+| 提交 | 对应计划 | 状态 | 说明 |
+|---|---|---|---|
+| `1700f51` | PR-L1 | 已完成第一步 | WS 语音回合新增 `debug.timing`，覆盖音频写入、转码、ASR、对话回复、语法分析耗时；ASR 错误路径也返回 timing。 |
+| `5066aa5` | PR-L2 | 已完成第一步 | 语音回合 `reply.text` 返回后异步执行 grammar/mistake 分析；前端收到回复后立即恢复录音按钮。 |
+| `317b783` | PR-L4 | 已完成诊断入口 | `scripts/test_tencent_soe.py --verbose-safe` 输出脱敏签名和音频诊断；SpeechOcean fixture 真实 Tencent SOE smoke 已通过。 |
+| `0180256` | PR-U1 | 已完成第一步 | UI 从三栏改为 Conversation + Coach 两栏；scenario select 移到 Conversation 顶部；Start/End 合并为一个按钮。 |
+| `b60bfed` | PR-U2 | 已完成第一步 | Conversation 消息区改为固定高度滚动容器，AI/用户左右气泡展示，新消息自动滚到底部。 |
+| `cf52215` | PR-L5 | 已完成 browser fallback 优化 | 浏览器 TTS 优先选择英文自然 voice，设置 `rate=0.94`、`lang=en-US`；真实云 TTS provider 仍待后续。 |
+| `050a973` | PR-L1 | 已完成前端展示 | 前端 Coach 面板显示最近一轮 ASR、Reply、Grammar、Total timing，便于现场定位延迟瓶颈。 |
+| `fce3f62` | 测试维护 | 已完成 | 更新 analysis WebSocket 测试以覆盖新增 timing 事件顺序。 |
+
+当前仍待继续：
+
+- PR-L3：真正的 LLM 流式回复 `reply.delta` / `reply.done`。
+- PR-L5 后续：真实云 TTS provider，而不是只优化 browser fallback。
+- PR-L6：自由对话音频的可选异步发音评测。
+- PR-E2E：浏览器自动 smoke。
+- PR-Eval2：L2-ARCTIC 口音 ASR / 误音检测评测。
