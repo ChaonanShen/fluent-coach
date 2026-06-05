@@ -769,11 +769,16 @@ WebSocket 事件：
 | `cf52215` | PR-L5 | 已完成 browser fallback 优化 | 浏览器 TTS 优先选择英文自然 voice，设置 `rate=0.94`、`lang=en-US`；真实云 TTS provider 仍待后续。 |
 | `050a973` | PR-L1 | 已完成前端展示 | 前端 Coach 面板显示最近一轮 ASR、Reply、Grammar、Total timing，便于现场定位延迟瓶颈。 |
 | `fce3f62` | 测试维护 | 已完成 | 更新 analysis WebSocket 测试以覆盖新增 timing 事件顺序。 |
+| `6806cbe` | PR-L3 | 已完成第一步 | LLM client、DialogueService、WS 和前端支持 `reply.delta` / `reply.done`；fixture/fallback 仍可走 `reply.text`。 |
+| `5503eaa` | PR-L6 | 已完成第一步 | 普通语音回合可异步触发发音评测，回复先返回，pronunciation 结果后到达 Coach/Mistakes。 |
+| `b4f452c` | PR-L5 | 已完成云 TTS 入口 | 新增 OpenAI-compatible TTS provider，前端优先播放后端音频，失败回退浏览器 TTS。 |
+| `90a63ca` | PR-Eval2 | 已完成第一步 | 默认评测报告增加 L2-ARCTIC native language 分布和手工标注覆盖率；真实口音 ASR/误音命中仍待后续。 |
+| `5242501` | PR-E2E | 已完成 | 新增 Playwright UI smoke，显式覆盖进入页面、Start、文本回合、End 和 Summary；不加入默认 `make test`。 |
 
 当前仍待继续：
 
-- PR-L3：真正的 LLM 流式回复 `reply.delta` / `reply.done`。
-- PR-L5 后续：真实云 TTS provider，而不是只优化 browser fallback。
-- PR-L6：自由对话音频的可选异步发音评测。
-- PR-E2E：浏览器自动 smoke。
-- PR-Eval2：L2-ARCTIC 口音 ASR / 误音检测评测。
+- 真正连续流式 ASR partial / VAD 自动断句，目前仍是“按轮录音 + end_turn 后识别”。
+- PR-L5 后续：真实云 TTS 需要可用账号做人工听感和延迟验收；代码已具备 OpenAI-compatible 接入口。
+- PR-Eval2 后续：L2-ARCTIC 真实 faster-whisper 口音 WER 和 TextGrid 误音命中率。
+- 更细的场景目标状态机和 custom scenario 完整创建流程。
+- 浏览器端 TTS start timing 与截图级 UI 回归仍可继续增强。

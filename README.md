@@ -211,8 +211,24 @@ CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/
 真实 ASR 集成测试默认不会运行；需要显式执行 integration marker。
 
 TTS 默认使用 `TTS_PROVIDER=browser`，前端通过浏览器 `speechSynthesis`
-播放 AI 回复。后端 `/api/tts/synthesize` 当前返回 browser fallback 元数据，
-方便后续替换成真实云 TTS provider。
+播放 AI 回复，并优先选择更自然的英文 voice。也可以启用 OpenAI-compatible
+语音接口，后端会调用 `/audio/speech` 并把音频以 base64 返回给前端播放：
+
+```bash
+TTS_PROVIDER=openai_compatible
+TTS_BASE_URL=https://example.test/v1
+TTS_API_KEY=...
+TTS_MODEL=tts-1
+TTS_VOICE=alloy
+TTS_RESPONSE_FORMAT=mp3
+```
+
+`TTS_BASE_URL` / `TTS_API_KEY` 为空时会自动回退到浏览器 TTS；默认测试仍走
+browser fallback，不访问外部服务。
+
+普通语音对话每轮发音评测是旁路异步任务，不会阻塞 AI 回复。可用
+`PRON_ASSESS_AUDIO_TURNS=1` 显式开启，`0` 显式关闭；未设置时 mock provider
+默认关闭，真实发音 provider 默认开启。
 
 ## LLM Provider
 
@@ -227,4 +243,6 @@ make dev-backend
 ```
 
 要求接口兼容 `/chat/completions`。真实 LLM 只在 fixture 未命中的自由输入上调用；
-JSON 解析失败会降级为当前 fallback，不中断对话。
+JSON 解析失败会降级为当前 fallback，不中断对话。语音 WebSocket 链路支持
+`reply.delta` / `reply.done` 流式回复；不支持流式的 provider 会回退到
+一次性 `reply.text`。
