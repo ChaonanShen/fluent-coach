@@ -1,4 +1,7 @@
 dataset/
+.env
+.env.*
+!.env.example
 fixtures/audio/
 fixtures/generated/
 fixture-subset.zip
