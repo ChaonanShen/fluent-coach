@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "samples": [
+    {
+      "id": "dialogue_001",
+      "scenario_id": "interview",
+      "title": "Self introduction and background",
+      "goal": "User introduces background and connects it to the role.",
+      "turns": [
+        {"speaker": "ai", "text": "Good morning. Thanks for joining today. Could you start by briefly introducing yourself?"},
+        {"speaker": "user", "text": "Sure. I have three years of experience in backend development, mainly building APIs and data services."},
+        {"speaker": "ai", "text": "Great. Which project from that experience is most relevant to this role?"},
+        {"speaker": "user", "text": "I worked on a payment monitoring system that reduced incident response time by about thirty percent."},
+        {"speaker": "ai", "text": "That sounds relevant. What was your specific responsibility on that project?"}
+      ],
+      "target_expressions": ["I have three years of experience in...", "I worked on...", "reduced incident response time"]
+    },
+    {
+      "id": "dialogue_002",
+      "scenario_id": "interview",
+      "title": "Behavioral question",
+      "goal": "User answers a challenge question with a specific example.",
+      "turns": [
+        {"speaker": "ai", "text": "Tell me about a time when you had to handle a difficult deadline."},
+        {"speaker": "user", "text": "In my last project, our release date moved forward by one week, so I helped the team split the work into must-have and nice-to-have tasks."},
+        {"speaker": "ai", "text": "How did you communicate that change to stakeholders?"},
+        {"speaker": "user", "text": "I sent a short status update every day and explained the trade-offs clearly."},
+        {"speaker": "ai", "text": "What was the final result?"}
+      ],
+      "target_expressions": ["must-have and nice-to-have tasks", "explained the trade-offs", "final result"]
+    },
+    {
+      "id": "dialogue_003",
+      "scenario_id": "interview",
+      "title": "Candidate question",
+      "goal": "User asks a thoughtful question about the team.",
+      "turns": [
+        {"speaker": "ai", "text": "Before we wrap up, do you have any questions for me?"},
+        {"speaker": "user", "text": "Yes. Could you tell me more about how this team measures success in the first three months?"},
+        {"speaker": "ai", "text": "Good question. We focus on onboarding speed, ownership, and collaboration with design and data teams."},
+        {"speaker": "user", "text": "That makes sense. What would be the most urgent problem for this role to solve?"},
+        {"speaker": "ai", "text": "The most urgent problem is improving reliability for our core user workflow."}
+      ],
+      "target_expressions": ["Could you tell me more about...", "measures success", "most urgent problem"]
+    },
+    {
+      "id": "dialogue_004",
+      "scenario_id": "restaurant_ordering",
+      "title": "Basic order",
+      "goal": "User asks for a recommendation and places an order politely.",
+      "turns": [
+        {"speaker": "ai", "text": "Hi, welcome in. Are you ready to order, or would you like a few more minutes?"},
+        {"speaker": "user", "text": "I am ready. What would you recommend today?"},
+        {"speaker": "ai", "text": "The grilled chicken sandwich is popular, and the tomato soup is also very good."},
+        {"speaker": "user", "text": "Could I have the grilled chicken sandwich and a glass of water, please?"},
+        {"speaker": "ai", "text": "Of course. Would you like fries or salad with that?"}
+      ],
+      "target_expressions": ["What would you recommend today?", "Could I have...", "a glass of water"]
+    },
+    {
+      "id": "dialogue_005",
+      "scenario_id": "restaurant_ordering",
+      "title": "Dietary request",
+      "goal": "User asks about ingredients and makes a special request.",
+      "turns": [
+        {"speaker": "ai", "text": "Do you have any questions about the menu?"},
+        {"speaker": "user", "text": "Yes. Does the chicken salad contain nuts?"},
+        {"speaker": "ai", "text": "It has almonds, but we can remove them if you prefer."},
+        {"speaker": "user", "text": "Could you make it without almonds, please? I have a nut allergy."},
+        {"speaker": "ai", "text": "Absolutely. I will make a note for the kitchen."}
+      ],
+      "target_expressions": ["Does this contain...", "Could you make it without...", "I have a nut allergy"]
+    },
+    {
+      "id": "dialogue_006",
+      "scenario_id": "restaurant_ordering",
+      "title": "Wrong item received",
+      "goal": "User handles a service issue politely.",
+      "turns": [
+        {"speaker": "ai", "text": "How is everything so far?"},
+        {"speaker": "user", "text": "The food looks good, but I think I received rice instead of pasta."},
+        {"speaker": "ai", "text": "I am sorry about that. Let me check your order."},
+        {"speaker": "user", "text": "No problem. Could you please bring the pasta when it is ready?"},
+        {"speaker": "ai", "text": "Yes, I will fix that right away."}
+      ],
+      "target_expressions": ["I think I received...", "instead of...", "Could you please..."]
+    },
+    {
+      "id": "dialogue_007",
+      "scenario_id": "meeting",
+      "title": "Weekly progress update",
+      "goal": "User gives completed work, current work, and next step.",
+      "turns": [
+        {"speaker": "ai", "text": "Let's start with your update. What did you finish last week, and what are you focusing on next?"},
+        {"speaker": "user", "text": "I finished the API changes last week and shared the test results with the team."},
+        {"speaker": "ai", "text": "Good. What are you working on this week?"},
+        {"speaker": "user", "text": "I am currently working on the dashboard integration, and I expect to finish the first version by Thursday."},
+        {"speaker": "ai", "text": "Please send the timeline after the meeting."}
+      ],
+      "target_expressions": ["I finished...", "I am currently working on...", "I expect to finish..."]
+    },
+    {
+      "id": "dialogue_008",
+      "scenario_id": "meeting",
+      "title": "Blocker and risk",
+      "goal": "User explains a blocker and asks for priority clarification.",
+      "turns": [
+        {"speaker": "ai", "text": "Are there any blockers we should discuss?"},
+        {"speaker": "user", "text": "The main blocker is that we do not have the final design for the settings page yet."},
+        {"speaker": "ai", "text": "How does that affect the schedule?"},
+        {"speaker": "user", "text": "If we do not get it by tomorrow, the frontend work may be delayed by two days."},
+        {"speaker": "ai", "text": "Understood. I will follow up with design today."}
+      ],
+      "target_expressions": ["The main blocker is...", "may be delayed", "I will follow up..."]
+    },
+    {
+      "id": "dialogue_009",
+      "scenario_id": "meeting",
+      "title": "Clarifying requirements",
+      "goal": "User asks for clarification and confirms next action.",
+      "turns": [
+        {"speaker": "ai", "text": "We need to update the onboarding flow for enterprise users."},
+        {"speaker": "user", "text": "Could you walk me through the new requirement? I want to make sure I understand the priority."},
+        {"speaker": "ai", "text": "Sure. The highest priority is reducing the number of manual approval steps."},
+        {"speaker": "user", "text": "Got it. I will draft a simpler flow and share it by Wednesday."},
+        {"speaker": "ai", "text": "That works. Please include the open questions in the draft."}
+      ],
+      "target_expressions": ["Could you walk me through...", "highest priority", "I will draft..."]
+    },
+    {
+      "id": "dialogue_010",
+      "scenario_id": "meeting",
+      "title": "Changing deadline",
+      "goal": "User proposes a deadline change and explains why.",
+      "turns": [
+        {"speaker": "ai", "text": "Do you still think we can finish the analytics update by Wednesday?"},
+        {"speaker": "user", "text": "We may need to move the deadline to Friday because the data export is taking longer than expected."},
+        {"speaker": "ai", "text": "What would be ready by Wednesday?"},
+        {"speaker": "user", "text": "The UI changes will be ready, but the final metrics need two more days of validation."},
+        {"speaker": "ai", "text": "Okay. Please send a revised plan this afternoon."}
+      ],
+      "target_expressions": ["move the deadline", "taking longer than expected", "revised plan"]
+    }
+  ]
+}

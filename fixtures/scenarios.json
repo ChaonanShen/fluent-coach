@@ -1,0 +1,101 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "interview",
+      "name": "Job Interview",
+      "ai_role": "Hiring manager for an international product team",
+      "user_role": "Candidate interviewing for a product or engineering role",
+      "opening_line": "Good morning. Thanks for joining today. Could you start by briefly introducing yourself?",
+      "conversation_goals": [
+        "Introduce professional background clearly",
+        "Explain one relevant project or achievement",
+        "Answer behavioral questions with specific examples",
+        "Ask one thoughtful question about the role or team"
+      ],
+      "target_expressions": [
+        "I have worked on...",
+        "One challenge I faced was...",
+        "I handled it by...",
+        "The result was...",
+        "Could you tell me more about..."
+      ],
+      "correction_focus": [
+        "past tense for experience",
+        "specific examples instead of vague claims",
+        "professional tone",
+        "concise answers"
+      ],
+      "summary_rubric": {
+        "grammar": "Accuracy of tense, articles, prepositions, and sentence structure.",
+        "fluency": "Ability to answer without long pauses or repeated restarts.",
+        "vocabulary": "Use of role-related vocabulary and precise action verbs.",
+        "task_completion": "Whether the user introduced themselves, gave examples, and asked a question."
+      }
+    },
+    {
+      "id": "restaurant_ordering",
+      "name": "Restaurant Ordering",
+      "ai_role": "Server at a casual restaurant",
+      "user_role": "Customer ordering food, asking questions, and handling a small issue",
+      "opening_line": "Hi, welcome in. Are you ready to order, or would you like a few more minutes?",
+      "conversation_goals": [
+        "Ask about menu items and ingredients",
+        "Place an order politely",
+        "Make one special request",
+        "Respond to a service issue or menu change"
+      ],
+      "target_expressions": [
+        "Could I have...",
+        "What do you recommend?",
+        "Does this come with...",
+        "Could you make it without...",
+        "That is all for now, thank you."
+      ],
+      "correction_focus": [
+        "polite requests",
+        "countable and uncountable food nouns",
+        "articles and quantifiers",
+        "clear pronunciation of order details"
+      ],
+      "summary_rubric": {
+        "grammar": "Correct use of articles, quantifiers, and request forms.",
+        "fluency": "Smooth ordering flow with clear responses to follow-up questions.",
+        "vocabulary": "Food, dietary preference, and service-related expressions.",
+        "task_completion": "Whether the user asked questions, ordered, and handled a change politely."
+      }
+    },
+    {
+      "id": "meeting",
+      "name": "Work Meeting",
+      "ai_role": "Project lead running a weekly sync meeting",
+      "user_role": "Team member giving updates, raising risks, and agreeing on next steps",
+      "opening_line": "Let's start with your update. What did you finish last week, and what are you focusing on next?",
+      "conversation_goals": [
+        "Give a concise progress update",
+        "Explain one blocker or risk",
+        "Clarify priorities",
+        "Confirm ownership and next steps"
+      ],
+      "target_expressions": [
+        "I completed...",
+        "I am currently working on...",
+        "The main blocker is...",
+        "Could we prioritize...",
+        "I will follow up by..."
+      ],
+      "correction_focus": [
+        "present perfect and past tense for status updates",
+        "clear ownership",
+        "concise risk statements",
+        "meeting-appropriate hedging and clarification"
+      ],
+      "summary_rubric": {
+        "grammar": "Correct tense choice for completed work, current work, and next steps.",
+        "fluency": "Ability to explain status and risks without losing structure.",
+        "vocabulary": "Project management, priority, timeline, and blocker expressions.",
+        "task_completion": "Whether the user gave updates, raised risks, and confirmed next actions."
+      }
+    }
+  ]
+}

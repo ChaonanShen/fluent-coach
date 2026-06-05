@@ -1,0 +1,7 @@
+dataset/
+fixtures/audio/
+fixtures/generated/
+fixture-subset.zip
+__pycache__/
+.pytest_cache/
+.ruff_cache/
