@@ -343,6 +343,7 @@ export default function App() {
     setStatus('Requesting mic');
     voiceCanceledRef.current = false;
     voiceErrorRef.current = false;
+    closeVoiceSocket();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       voiceStreamRef.current = stream;
@@ -414,6 +415,8 @@ export default function App() {
           asr_confidence: null,
         }));
         speak(message.text);
+        setVoiceState('idle');
+        setStatus('In session');
       }
       if (message.type === 'analysis.result') {
         setLatestCorrection(message.result);

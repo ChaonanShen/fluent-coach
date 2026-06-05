@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import binascii
 import json
@@ -448,54 +449,17 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     }
                 )
                 await websocket.send_json({"type": "analysis.pending", "stages": ["grammar"]})
-                grammar_started = time.perf_counter()
-                if force_analysis_error:
-                    error = AnalysisError(
-                        stage=AnalysisStage.GRAMMAR,
-                        code="forced_analysis_error",
-                        user_message_zh="语法分析暂时不可用，已保留本轮对话。",
-                        severity=AnalysisErrorSeverity.WARNING,
-                        fallback_applied=True,
-                    )
-                    analysis_store.add_error(session.id, error)
-                    timings["grammar_ms"] = _elapsed_ms(grammar_started)
-                    await websocket.send_json(
-                        {
-                            "type": "debug.timing",
-                            "stage": "grammar",
-                            "timings": timings,
-                        }
-                    )
-                    await websocket.send_json(
-                        {
-                            "type": "analysis.error",
-                            "error": error.model_dump(mode="json"),
-                        }
-                    )
-                else:
-                    correction = grammar_service.check(
+                asyncio.create_task(
+                    _run_ws_grammar_analysis(
+                        websocket=websocket,
+                        session_id=session.id,
                         scenario_id=scenario.id,
                         user_text=transcript,
                         conversation_context=[turn.text for turn in session.turns],
+                        force_analysis_error=force_analysis_error,
+                        timings=dict(timings),
                     )
-                    log_store.save_grammar_correction(correction)
-                    mistake_service.add_from_grammar(correction)
-                    analysis_store.add_grammar_result(session.id, correction)
-                    timings["grammar_ms"] = _elapsed_ms(grammar_started)
-                    await websocket.send_json(
-                        {
-                            "type": "debug.timing",
-                            "stage": "grammar",
-                            "timings": timings,
-                        }
-                    )
-                    await websocket.send_json(
-                        {
-                            "type": "analysis.result",
-                            "stage": "grammar",
-                            "result": correction.model_dump(mode="json"),
-                        }
-                    )
+                )
                 audio.clear()
                 expected_text = None
                 audio_mime_type = None
@@ -510,6 +474,80 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                 )
     except (WebSocketDisconnect, json.JSONDecodeError):
         return
+
+
+async def _run_ws_grammar_analysis(
+    *,
+    websocket: WebSocket,
+    session_id: str,
+    scenario_id: str,
+    user_text: str,
+    conversation_context: list[str],
+    force_analysis_error: bool,
+    timings: dict[str, float],
+) -> None:
+    grammar_started = time.perf_counter()
+    if force_analysis_error:
+        error = AnalysisError(
+            stage=AnalysisStage.GRAMMAR,
+            code="forced_analysis_error",
+            user_message_zh="语法分析暂时不可用，已保留本轮对话。",
+            severity=AnalysisErrorSeverity.WARNING,
+            fallback_applied=True,
+        )
+        analysis_store.add_error(session_id, error)
+        timings["grammar_ms"] = _elapsed_ms(grammar_started)
+        await _safe_send_json(
+            websocket,
+            {
+                "type": "debug.timing",
+                "stage": "grammar",
+                "timings": timings,
+            },
+        )
+        await _safe_send_json(
+            websocket,
+            {
+                "type": "analysis.error",
+                "error": error.model_dump(mode="json"),
+            },
+        )
+        return
+
+    correction = await asyncio.to_thread(
+        grammar_service.check,
+        scenario_id=scenario_id,
+        user_text=user_text,
+        conversation_context=conversation_context,
+    )
+    log_store.save_grammar_correction(correction)
+    mistake_service.add_from_grammar(correction)
+    analysis_store.add_grammar_result(session_id, correction)
+    timings["grammar_ms"] = _elapsed_ms(grammar_started)
+    await _safe_send_json(
+        websocket,
+        {
+            "type": "debug.timing",
+            "stage": "grammar",
+            "timings": timings,
+        },
+    )
+    await _safe_send_json(
+        websocket,
+        {
+            "type": "analysis.result",
+            "stage": "grammar",
+            "result": correction.model_dump(mode="json"),
+        },
+    )
+
+
+async def _safe_send_json(websocket: WebSocket, payload: dict[str, object]) -> bool:
+    try:
+        await websocket.send_json(payload)
+    except (RuntimeError, WebSocketDisconnect):
+        return False
+    return True
 
 
 def _provider_analysis_error(

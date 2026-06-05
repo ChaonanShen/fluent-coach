@@ -1,7 +1,9 @@
 import pytest
+import time
 from fastapi.testclient import TestClient
 from pathlib import Path
 
+from backend.app.models import CorrectionTiming, GrammarCorrection, GrammarSeverity
 from backend.app.main import app
 from backend.app.services.analysis import analysis_store
 from backend.app.services.sessions import session_store
@@ -72,6 +74,50 @@ def test_audio_websocket_emits_reply_and_grammar_timings() -> None:
     assert grammar_timing["type"] == "debug.timing"
     assert grammar_timing["stage"] == "grammar"
     assert grammar_timing["timings"]["grammar_ms"] >= 0
+
+
+def test_audio_websocket_reply_does_not_wait_for_slow_grammar(monkeypatch) -> None:
+    class SlowGrammar:
+        def check(self, **kwargs):
+            time.sleep(0.35)
+            return GrammarCorrection(
+                scenario_id=kwargs["scenario_id"],
+                user_text=kwargs["user_text"],
+                corrected_text=kwargs["user_text"],
+                issues=[],
+                overall_severity=GrammarSeverity.MINOR,
+                correction_timing=CorrectionTiming.DELAYED_SUMMARY,
+            )
+
+    monkeypatch.setattr("backend.app.main.grammar_service", SlowGrammar())
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json(
+            {
+                "type": "start_turn",
+                "expected_text": "I have worked on backend systems for three years.",
+            }
+        )
+        websocket.receive_json()
+        websocket.send_bytes(b"fake-audio-chunk")
+        started = time.perf_counter()
+        websocket.send_json({"type": "end_turn"})
+        websocket.receive_json()
+        reply = websocket.receive_json()
+        websocket.receive_json()
+        pending = websocket.receive_json()
+        elapsed_before_pending = time.perf_counter() - started
+        grammar_timing = websocket.receive_json()
+        analysis = websocket.receive_json()
+
+    assert reply["type"] == "reply.text"
+    assert pending["type"] == "analysis.pending"
+    assert elapsed_before_pending < 0.25
+    assert grammar_timing["type"] == "debug.timing"
+    assert analysis["type"] == "analysis.result"
 
 
 def test_audio_websocket_saves_audio_turn_file(monkeypatch, tmp_path) -> None:

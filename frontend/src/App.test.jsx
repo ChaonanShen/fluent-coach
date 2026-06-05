@@ -346,6 +346,21 @@ test('records microphone audio over the session websocket', async () => {
   expect(window.speechSynthesis.speak).toHaveBeenCalled();
 });
 
+test('voice control becomes available after reply before delayed analysis', async () => {
+  const voice = installVoiceMocks({ delayedAnalysis: true });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+
+  expect(await screen.findByText('Thanks for sharing that project. What impact did it have?')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
+});
+
 test('shows microphone permission errors clearly', async () => {
   const voice = installVoiceMocks({ getUserMediaError: new Error('Permission denied') });
   render(<App />);
@@ -501,26 +516,34 @@ function installVoiceMocks(options = {}) {
               turn_id: 'turn_ai_voice_1',
             }),
           });
-          this.onmessage?.({
-            data: JSON.stringify({
-              type: 'analysis.result',
-              stage: 'grammar',
-              result: {
-                id: 'correction_voice_1',
-                scenario_id: 'interview',
-                user_text: 'I have worked on backend systems for three years.',
-                corrected_text: 'I have worked on backend systems for three years.',
-                better_expression: null,
-                issues: [],
-                overall_severity: 'minor',
-                correction_timing: 'delayed_summary',
-                naturalness_reason_zh: null,
-                created_at: '2026-06-05T00:00:06Z',
-              },
-            }),
-          });
+          if (options.delayedAnalysis) {
+            setTimeout(() => this.sendAnalysisResult(), 80);
+            return;
+          }
+          this.sendAnalysisResult();
         }, 0);
       }
+    }
+
+    sendAnalysisResult() {
+      this.onmessage?.({
+        data: JSON.stringify({
+          type: 'analysis.result',
+          stage: 'grammar',
+          result: {
+            id: 'correction_voice_1',
+            scenario_id: 'interview',
+            user_text: 'I have worked on backend systems for three years.',
+            corrected_text: 'I have worked on backend systems for three years.',
+            better_expression: null,
+            issues: [],
+            overall_severity: 'minor',
+            correction_timing: 'delayed_summary',
+            naturalness_reason_zh: null,
+            created_at: '2026-06-05T00:00:06Z',
+          },
+        }),
+      });
     }
 
     close() {
