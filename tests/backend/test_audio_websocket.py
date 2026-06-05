@@ -69,6 +69,50 @@ def test_audio_websocket_saves_audio_turn_file(monkeypatch, tmp_path) -> None:
     assert tmp_path in audio_path.parents
 
 
+def test_audio_websocket_transcribes_stored_audio_path(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("APP_AUDIO_DIR", str(tmp_path))
+    seen_paths: list[Path] = []
+
+    class PathAwareASR:
+        provider_name = "path-aware"
+
+        def partial(self, expected_text=None):
+            del expected_text
+            return ""
+
+        def transcribe(self, audio_bytes, expected_text=None):
+            del audio_bytes, expected_text
+            raise AssertionError("websocket should transcribe the stored audio file path")
+
+        def transcribe_file(self, audio_path, expected_text=None):
+            seen_paths.append(Path(audio_path))
+            return expected_text or "I have worked on backend systems for three years."
+
+    monkeypatch.setattr("backend.app.main.asr_provider", PathAwareASR())
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json(
+            {
+                "type": "start_turn",
+                "expected_text": "I have worked on backend systems for three years.",
+                "mime_type": "audio/wav",
+            }
+        )
+        websocket.receive_json()
+        websocket.send_bytes(b"fake-wav-audio")
+        websocket.send_json({"type": "end_turn"})
+        final = websocket.receive_json()
+
+    assert final["type"] == "asr.final"
+    assert seen_paths
+    assert seen_paths[0].suffix == ".wav"
+    assert seen_paths[0].read_bytes() == b"fake-wav-audio"
+    assert tmp_path in seen_paths[0].parents
+
+
 def test_audio_websocket_rejects_empty_audio_turn() -> None:
     client = TestClient(app)
     created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()

@@ -301,8 +301,7 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     audio_bytes=bytes(audio),
                     mime_type=audio_mime_type,
                 )
-                asr_audio = stored_audio.preferred_path.read_bytes()
-                transcript = asr_provider.transcribe(asr_audio, expected_text)
+                transcript = asr_provider.transcribe_file(stored_audio.preferred_path, expected_text)
                 await websocket.send_json({"type": "asr.final", "text": transcript})
                 user_turn, ai_turn, reply = dialogue_service.add_text_turns(
                     session=session,

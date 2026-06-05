@@ -22,6 +22,9 @@ class ASRProvider(Protocol):
     def transcribe(self, audio_bytes: bytes, expected_text: str | None = None) -> str:
         """Return final transcript text for one turn."""
 
+    def transcribe_file(self, audio_path: Path, expected_text: str | None = None) -> str:
+        """Return final transcript text for one stored audio file."""
+
 
 class FakeASR:
     provider_name = "fake"
@@ -34,6 +37,10 @@ class FakeASR:
 
     def transcribe(self, audio_bytes: bytes, expected_text: str | None = None) -> str:
         del audio_bytes
+        return expected_text or self.default_transcript
+
+    def transcribe_file(self, audio_path: Path, expected_text: str | None = None) -> str:
+        del audio_path
         return expected_text or self.default_transcript
 
 
@@ -58,7 +65,8 @@ class FasterWhisperASR:
         finally:
             audio_path.unlink(missing_ok=True)
 
-    def transcribe_file(self, audio_path: Path) -> str:
+    def transcribe_file(self, audio_path: Path, expected_text: str | None = None) -> str:
+        del expected_text
         model = self._load_model()
         segments, _info = model.transcribe(str(audio_path), beam_size=1)
         return " ".join(segment.text.strip() for segment in segments if segment.text.strip())
