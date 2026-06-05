@@ -529,15 +529,22 @@ WebSocket 事件：
 | `d3bb415` | PR-I | 已完成 Summary 第一版 | Summary 优先使用 session 已有 grammar/pronunciation analysis；发音结果进入 `pronunciation_score`、`top_issues` 和 `next_drills`，无已有 grammar 时保留 fallback。 |
 | `877a7a7` | PR-J | 已完成离线骨架 | 新增 fixture-backed smoke report 和脚本，默认覆盖 ASR、Grammar、Pronunciation、dialogue fixture、UI 手动清单与延迟字段占位，不访问真实服务。 |
 | `1167e08` | PR-K | 已完成第一步 | End session 后禁用文本发送、语音 Record 和 Read Aloud，前端测试覆盖 ended session 控件状态。 |
+| `a24d91f` | PR-D/PR-H | 已完成 | WebSocket ASR 和发音 provider 异常统一映射为 `AnalysisError`；发音失败会关联当前 session analysis。 |
+| `974ebba` | PR-J | 已完成 | 新增显式真实 provider smoke report：LLM、ASR、腾讯 SOE 状态和延迟写入 `reports/smoke-real-latest.*`。 |
+| `9bac9a1` | PR-I2/PR-K | 已完成 | 前端 progress 摘要、provider 错误 inline 展示、summary loading/error、新 session 状态清理已补齐。 |
+| `dcdda1a` | PR-D | 已完成 | 默认测试覆盖 ffmpeg 缺失、ASR provider 异常、ASR 空转写等真实录音链路失败路径。 |
+| `c6769b2` | PR-J | 已完成 | 真实 smoke report 错误信息脱敏，避免报告写入完整 URL 或敏感配置。 |
 
-当前仍未完成或需继续增强：
+本轮收口后的当前状态：
 
 - PR-D 的依赖已在当前环境安装：`faster-whisper` 作为本地 ASR 推理库，`ffmpeg` 作为音频解码/转码工具。
 - PR-D 的模型文件已放入 `models/faster-whisper-small.en/`，并已通过 V100/CUDA smoke：
   `CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/faster-whisper-small.en ASR_DEVICE=cuda ASR_COMPUTE_TYPE=float16 python3 scripts/test_asr_provider.py`。
-- PR-H2 后端腾讯 SOE 错误分类已完成；前端 inline 展示已有基础能力，后续 PR-K 继续补权限失败、WS error、pronunciation 502 等 UI 状态测试。
-- PR-I Summary 服务层已接入已有 analysis/pronunciation 结果；后续还需补前端 summary 展示状态和真实 smoke report。
-- PR-J 离线 smoke report 骨架已完成；真实服务 LLM/ASR/Tencent SOE 延迟采集和 UI 手动结果填充仍需继续补。
+- PR-H2 后端腾讯 SOE 错误分类已完成，前端 inline 展示已覆盖权限失败、WS `analysis.error`、pronunciation 502/provider 错误。
+- PR-I Summary 服务层已接入已有 analysis/pronunciation 结果，前端 summary loading/error 状态已补。
+- PR-J 离线 smoke report 和真实 provider smoke report 均已完成。当前真实 smoke 结果：LLM passed、faster-whisper ASR passed、Tencent SOE passed；ASR fixture WER 约 `0.0588`。
+- 默认测试仍使用 fake/mock provider；真实 provider 只通过 `python3 scripts/run_smoke_report.py --mode real` 显式触发。
+- 浏览器麦克风现场演示仍属于手动验收：打开 UI 后按 checklist 录一轮对话和一次 Read Aloud 即可，不需要新增数据集或提交录音。
 
 ### 2026-06-05 可执行计划 v2：真实服务可用后的收口计划
 

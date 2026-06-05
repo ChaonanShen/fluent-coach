@@ -105,6 +105,20 @@ python3 scripts/run_smoke_report.py
 该报告输出到 `reports/smoke-latest.json` 和 `reports/smoke-latest.md`，
 只使用 fixtures 与 fake/mock provider，不访问真实 LLM、ASR 模型或腾讯云服务。
 
+显式生成真实 provider smoke report（会读取 `.env`，失败信息会脱敏写入报告）：
+
+```bash
+ASR_PROVIDER=faster_whisper \
+ASR_MODEL_SIZE=/home/scn/xe2/models/faster-whisper-small.en \
+ASR_DEVICE=cuda \
+ASR_COMPUTE_TYPE=float16 \
+python3 scripts/run_smoke_report.py --mode real
+```
+
+真实报告输出到 `reports/smoke-real-latest.json` 和
+`reports/smoke-real-latest.md`，记录 LLM、ASR、腾讯 SOE 的状态与分段延迟。
+默认测试和默认 smoke report 仍不访问真实服务。
+
 ### 从本地电脑访问服务器上的开发服务
 
 如果服务跑在远程服务器上，`10.x.x.x` 这类地址通常是服务器内网地址，

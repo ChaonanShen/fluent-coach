@@ -1,0 +1,54 @@
+{
+  "generated_at": "2026-06-05T08:35:50.614991+00:00",
+  "mode": "real_provider_smoke",
+  "external_services_used": true,
+  "provider_status": {
+    "dotenv_loaded": true,
+    "llm_provider": "openai_compatible",
+    "llm_model": "deepseek-v4-flash",
+    "asr_provider": "faster_whisper",
+    "pronunciation_provider": "tencent_soe",
+    "tts_provider": "browser",
+    "external_services_enabled": true
+  },
+  "checks": {
+    "llm": {
+      "status": "passed",
+      "provider": "openai_compatible",
+      "model": "deepseek-v4-flash",
+      "latency_ms": 1234.0,
+      "response_chars": 39
+    },
+    "asr": {
+      "status": "passed",
+      "provider": "faster_whisper",
+      "fixture_id": "librispeech_dev-clean_1272-128104-0000",
+      "latency_ms": 4656.8,
+      "wer": 0.058823529411764705,
+      "transcript": "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel."
+    },
+    "pronunciation": {
+      "status": "passed",
+      "provider": "tencent_soe",
+      "fixture_id": "speechocean_000010113",
+      "latency_ms": 1050.7,
+      "overall": 64.80406188964844,
+      "issue_count": 3
+    },
+    "ui_manual": {
+      "status": "not_run",
+      "checklist": [
+        "Open the browser UI and start a scenario session.",
+        "Record one voice turn and confirm asr.final plus reply.text appear.",
+        "Record Read Aloud and confirm a provider-backed pronunciation result appears.",
+        "End the session and confirm summary includes stored grammar/pronunciation results."
+      ]
+    }
+  },
+  "latency_ms": {
+    "end_turn_to_asr_final": 4656.8,
+    "asr_final_to_reply_text": 1234.0,
+    "reply_text_to_tts_start": null,
+    "pronunciation_upload_to_result": 1050.7
+  }
+}
