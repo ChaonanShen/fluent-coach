@@ -54,16 +54,16 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([request('/api/scenarios'), request('/api/mistakes'), request('/api/progress')])
-      .then(([scenarioBody, mistakeBody, progressBody]) => {
+    Promise.all([request('/api/scenarios'), request('/api/mistakes')])
+      .then(([scenarioBody, mistakeBody]) => {
         if (!active) {
           return;
         }
         setScenarios(scenarioBody.scenarios);
         setSelectedScenarioId(scenarioBody.scenarios[0]?.id || '');
         setMistakes(mistakeBody.mistakes);
-        setProgress(progressBody);
         setStatus('Ready');
+        refreshProgress().catch(() => {});
       })
       .catch((err) => {
         if (!active) {

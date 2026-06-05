@@ -82,6 +82,7 @@ make test-backend
 make test-frontend
 make dev-backend
 make dev-frontend
+make test-e2e
 ```
 
 `make test` 会先检查 `fixtures/generated/` 与 `fixtures/audio/public/` 是否存在。
@@ -95,6 +96,13 @@ GET /api/health
 ```
 
 前端开发服务由 Vite 启动，`/api` 和 `/ws` 会代理到本地 FastAPI 后端。
+
+`make test-e2e` 使用 Playwright 做显式浏览器 smoke，不属于默认 `make test`。
+首次运行若本机没有 Playwright 浏览器，需要先执行：
+
+```bash
+cd frontend && npx playwright install chromium
+```
 
 生成默认离线 smoke report：
 
