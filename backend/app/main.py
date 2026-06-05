@@ -1,3 +1,5 @@
+import base64
+import binascii
 import json
 
 from backend.app.core.env import load_dotenv, provider_status
@@ -13,6 +15,7 @@ from backend.app.api import (
     MistakeListResponse,
     ProgressResponse,
     PronunciationAssessRequest,
+    PronunciationUploadRequest,
     ScenarioListResponse,
     SessionAnalysisResponse,
     SessionResponse,
@@ -150,6 +153,31 @@ def assess_pronunciation(request: PronunciationAssessRequest) -> PronunciationAs
     )
     if assessment is None:
         raise HTTPException(status_code=404, detail="Pronunciation fixture not found")
+    log_store.save_pronunciation_assessment(assessment)
+    mistake_service.add_from_pronunciation(assessment)
+    return assessment
+
+
+@app.post("/api/pronunciation/assess/upload", response_model=PronunciationAssessment)
+def assess_uploaded_pronunciation(request: PronunciationUploadRequest) -> PronunciationAssessment:
+    try:
+        audio_bytes = base64.b64decode(request.audio_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid audio_base64") from exc
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded audio is empty")
+
+    stored_audio = save_turn_audio(
+        session_id="pronunciation",
+        audio_bytes=audio_bytes,
+        mime_type=request.mime_type,
+    )
+    assessment = pronunciation_provider.assess(
+        reference_text=request.reference_text,
+        audio_file=str(stored_audio.preferred_path.resolve()),
+    )
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Pronunciation assessment failed")
     log_store.save_pronunciation_assessment(assessment)
     mistake_service.add_from_pronunciation(assessment)
     return assessment
