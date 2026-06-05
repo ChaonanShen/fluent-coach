@@ -32,6 +32,7 @@ class ProgressService:
         return ProgressResponse(
             session_count=len(points),
             average_grammar_score=_average([point.grammar_score for point in points]),
+            average_pronunciation_score=_average([point.pronunciation_score for point in points]),
             average_fluency_score=_average([point.fluency_score for point in points]),
             average_vocabulary_score=_average([point.vocabulary_score for point in points]),
             average_task_completion_rate=_average([point.task_completion_rate for point in points]),

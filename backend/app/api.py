@@ -111,6 +111,7 @@ class ProgressResponse(BaseModel):
 
     session_count: int
     average_grammar_score: float | None
+    average_pronunciation_score: float | None
     average_fluency_score: float | None
     average_vocabulary_score: float | None
     average_task_completion_rate: float | None

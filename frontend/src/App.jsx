@@ -12,7 +12,9 @@ async function request(path, options = {}) {
     const body = await response.json().catch(() => ({}));
     const detail = body.detail;
     if (detail && typeof detail === 'object') {
-      throw new Error(detail.user_message_zh || detail.code || `Request failed: ${response.status}`);
+      const error = new Error(detail.user_message_zh || detail.code || `Request failed: ${response.status}`);
+      error.detail = detail;
+      throw error;
     }
     throw new Error(detail || `Request failed: ${response.status}`);
   }
@@ -31,6 +33,9 @@ export default function App() {
   const [voiceState, setVoiceState] = useState('idle');
   const [readingState, setReadingState] = useState('idle');
   const [summary, setSummary] = useState(null);
+  const [summaryState, setSummaryState] = useState('idle');
+  const [progress, setProgress] = useState(null);
+  const [analysisErrors, setAnalysisErrors] = useState([]);
   const [status, setStatus] = useState('Loading scenarios');
   const [error, setError] = useState('');
   const mediaRecorderRef = useRef(null);
@@ -38,6 +43,7 @@ export default function App() {
   const voiceStreamRef = useRef(null);
   const pendingAudioSendsRef = useRef([]);
   const voiceCanceledRef = useRef(false);
+  const voiceErrorRef = useRef(false);
   const readingRecorderRef = useRef(null);
   const readingStreamRef = useRef(null);
   const readingChunksRef = useRef([]);
@@ -45,14 +51,15 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([request('/api/scenarios'), request('/api/mistakes')])
-      .then(([scenarioBody, mistakeBody]) => {
+    Promise.all([request('/api/scenarios'), request('/api/mistakes'), request('/api/progress')])
+      .then(([scenarioBody, mistakeBody, progressBody]) => {
         if (!active) {
           return;
         }
         setScenarios(scenarioBody.scenarios);
         setSelectedScenarioId(scenarioBody.scenarios[0]?.id || '');
         setMistakes(mistakeBody.mistakes);
+        setProgress(progressBody);
         setStatus('Ready');
       })
       .catch((err) => {
@@ -88,6 +95,32 @@ export default function App() {
     setMistakes(body.mistakes);
   }
 
+  async function refreshProgress() {
+    const body = await request('/api/progress');
+    setProgress(body);
+  }
+
+  function resetSessionDerivedState() {
+    setLatestCorrection(null);
+    setPronunciation(null);
+    setPartialText('');
+    setSummary(null);
+    setSummaryState('idle');
+    setAnalysisErrors([]);
+  }
+
+  function pushAnalysisError(detail) {
+    if (!detail || typeof detail !== 'object') {
+      return;
+    }
+    setAnalysisErrors((current) => [detail, ...current].slice(0, 5));
+  }
+
+  function handleRequestError(err, fallbackMessage = 'Request failed.') {
+    pushAnalysisError(err.detail);
+    setError(err.message || fallbackMessage);
+  }
+
   function speak(text) {
     if (!text || !window.speechSynthesis || !window.SpeechSynthesisUtterance) {
       return;
@@ -101,8 +134,7 @@ export default function App() {
       return;
     }
     setError('');
-    setSummary(null);
-    setLatestCorrection(null);
+    resetSessionDerivedState();
     setStatus('Starting');
     try {
       const body = await request('/api/sessions', {
@@ -111,9 +143,10 @@ export default function App() {
       });
       setSession(body.session);
       await refreshMistakes();
+      await refreshProgress().catch(() => {});
       setStatus('In session');
     } catch (err) {
-      setError(err.message);
+      handleRequestError(err);
       setStatus('Error');
     }
   }
@@ -138,7 +171,7 @@ export default function App() {
       await refreshMistakes();
       setStatus('In session');
     } catch (err) {
-      setError(err.message);
+      handleRequestError(err);
       setStatus('Error');
     }
   }
@@ -149,6 +182,7 @@ export default function App() {
     }
     setError('');
     setStatus('Ending');
+    setSummaryState('loading');
     try {
       const ended = await request(`/api/sessions/${session.id}/end`, {
         method: 'POST',
@@ -158,9 +192,12 @@ export default function App() {
       setSession(ended.session);
       setSummary(sessionSummary);
       await refreshMistakes();
+      await refreshProgress().catch(() => {});
+      setSummaryState('ready');
       setStatus('Ended');
     } catch (err) {
-      setError(err.message);
+      handleRequestError(err);
+      setSummaryState('error');
       setStatus('Error');
     }
   }
@@ -174,7 +211,7 @@ export default function App() {
       });
       setMistakes((current) => current.map((mistake) => (mistake.id === reviewed.id ? reviewed : mistake)));
     } catch (err) {
-      setError(err.message);
+      handleRequestError(err);
     }
   }
 
@@ -206,7 +243,7 @@ export default function App() {
       recorder.onstop = () => {
         if (!readingCanceledRef.current) {
           finishReadingAssessment(recorder.mimeType).catch((err) => {
-            setError(err.message);
+            handleRequestError(err, 'Reading assessment failed.');
             setStatus('Error');
             setReadingState('idle');
             stopReadingStream();
@@ -277,6 +314,7 @@ export default function App() {
     });
     setPronunciation(assessment);
     await refreshMistakes();
+    await refreshProgress().catch(() => {});
     setReadingState('idle');
     setStatus(sessionEnded ? 'Ended' : session ? 'In session' : 'Ready');
     stopReadingStream();
@@ -304,6 +342,7 @@ export default function App() {
     setPartialText('');
     setStatus('Requesting mic');
     voiceCanceledRef.current = false;
+    voiceErrorRef.current = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       voiceStreamRef.current = stream;
@@ -333,7 +372,7 @@ export default function App() {
       recorder.onstop = () => {
         if (!voiceCanceledRef.current) {
           finishVoiceTurn().catch((err) => {
-            setError(err.message);
+            handleRequestError(err, 'Voice turn failed.');
             setStatus('Error');
             setVoiceState('idle');
             closeVoiceSocket();
@@ -379,14 +418,27 @@ export default function App() {
       if (message.type === 'analysis.result') {
         setLatestCorrection(message.result);
         refreshMistakes().catch(() => {});
+        refreshProgress().catch(() => {});
         closeVoiceSocket();
       }
       if (message.type === 'error' || message.type === 'analysis.error') {
-        setError(message.message || message.error?.user_message_zh || 'Analysis error');
+        const detail = message.error || {
+          stage: message.stage || 'asr',
+          code: message.code || 'voice_error',
+          user_message_zh: message.message || '语音链路暂时不可用，请重试。',
+          severity: 'warning',
+          fallback_applied: false,
+        };
+        voiceErrorRef.current = true;
+        pushAnalysisError(detail);
+        setError(detail.user_message_zh || message.message || 'Analysis error');
+        setStatus('Error');
+        setVoiceState('idle');
         closeVoiceSocket();
       }
     };
     websocket.onerror = () => {
+      voiceErrorRef.current = true;
       setError('Voice connection failed.');
       setStatus('Error');
       setVoiceState('idle');
@@ -398,7 +450,9 @@ export default function App() {
       pendingAudioSendsRef.current = [];
       stopVoiceStream();
       setVoiceState('idle');
-      setStatus(sessionEnded ? 'Ended' : 'In session');
+      if (!voiceErrorRef.current) {
+        setStatus(sessionEnded ? 'Ended' : 'In session');
+      }
     };
   }
 
@@ -502,8 +556,7 @@ export default function App() {
                 onClick={() => {
                   setSelectedScenarioId(scenario.id);
                   setSession(null);
-                  setLatestCorrection(null);
-                  setSummary(null);
+                  resetSessionDerivedState();
                 }}
                 type="button"
               >
@@ -621,6 +674,34 @@ export default function App() {
             </section>
           )}
 
+          {analysisErrors.length ? (
+            <section className="coach-block">
+              <h3>Issues</h3>
+              <div className="analysis-error-list">
+                {analysisErrors.map((item, index) => (
+                  <article className="analysis-error" key={`${item.code}-${index}`}>
+                    <span>{item.stage}</span>
+                    <p>{item.user_message_zh || item.code}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {summaryState === 'loading' ? (
+            <section className="coach-block">
+              <h3>Summary</h3>
+              <p>Generating summary...</p>
+            </section>
+          ) : null}
+
+          {summaryState === 'error' ? (
+            <section className="coach-block">
+              <h3>Summary</h3>
+              <p>Summary is unavailable for this session.</p>
+            </section>
+          ) : null}
+
           {summary ? (
             <section className="coach-block">
               <h3>Summary</h3>
@@ -645,6 +726,28 @@ export default function App() {
               </ul>
             </section>
           ) : null}
+
+          <section className="coach-block">
+            <h3>Progress</h3>
+            {progress?.session_count ? (
+              <dl>
+                <div>
+                  <dt>Sessions</dt>
+                  <dd>{progress.session_count}</dd>
+                </div>
+                <div>
+                  <dt>Grammar avg</dt>
+                  <dd>{formatScore(progress.average_grammar_score)}</dd>
+                </div>
+                <div>
+                  <dt>Pronunciation avg</dt>
+                  <dd>{formatScore(progress.average_pronunciation_score)}</dd>
+                </div>
+              </dl>
+            ) : (
+              <p>No completed practice history yet.</p>
+            )}
+          </section>
 
           <section className="coach-block">
             <h3>Mistakes</h3>
@@ -694,4 +797,8 @@ async function blobToBase64(blob) {
     binary += String.fromCharCode(byte);
   }
   return window.btoa(binary);
+}
+
+function formatScore(value) {
+  return value === null || value === undefined ? '-' : Math.round(value);
 }

@@ -26,7 +26,10 @@ const openingTurn = {
   asr_confidence: null,
 };
 
+let pronunciationUploadFails = false;
+
 beforeEach(() => {
+  pronunciationUploadFails = false;
   window.speechSynthesis = {
     cancel: vi.fn(),
     speak: vi.fn(),
@@ -53,6 +56,28 @@ beforeEach(() => {
             mastery: 0.1,
             review_count: 0,
             created_at: '2026-06-05T00:00:04Z',
+          },
+        ],
+      });
+    }
+    if (url === '/api/progress') {
+      return jsonResponse({
+        session_count: 2,
+        average_grammar_score: 88,
+        average_pronunciation_score: 72,
+        average_fluency_score: 75,
+        average_vocabulary_score: 80,
+        average_task_completion_rate: 0.5,
+        trend: [
+          {
+            session_id: 'session_old_1',
+            scenario_id: 'interview',
+            created_at: '2026-06-05T00:00:00Z',
+            grammar_score: 88,
+            pronunciation_score: 72,
+            fluency_score: 75,
+            vocabulary_score: 80,
+            task_completion_rate: 0.5,
           },
         ],
       });
@@ -159,6 +184,21 @@ beforeEach(() => {
       });
     }
     if (url === '/api/pronunciation/assess/upload') {
+      if (pronunciationUploadFails) {
+        return Promise.resolve({
+          ok: false,
+          status: 502,
+          json: () => Promise.resolve({
+            detail: {
+              stage: 'pronunciation',
+              code: 'provider_timeout',
+              user_message_zh: '腾讯云发音评测超时，请稍后重试。',
+              severity: 'warning',
+              fallback_applied: false,
+            },
+          }),
+        });
+      }
       const body = JSON.parse(options.body);
       if (!body.audio_base64 || body.reference_text !== 'THEN HE WENT TO THEME PARK') {
         throw new Error('Invalid pronunciation upload payload');
@@ -195,6 +235,8 @@ test('loads scenarios and starts a session', async () => {
 
   expect(await screen.findByRole('button', { name: 'Job Interview' })).toBeInTheDocument();
   expect(screen.getByText('am working')).toBeInTheDocument();
+  expect(screen.getByText('Sessions')).toBeInTheDocument();
+  expect(screen.getByText('72')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   expect(await screen.findByText(scenario.opening_line)).toBeInTheDocument();
@@ -236,6 +278,19 @@ test('records read aloud audio and uploads it for assessment', async () => {
   expect(await screen.findByText('Overall')).toBeInTheDocument();
   expect(screen.getByText('THEME')).toHaveClass('low-word');
   expect(global.fetch).toHaveBeenCalledWith('/api/pronunciation/assess/upload', expect.any(Object));
+});
+
+test('shows provider pronunciation errors inline', async () => {
+  pronunciationUploadFails = true;
+  const voice = installVoiceMocks();
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Record Reading' }));
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
+
+  expect(await screen.findByText('pronunciation')).toBeInTheDocument();
+  expect(screen.getAllByText('腾讯云发音评测超时，请稍后重试。').length).toBeGreaterThan(0);
 });
 
 test('links read aloud assessment to the active session', async () => {
@@ -291,6 +346,33 @@ test('records microphone audio over the session websocket', async () => {
   expect(window.speechSynthesis.speak).toHaveBeenCalled();
 });
 
+test('shows microphone permission errors clearly', async () => {
+  const voice = installVoiceMocks({ getUserMediaError: new Error('Permission denied') });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  expect(await screen.findByText('Permission denied')).toBeInTheDocument();
+});
+
+test('shows websocket analysis errors inline', async () => {
+  const voice = installVoiceMocks({ websocketAnalysisError: true });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+
+  expect(await screen.findByText('asr')).toBeInTheDocument();
+  expect(screen.getAllByText('语音识别暂时不可用，请稍后重试。').length).toBeGreaterThan(0);
+});
+
 function jsonResponse(body) {
   return Promise.resolve({
     ok: true,
@@ -321,11 +403,16 @@ function grammarCorrection() {
   };
 }
 
-function installVoiceMocks() {
+function installVoiceMocks(options = {}) {
   const sentMessages = [];
-  const getUserMedia = vi.fn(async () => ({
-    getTracks: () => [{ stop: vi.fn() }],
-  }));
+  const getUserMedia = vi.fn(async () => {
+    if (options.getUserMediaError) {
+      throw options.getUserMediaError;
+    }
+    return {
+      getTracks: () => [{ stop: vi.fn() }],
+    };
+  });
 
   Object.defineProperty(window.navigator, 'mediaDevices', {
     configurable: true,
@@ -384,6 +471,22 @@ function installVoiceMocks() {
       }
       if (eventType(payload) === 'end_turn') {
         setTimeout(() => {
+          if (options.websocketAnalysisError) {
+            this.onmessage?.({
+              data: JSON.stringify({
+                type: 'analysis.error',
+                stage: 'asr',
+                error: {
+                  stage: 'asr',
+                  code: 'provider_request_failed',
+                  user_message_zh: '语音识别暂时不可用，请稍后重试。',
+                  severity: 'warning',
+                  fallback_applied: false,
+                },
+              }),
+            });
+            return;
+          }
           this.onmessage?.({
             data: JSON.stringify({
               type: 'asr.final',

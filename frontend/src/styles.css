@@ -318,6 +318,33 @@ h3 {
   color: #7c3217;
 }
 
+.analysis-error-list {
+  display: grid;
+  gap: 8px;
+}
+
+.analysis-error {
+  background: #fff8f4;
+  border: 1px solid #e2b391;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.analysis-error span {
+  color: #8b4a22;
+  display: block;
+  font-size: 0.74rem;
+  font-weight: 750;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.analysis-error p {
+  color: #6f2d16;
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
 .coach-panel dl {
   display: grid;
   gap: 10px;
