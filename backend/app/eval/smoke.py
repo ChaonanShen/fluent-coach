@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
 from typing import Any
 
-from backend.app.core.fixtures import load_generated_manifest, load_text_fixture
+from backend.app.core.env import provider_status
+from backend.app.core.fixtures import load_generated_manifest, load_text_fixture, resolve_fixture_audio
+from backend.app.eval.metrics import word_error_rate
 from backend.app.services.asr import FakeASR
 from backend.app.services.grammar import grammar_service
+from backend.app.services.llm import LLMMessage, create_llm_client_from_env
 from backend.app.services.pronunciation import MockPronunciationProvider
 
 
@@ -42,9 +46,43 @@ def run_fixture_smoke_report() -> dict[str, Any]:
     }
 
 
+def run_real_smoke_report() -> dict[str, Any]:
+    status = provider_status()
+    llm = _smoke_real_llm(status)
+    asr = _smoke_real_asr(status)
+    pronunciation = _smoke_real_pronunciation(status)
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "mode": "real_provider_smoke",
+        "external_services_used": bool(status["external_services_enabled"]),
+        "provider_status": status,
+        "checks": {
+            "llm": llm,
+            "asr": asr,
+            "pronunciation": pronunciation,
+            "ui_manual": {
+                "status": "not_run",
+                "checklist": [
+                    "Open the browser UI and start a scenario session.",
+                    "Record one voice turn and confirm asr.final plus reply.text appear.",
+                    "Record Read Aloud and confirm a provider-backed pronunciation result appears.",
+                    "End the session and confirm summary includes stored grammar/pronunciation results.",
+                ],
+            },
+        },
+        "latency_ms": {
+            "end_turn_to_asr_final": asr.get("latency_ms"),
+            "asr_final_to_reply_text": llm.get("latency_ms"),
+            "reply_text_to_tts_start": None,
+            "pronunciation_upload_to_result": pronunciation.get("latency_ms"),
+        },
+    }
+
+
 def render_smoke_markdown(report: dict[str, Any]) -> str:
     checks = report["checks"]
     latency = report["latency_ms"]
+    provider_lines = _provider_markdown_lines(report.get("provider_status"))
     lines = [
         "# Smoke Report",
         "",
@@ -52,12 +90,14 @@ def render_smoke_markdown(report: dict[str, Any]) -> str:
         f"Mode: `{report['mode']}`",
         f"External services used: `{str(report['external_services_used']).lower()}`",
         "",
+        *provider_lines,
         "## Checks",
         "",
+        *(_check_line("LLM", checks.get("llm"))),
         f"- ASR: {checks['asr']['status']} ({checks['asr']['provider']})",
-        f"- Grammar: {checks['grammar']['status']}",
+        *(_check_line("Grammar", checks.get("grammar"))),
         f"- Pronunciation: {checks['pronunciation']['status']} ({checks['pronunciation']['provider']})",
-        f"- Dialogue fixture: {checks['dialogue_fixture']['status']}",
+        *(_check_line("Dialogue fixture", checks.get("dialogue_fixture"))),
         f"- UI manual: {checks['ui_manual']['status']}",
         "",
         "## Latency",
@@ -127,6 +167,148 @@ def _smoke_dialogue_fixture() -> dict[str, Any]:
         "scenario_id": sample["scenario_id"],
         "turn_count": len(turns),
     }
+
+
+def _smoke_real_llm(status: dict[str, object]) -> dict[str, Any]:
+    if status["llm_provider"] in {"fake", "none", "disabled"}:
+        return {"status": "skipped", "provider": status["llm_provider"], "reason": "LLM_PROVIDER is not real"}
+    started = time.perf_counter()
+    try:
+        client = create_llm_client_from_env()
+        if client is None:
+            return {"status": "skipped", "provider": status["llm_provider"], "reason": "LLM client disabled"}
+        content = client.complete(
+            [
+                LLMMessage(
+                    role="system",
+                    content="Reply with one short English sentence.",
+                ),
+                LLMMessage(
+                    role="user",
+                    content="Say hello as an English speaking coach.",
+                ),
+            ]
+        )
+        latency_ms = _elapsed_ms(started)
+        return {
+            "status": "passed" if content.strip() else "failed",
+            "provider": status["llm_provider"],
+            "model": status.get("llm_model"),
+            "latency_ms": latency_ms,
+            "response_chars": len(content),
+        }
+    except Exception as exc:  # pragma: no cover - real provider smoke is environment-dependent.
+        return _failed_real_check(
+            provider=str(status["llm_provider"]),
+            started=started,
+            exc=exc,
+        )
+
+
+def _smoke_real_asr(status: dict[str, object]) -> dict[str, Any]:
+    if status["asr_provider"] in {"fake", "none", "disabled"}:
+        return {"status": "skipped", "provider": status["asr_provider"], "reason": "ASR_PROVIDER is not real"}
+    item = load_generated_manifest("librispeech")["items"][0]
+    audio_path = resolve_fixture_audio(item["audio_file"])
+    started = time.perf_counter()
+    try:
+        from backend.app.services.asr import create_asr_provider
+
+        provider = create_asr_provider()
+        transcript = provider.transcribe_file(audio_path)
+        latency_ms = _elapsed_ms(started)
+        wer = word_error_rate(item["transcript"], transcript)
+        return {
+            "status": "passed" if transcript.strip() else "failed",
+            "provider": status["asr_provider"],
+            "fixture_id": item["id"],
+            "latency_ms": latency_ms,
+            "wer": wer,
+            "transcript": transcript,
+        }
+    except Exception as exc:  # pragma: no cover - real provider smoke is environment-dependent.
+        return _failed_real_check(
+            provider=str(status["asr_provider"]),
+            started=started,
+            exc=exc,
+            fixture_id=item["id"],
+        )
+
+
+def _smoke_real_pronunciation(status: dict[str, object]) -> dict[str, Any]:
+    if status["pronunciation_provider"] in {"mock", "none", "disabled"}:
+        return {
+            "status": "skipped",
+            "provider": status["pronunciation_provider"],
+            "reason": "PRON_PROVIDER is not real",
+        }
+    item = load_generated_manifest("speechocean762")["items"][0]
+    started = time.perf_counter()
+    try:
+        from backend.app.services.pronunciation import create_pronunciation_provider
+
+        provider = create_pronunciation_provider()
+        assessment = provider.assess(fixture_id=item["id"])
+        latency_ms = _elapsed_ms(started)
+        return {
+            "status": "passed" if assessment is not None else "failed",
+            "provider": status["pronunciation_provider"],
+            "fixture_id": item["id"],
+            "latency_ms": latency_ms,
+            "overall": assessment.overall if assessment else None,
+            "issue_count": len(assessment.issues) if assessment else 0,
+        }
+    except Exception as exc:  # pragma: no cover - real provider smoke is environment-dependent.
+        return _failed_real_check(
+            provider=str(status["pronunciation_provider"]),
+            started=started,
+            exc=exc,
+            fixture_id=item["id"],
+        )
+
+
+def _failed_real_check(
+    *,
+    provider: str,
+    started: float,
+    exc: Exception,
+    fixture_id: str | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "status": "failed",
+        "provider": provider,
+        "latency_ms": _elapsed_ms(started),
+        "error_type": type(exc).__name__,
+        "error": str(exc)[:240],
+    }
+    if fixture_id is not None:
+        payload["fixture_id"] = fixture_id
+    return payload
+
+
+def _elapsed_ms(started: float) -> float:
+    return round((time.perf_counter() - started) * 1000.0, 1)
+
+
+def _provider_markdown_lines(status: object) -> list[str]:
+    if not isinstance(status, dict):
+        return []
+    return [
+        "## Providers",
+        "",
+        f"- LLM: {status.get('llm_provider')} ({status.get('llm_model') or 'no model'})",
+        f"- ASR: {status.get('asr_provider')}",
+        f"- Pronunciation: {status.get('pronunciation_provider')}",
+        f"- TTS: {status.get('tts_provider')}",
+        "",
+    ]
+
+
+def _check_line(label: str, check: object) -> list[str]:
+    if not isinstance(check, dict):
+        return []
+    suffix = f" ({check['provider']})" if "provider" in check else ""
+    return [f"- {label}: {check.get('status')}{suffix}"]
 
 
 def _format_latency(value: object) -> str:
