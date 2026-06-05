@@ -336,6 +336,46 @@ test('sends a text turn and shows correction feedback', async () => {
   expect(utterance.voice.name).toBe('Google US English');
 });
 
+test('keeps the latest message visible when new turns arrive near the bottom', async () => {
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  const history = screen.getByLabelText('Conversation history');
+  setScrollMetrics(history, { clientHeight: 320, scrollHeight: 900 });
+  history.scrollTop = 580;
+  fireEvent.scroll(history);
+  fireEvent.change(screen.getByLabelText('Your reply'), {
+    target: { value: 'I am working in this field since three years.' },
+  });
+  setScrollMetrics(history, { clientHeight: 320, scrollHeight: 1250 });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+  await screen.findByText('Great. Which project is most relevant to this role?');
+  await waitFor(() => expect(history.scrollTop).toBe(1250));
+});
+
+test('does not force-scroll delayed replies when the user is reading older messages', async () => {
+  const voice = installVoiceMocks({ delayedReply: true });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  const history = screen.getByLabelText('Conversation history');
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+  await screen.findByText('I have worked on backend systems for three years.');
+
+  setScrollMetrics(history, { clientHeight: 320, scrollHeight: 900 });
+  history.scrollTop = 100;
+  fireEvent.scroll(history);
+  setScrollMetrics(history, { clientHeight: 320, scrollHeight: 1250 });
+
+  await screen.findByText('Thanks for sharing that project. What impact did it have?');
+  expect(history.scrollTop).toBe(100);
+});
+
 test('plays cloud TTS audio when the backend returns audio', async () => {
   cloudTtsEnabled = true;
   render(<App />);
@@ -557,6 +597,17 @@ function grammarCorrection() {
   };
 }
 
+function setScrollMetrics(element, { clientHeight, scrollHeight }) {
+  Object.defineProperty(element, 'clientHeight', {
+    configurable: true,
+    value: clientHeight,
+  });
+  Object.defineProperty(element, 'scrollHeight', {
+    configurable: true,
+    value: scrollHeight,
+  });
+}
+
 function installVoiceMocks(options = {}) {
   const sentMessages = [];
   const getUserMedia = vi.fn(async () => {
@@ -648,6 +699,30 @@ function installVoiceMocks(options = {}) {
               user_turn_id: 'turn_user_voice_1',
             }),
           });
+          if (options.delayedReply) {
+            setTimeout(() => {
+              this.onmessage?.({
+                data: JSON.stringify({
+                  type: 'reply.text',
+                  text: 'Thanks for sharing that project. What impact did it have?',
+                  turn_id: 'turn_ai_voice_1',
+                }),
+              });
+              this.onmessage?.({
+                data: JSON.stringify({
+                  type: 'debug.timing',
+                  stage: 'reply',
+                  timings: {
+                    asr_ms: 123,
+                    dialogue_reply_ms: 45,
+                    end_turn_to_reply_text_ms: 190,
+                  },
+                }),
+              });
+              this.sendAnalysisResult();
+            }, 80);
+            return;
+          }
           if (options.streamingReply) {
             this.onmessage?.({
               data: JSON.stringify({ type: 'reply.delta', text: 'That sounds useful. ' }),

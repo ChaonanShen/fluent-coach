@@ -21,6 +21,12 @@ async function request(path, options = {}) {
   return response.json();
 }
 
+const MESSAGE_LIST_BOTTOM_THRESHOLD_PX = 72;
+
+function isNearMessageListBottom(list) {
+  return list.scrollHeight - list.scrollTop - list.clientHeight <= MESSAGE_LIST_BOTTOM_THRESHOLD_PX;
+}
+
 export default function App() {
   const [scenarios, setScenarios] = useState([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState('');
@@ -49,6 +55,7 @@ export default function App() {
   const streamingReplyRef = useRef(null);
   const voiceCanceledRef = useRef(false);
   const voiceErrorRef = useRef(false);
+  const messageListShouldFollowRef = useRef(true);
   const readingRecorderRef = useRef(null);
   const readingStreamRef = useRef(null);
   const readingChunksRef = useRef([]);
@@ -117,10 +124,37 @@ export default function App() {
   useEffect(() => {
     const list = messageListRef.current;
     if (!list) {
+      return undefined;
+    }
+    const handleScroll = () => {
+      messageListShouldFollowRef.current = isNearMessageListBottom(list);
+    };
+    list.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      list.removeEventListener('scroll', handleScroll);
+    };
+  }, [mainView]);
+
+  const latestTurnText = turns.at(-1)?.text || '';
+
+  useEffect(() => {
+    const list = messageListRef.current;
+    if (!list || !messageListShouldFollowRef.current) {
       return;
     }
-    list.scrollTop = list.scrollHeight;
-  }, [turns.length]);
+    const scrollToBottom = () => {
+      if (!messageListShouldFollowRef.current) {
+        return;
+      }
+      list.scrollTop = list.scrollHeight;
+    };
+    if (typeof window.requestAnimationFrame === 'function') {
+      const frameId = window.requestAnimationFrame(scrollToBottom);
+      return () => window.cancelAnimationFrame(frameId);
+    }
+    const timeoutId = window.setTimeout(scrollToBottom, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [latestTurnText, mainView, turns.length]);
 
   async function refreshMistakes() {
     const body = await request('/api/mistakes');
@@ -216,6 +250,7 @@ export default function App() {
     if (!selectedScenarioId) {
       return;
     }
+    messageListShouldFollowRef.current = true;
     setError('');
     resetSessionDerivedState();
     setStatus('Starting');
@@ -247,6 +282,7 @@ export default function App() {
     if (!session || !text || sessionEnded) {
       return;
     }
+    messageListShouldFollowRef.current = true;
     setError('');
     setStatus('Sending');
     setInputText('');
@@ -594,6 +630,7 @@ export default function App() {
     if (voiceStateRef.current !== 'recording') {
       return;
     }
+    messageListShouldFollowRef.current = true;
     voiceStateRef.current = 'processing';
     setVoiceState('processing');
     setStatus('Processing');
