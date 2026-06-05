@@ -519,11 +519,13 @@ WebSocket 事件：
 | `f9740b8` | PR-G | 已完成后端入口 | 新增 `/api/pronunciation/assess/upload`，支持 `reference_text` + `audio_base64` + `mime_type`。 |
 | `3903904` | PR-G | 已完成前端入口 | Read Aloud 改为真实录音并上传用户音频进行评测。 |
 | `91882a9` | PR-H | 已完成第一步 | 发音 provider `RuntimeError` 映射为结构化 `AnalysisError`，前端可显示中文错误文案。 |
+| `91d4ac4` | PR-D | 已完成模型目录准备 | 新增 `models/` 目录说明和忽略规则，README 记录本地模型路径与 V100/CUDA smoke 示例。 |
 
 当前仍未完成或需继续增强：
 
 - PR-D 的依赖已在当前环境安装：`faster-whisper` 作为本地 ASR 推理库，`ffmpeg` 作为音频解码/转码工具。
-- PR-D 的真实 faster-whisper smoke 尚未完成；模型文件应由维护者手动下载，然后通过 `ASR_MODEL_SIZE=/path/to/local/model` 指向本地模型目录，避免运行时依赖外网下载。
+- PR-D 的模型文件已放入 `models/faster-whisper-small.en/`，并已通过 V100/CUDA smoke：
+  `CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/faster-whisper-small.en ASR_DEVICE=cuda ASR_COMPUTE_TYPE=float16 python3 scripts/test_asr_provider.py`。
 - PR-H 目前只覆盖 provider `RuntimeError` 到 HTTP `AnalysisError`；腾讯 SOE 具体错误码细分、限流/超时/音频非法的 canonical code 还可继续细化。
 - PR-I 尚未开始：Summary 仍需优先使用 session 已有 analysis/pronunciation 结果，而不是重新跑 grammar。
 - PR-J 尚未开始：真实服务 smoke report 和手动测试清单还需补。
