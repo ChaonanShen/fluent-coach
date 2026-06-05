@@ -513,13 +513,15 @@ WebSocket 事件：
 | `1e57f7b` | PR-A | 已完成 | 后端自动加载 `.env`，`/api/health` 返回非敏感 provider 状态；默认测试禁用真实 provider。 |
 | `784e9f5` | PR-B | 已完成 | 前端 `Voice` 改为真实 `MediaRecorder` 录音，通过现有 WS 发送音频 chunk。 |
 | `4a421d4` | PR-C | 已完成 | 后端保存 WS 音频，尽力转 WAV，用户 turn 记录 `mode=audio` 和 `audio_path`。 |
-| `1e8a28e` | PR-D | 已完成基础 smoke | 增加 ASR provider smoke 脚本，`FasterWhisperASR` 支持直接转写 fixture 文件路径；本机未装 `faster-whisper`，真实模型 smoke 待依赖安装后执行。 |
+| `1e8a28e` | PR-D | 已完成基础 smoke | 增加 ASR provider smoke 脚本，`FasterWhisperASR` 支持直接转写 fixture 文件路径；提交当时未装 `faster-whisper`，后续已补完真实 CUDA smoke。 |
 | `c04b19e` | PR-E | 已完成 | `/turns/text` 返回 `grammar_result`，前端不再重复调用 `/api/grammar/check`。 |
 | `799c15b` | PR-F | 已完成第一步 | LLM provider 异常统一映射为 `AnalysisError`，避免 provider 异常直接冒泡。 |
 | `f9740b8` | PR-G | 已完成后端入口 | 新增 `/api/pronunciation/assess/upload`，支持 `reference_text` + `audio_base64` + `mime_type`。 |
 | `3903904` | PR-G | 已完成前端入口 | Read Aloud 改为真实录音并上传用户音频进行评测。 |
 | `91882a9` | PR-H | 已完成第一步 | 发音 provider `RuntimeError` 映射为结构化 `AnalysisError`，前端可显示中文错误文案。 |
+| `f20f674` | PR-D | 已完成依赖记录 | README 和计划记录 `faster-whisper`、`ffmpeg` 的用途、安装方式和手动模型下载要求。 |
 | `91d4ac4` | PR-D | 已完成模型目录准备 | 新增 `models/` 目录说明和忽略规则，README 记录本地模型路径与 V100/CUDA smoke 示例。 |
+| `e28bef4` | PR-D | 已完成真实 CUDA smoke | `models/faster-whisper-small.en/` 已落位，V100/CUDA 上通过 `scripts/test_asr_provider.py`。 |
 
 当前仍未完成或需继续增强：
 
@@ -529,3 +531,63 @@ WebSocket 事件：
 - PR-H 目前只覆盖 provider `RuntimeError` 到 HTTP `AnalysisError`；腾讯 SOE 具体错误码细分、限流/超时/音频非法的 canonical code 还可继续细化。
 - PR-I 尚未开始：Summary 仍需优先使用 session 已有 analysis/pronunciation 结果，而不是重新跑 grammar。
 - PR-J 尚未开始：真实服务 smoke report 和手动测试清单还需补。
+
+### 2026-06-05 可执行计划 v2：真实服务可用后的收口计划
+
+当前前提：
+
+- `.env` 已具备真实 LLM 与腾讯 SOE 配置；文档、测试输出和报告仍不能泄露真实 key。
+- `faster-whisper`、`ffmpeg` 已安装；`models/faster-whisper-small.en/` 已由维护者手动上传。
+- 本机 V100/CUDA 已通过 ASR smoke，后续可实现真实本地 ASR、真实 LLM、真实腾讯 SOE 和浏览器录音 UI 的完整链路。
+- 默认测试仍必须离线、确定性、可复现；真实服务只走显式 integration/manual smoke。
+
+测试框架约束：
+
+- 默认验证命令继续是 `make test`，只使用 fake/mock provider 和 fixtures，不访问外网，不依赖真实 key。
+- 真实链路统一使用 `pytest.mark.integration`、独立脚本或 manual smoke；失败不能影响默认测试。
+- 新增额外测试库必须先在 README 和本计划记录用途。当前先不新增浏览器 e2e 依赖；前端继续用 Vitest mock `MediaRecorder`、`WebSocket`、`fetch`。
+- 所有测试数据优先来自现有 fixtures：
+  - `fixtures/audio/public/librispeech_subset/`：ASR 英语母语音频 smoke 和准确率 sanity。
+  - `fixtures/audio/public/l2_arctic_subset/`：ASR 二语口音 sanity。
+  - `fixtures/generated/speechocean762_subset.json` 与 `fixtures/audio/public/speechocean762_subset/`：发音评测 mock、腾讯 SOE 手动 smoke、错题生成。
+  - `fixtures/generated/jfleg_subset.json` 与 `fixtures/grammar_expression_errors.json`：语法纠错和表达改写。
+  - `fixtures/scenarios.json`、`fixtures/dialogue_samples.json`：对话、总结、进度和 UI 状态。
+
+后续小 PR 切分：
+
+1. **PR-D2：WebSocket 真实 ASR 路径加固**
+   - 目标：WS 收到浏览器音频后，优先使用 `save_turn_audio()` 转出的 `preferred_path` 调用文件级 ASR，避免把 webm/opus bytes 误写成临时 wav。
+   - 测试：默认测试用 monkeypatch provider 验证 WS 传入的是转码后文件路径；integration 用 `faster-whisper-small.en` + LibriSpeech fixture 验证 `transcribe_file()`。
+   - 数据：LibriSpeech fixture；必要时用现有音频文件模拟 WS binary chunk。
+
+2. **PR-H2：腾讯 SOE 错误分类与前端展示**
+   - 目标：把鉴权失败、握手失败、超时、限流、音频格式错误映射成稳定 canonical code；前端 inline 展示中文错误，不中断对话。
+   - 测试：默认单测 mock Tencent 返回/异常；manual smoke 用 `scripts/test_tencent_soe.py` 跑 SpeechOcean762 fixture。
+   - 数据：SpeechOcean762 fixture。
+
+3. **PR-G2：发音评测结果和 session 关联**
+   - 目标：Read Aloud 上传结果可关联当前 session，Summary/Progress 能读取本 session 的 pronunciation assessment。
+   - 测试：后端 API 单测覆盖 session_id 透传与 storage/analysis_store；前端 Vitest 覆盖评测后总结面板可读到最新分数。
+   - 数据：SpeechOcean762 fixture。
+
+4. **PR-I：Summary 使用已有 analysis/pronunciation**
+   - 目标：Summary 优先使用 session 已有 grammar/pronunciation 结果，不再对历史 turn 盲目重新跑 grammar；加入发音 top issues。
+   - 测试：构造 session + analysis_store fixture 结果，断言不会再次调用 grammar provider；API 测试覆盖 text turn、audio turn、pronunciation result 混合场景。
+   - 数据：JFLEG/grammar fixture、SpeechOcean762 fixture、dialogue_samples。
+
+5. **PR-I2：Progress 与错题趋势**
+   - 目标：Progress 展示历史趋势，发音低分单词和语法错误都能进入错题复习统计。
+   - 测试：storage/progress 单测覆盖多次 session、多次 review、语法与发音混合 mistake。
+   - 数据：SpeechOcean762 fixture、grammar_expression_errors。
+
+6. **PR-J：真实服务 smoke report**
+   - 目标：新增不影响默认 CI 的真实 smoke 报告，记录 LLM、ASR、Tencent SOE、UI 手动链路状态和分段延迟。
+   - 测试：报告生成器默认可用 fake fixture 生成；真实模式显式读取 `.env` 和本地模型路径。
+   - 数据：LibriSpeech fixture、SpeechOcean762 fixture、dialogue_samples。
+
+7. **PR-K：前端收尾状态**
+   - 目标：新 session 清空上一轮 partial/pronunciation/summary；End 后禁用录音和发送；录音权限失败、provider 错误、summary loading 都有明确状态。
+   - 测试：Vitest 扩展现有 `App.test.jsx`，mock 权限拒绝、WS error、pronunciation 502、session end。
+   - 数据：前端 mock payload 来自 scenarios、dialogue_samples、SpeechOcean762 fixture 字段结构。
+
+当前不需要新增公开数据集。若后续要做更接近演示现场的真实 UI 手动测试，只需要用浏览器麦克风录一两句，不需要把录音提交到仓库。
