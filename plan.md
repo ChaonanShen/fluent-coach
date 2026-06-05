@@ -605,3 +605,151 @@ WebSocket 事件：
    - 数据：前端 mock payload 来自 scenarios、dialogue_samples、SpeechOcean762 fixture 字段结构。
 
 当前不需要新增公开数据集。若后续要做更接近演示现场的真实 UI 手动测试，只需要用浏览器麦克风录一两句，不需要把录音提交到仓库。
+
+### 2026-06-05 真实试用反馈与可执行计划 v3
+
+当前可运行基线已打 tag：
+
+- `v0.1.0-demo-baseline`：指向 `c727379`，记录“基本能跑起来”的版本。包含场景选择、浏览器录音、faster-whisper ASR、LLM 回复、语法纠错、Read Aloud 发音评测入口、summary/progress、默认/真实 smoke report。
+
+用户真实试用反馈：
+
+1. **时延过高**
+   - 现象：说一句后整体回复需要约 `5-10s`，用户体验不够好。
+   - 需要检查后端调用链：ASR、LLM 对话回复、LLM 语法纠错、腾讯云发音评测是否串行等待。
+   - 期望：主路径优先返回 AI 回复；mistakes、语法纠错、发音分析等学习反馈可以异步逐步出现，哪个完成先展示哪个，不要阻塞对话。
+
+2. **界面需要简化**
+   - 现象：当前左/中/右三栏偏复杂。
+   - 期望：去掉左侧 scenario 栏，把场景选择放到 Conversation 栏顶部，作为选择框：`Job Interview` / `Restaurant Ordering` / `Work Meeting` / 自选。
+
+3. **AI 回复朗读声音生硬**
+   - 现象：浏览器 `speechSynthesis` 声音不像真人，听感不流畅。
+   - 期望：替换更自然的 TTS，优先真实云 TTS 或更自然的浏览器 voice 选择策略；同时保留 browser fallback。
+
+4. **Read Aloud 腾讯云发音评测鉴权失败**
+   - 现象：右侧 `Record Reading` 返回“腾讯云发音评测鉴权失败，请检查密钥和签名配置”。
+   - 需要单独做腾讯云发音评测诊断：签名参数、音频格式、评测模式、账号权限、请求 URL、服务区域/产品权限。
+
+5. **对话区要改成聊天软件样式**
+   - 现象：对话变长后展示不理想。
+   - 期望：Conversation 区固定尺寸，消息像微信/QQ 气泡，默认显示最近几条，可上滑查看历史；容器高度随浏览器大小适配但整体不撑爆页面。
+
+同时保留之前未完成的重要增强：
+
+- 真正流式 ASR partial / VAD 自动断句。
+- 自由对话每轮可选自动发音评测。
+- L2-ARCTIC 口音 ASR / 误音检测评测。
+- 自动浏览器 E2E smoke。
+- 更细的场景目标状态机。
+- 更完整的真实服务延迟报告，包括浏览器端 TTS start 和 UI 端分段耗时。
+
+#### v3 优先级和 PR 切分
+
+1. **PR-L1：后端对话链路分段计时与调用关系审计**
+   - 目标：明确当前一轮语音从 `end_turn` 到 `reply.text` 的真实耗时组成。
+   - 实现：
+     - WS 每轮记录 `audio_save_ms`、`transcode_ms`、`asr_ms`、`dialogue_llm_ms`、`grammar_ms`、`reply_emit_ms`。
+     - 将 timing 通过 `debug.timing` WS 事件和真实 smoke report 输出。
+     - 日志不包含用户 key、secret、完整 base URL。
+   - 测试：
+     - 默认 fake provider 测 timing 字段存在且数值合法。
+     - 真实 smoke 记录 ASR/LLM 分段耗时。
+
+2. **PR-L2：对话主路径优先，语法/错题异步旁路**
+   - 目标：降低首个 AI 回复等待时间。
+   - 实现：
+     - WS `end_turn` 后顺序只保留：保存音频 -> ASR final -> 生成 AI reply -> 立即发 `reply.text`。
+     - grammar correction、mistake generation、summary store 放入后台 task，完成后发 `analysis.result`。
+     - 若 grammar 失败，只发 `analysis.error`，不影响已返回的 AI 回复。
+   - 测试：
+     - Fake grammar 延迟时，`reply.text` 必须先于 `analysis.result` 到达。
+     - provider 报错仍写入 session analysis。
+
+3. **PR-L3：LLM 对话回复流式输出**
+   - 目标：进一步降低感知延迟。
+   - 实现：
+     - OpenAI-compatible client 增加 streaming adapter。
+     - WS 新增事件：`reply.delta`、`reply.done`。
+     - 前端边收到边展示 AI 气泡文本；`reply.done` 后再触发 TTS。
+     - FakeLLMClient 保持确定性 streaming 测试。
+   - 测试：
+     - fake streaming 多段 delta 顺序合并成最终 turn。
+     - 非 streaming provider fallback 到现有 `reply.text`。
+
+4. **PR-L4：腾讯 SOE 单独诊断脚本与签名修复**
+   - 目标：解决 Read Aloud 鉴权失败。
+   - 实现：
+     - 新增或增强 `scripts/test_tencent_soe.py --verbose-safe`，输出脱敏后的签名参数摘要、voice_format、engine、eval_mode、音频采样率检查结果、错误分类。
+     - 校验腾讯 SOE URL path、appid 拼接、query 排序、signature encode、`ref_text` 编码。
+     - 用 SpeechOcean fixture WAV 做固定诊断；不使用浏览器录音作为第一步。
+   - 测试：
+     - 默认测试 mock 鉴权错误、签名错误、音频格式错误映射。
+     - 手动真实 smoke：腾讯 SOE fixture assessment passed 后再接 UI。
+
+5. **PR-L5：TTS provider 抽象与自然声音**
+   - 目标：替换生硬浏览器朗读。
+   - 实现：
+     - 后端新增真实 TTS provider adapter（优先腾讯云 TTS 或 OpenAI-compatible TTS，取决于可用账号）。
+     - 前端优先播放后端返回音频 URL/base64；失败回退 `speechSynthesis`。
+     - browser fallback 增加 voice 选择：优先英文、自然度较高、语速 `0.92-0.98`。
+   - 测试：
+     - provider fallback 单测。
+     - 前端 mock 音频播放和 browser fallback。
+
+6. **PR-U1：布局简化为两栏**
+   - 目标：去掉左侧 scenario 栏。
+   - 实现：
+     - Conversation 顶部增加 scenario select。
+     - 支持 `custom` 自选场景入口：第一版可作为文本输入生成临时 scenario，或先展示 disabled/coming state 但不破坏现有三场景。
+     - Coach 保持右栏；移动端仍单列。
+   - 测试：
+     - 选择不同 scenario 后新 session 使用对应场景。
+     - 新 session 清理旧状态。
+
+7. **PR-U2：聊天气泡与固定滚动对话区**
+   - 目标：对话像微信/QQ，长对话不撑爆页面。
+   - 实现：
+     - `.message-list` 固定高度：基于 viewport 的 `clamp()` 或 grid/flex 剩余空间。
+     - AI 左侧气泡、用户右侧气泡。
+     - 新消息默认滚到底部；用户可上滑看历史。
+     - 文本长句 `overflow-wrap:anywhere`，按钮和输入区固定尺寸。
+   - 测试：
+     - 前端测试消息追加后仍渲染最新消息。
+     - 可选 Playwright 截图检查 desktop/mobile 不重叠。
+
+8. **PR-L6：自由对话发音评测可选异步任务**
+   - 目标：普通语音对话也能评估发音，但不能阻塞回复。
+   - 实现：
+     - 每个 audio turn 可配置是否触发 pronunciation task。
+     - 默认可先只对短音频启用；超长音频跳过并提示。
+     - 结果通过 `analysis.result stage=pronunciation` 进入 Coach 和 mistakes。
+   - 测试：
+     - Fake provider 验证 reply 先返回，pronunciation 后返回。
+
+9. **PR-E2E：浏览器自动 smoke**
+   - 目标：减少人工回归成本。
+   - 实现：
+     - 引入 Playwright 前先更新 README/plan 说明用途。
+     - 使用 fake/mock provider 环境，mock 麦克风或使用 fixture 音频。
+     - 验证：进入页面 -> start session -> 发送文本或模拟音频 -> AI 回复 -> summary。
+   - 测试：
+     - 默认可选，不阻塞 `make test`；CI 或手动命令显式运行。
+
+10. **PR-Eval2：口音/误音评测**
+    - 目标：补原计划中的 L2-ARCTIC 口音 ASR 和误音检测。
+    - 实现：
+      - faster-whisper 在 L2-ARCTIC subset 上计算 WER。
+      - 初版误音检测先从 TextGrid 标注生成可解释报告，不直接影响实时 UI。
+    - 测试：
+      - integration marker，默认 skip。
+
+#### v3 验收标准
+
+- 首个 AI 回复感知延迟目标：`end_turn -> reply first token` 小于 `2.5s`（真实 ASR 仍可能受模型影响，先以分段报告定位瓶颈）。
+- `reply.text` 或 `reply.delta` 必须早于 grammar/pronunciation analysis 结果。
+- Read Aloud 腾讯 SOE fixture smoke 必须 passed，UI 才算发音评测可用。
+- Conversation 页面改为两栏，场景选择在 Conversation 顶部。
+- 对话区固定高度、气泡样式、默认滚动到底部。
+- TTS 听感优先使用真实 provider 或更自然 browser voice，不再只依赖默认系统朗读。
+- 默认 `make test` 仍离线稳定；真实服务测试只显式运行。
