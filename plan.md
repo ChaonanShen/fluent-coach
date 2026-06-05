@@ -807,3 +807,119 @@ WebSocket 事件：
 - PR-Eval2 后续：完整 TextGrid 误音命中率需要原始 L2-ARCTIC TextGrid 文件和一个实时误音 detector；当前默认报告只统计 readiness，避免假算。
 - 更细的场景目标状态机仍未做，当前 custom scenario 是主题驱动的临时场景。
 - 截图级 UI 视觉回归可继续增强；当前已有功能型 Playwright smoke。
+
+### 2026-06-05 UI 精简与错题本入口计划（待确认后执行）
+
+> 说明：本节只记录待执行计划，尚未改 UI。执行前需用户明确确认。
+
+#### 目标
+
+当前页面是左侧 Conversation、右侧 Coach 信息栏。下一步目标是减少演示时的调试/工程痕迹，让右侧反馈更像学习产品：
+
+- 顶部品牌和对话区说明更简洁。
+- 发音评测、纠错、错误提示、总结的层级更清楚。
+- Timing 不再占用大块视觉空间，仅作为底部浅色调试信息。
+- Mistakes 不在右栏直接展开，改成“错题本”入口和独立视图。
+- Progress 暂时从主界面隐藏或弱化，避免和当前会话反馈混在一起。
+
+#### 计划
+
+1. **页面标题和顶部清理**
+   - `frontend/index.html`：浏览器标题从 `XEngineer Speaking Coach` 改为 `Speaking Coach`。
+   - 页面顶部去掉 `XEngineer` eyebrow。
+   - 主标题建议改为 `Speaking Coach`。
+   - 对话框上方的 `selectedScenario.user_role`（如 `Candidate`）去掉。
+   - 保留 `Conversation` 标题、场景选择、Start/End。
+
+2. **对话区精简**
+   - 删除 `scenario-strip` 中展示的 conversation goals 胶囊。
+   - 保留：
+     - 场景选择。
+     - Start/End。
+     - 对话历史。
+     - 文本输入。
+     - 录音按钮。
+     - partial 识别提示。
+
+3. **Read Aloud 模块明确命名**
+   - 当前 Read Aloud/Record Reading 是“指定句跟读发音评测”，不是自由对话识别。
+   - 在右栏给它一个和 `Correction`、`Timing` 同级的小标题，建议命名为 `Pronunciation`。
+   - 结构建议：
+     - `Pronunciation`
+     - 参考句：`THEN HE WENT TO THEME PARK`
+     - 按钮：`Record Reading`
+     - 结果区：
+       - `Overall`
+       - `Accuracy`
+       - `Fluency`
+       - `Low-score words`，低于 60 分的词标红。
+   - 注意：标红表示腾讯 SOE 给该词的准确度低，不严格等同于“读错”。
+
+4. **Timing 降级为底部浅色文本**
+   - 不再使用大的 `coach-block`。
+   - 放到 Coach 右栏最底部。
+   - 小号、浅灰、低优先级显示，例如：
+
+     ```text
+     Timing: ASR 820ms · Reply 1400ms · Grammar 600ms · Pronunciation 1200ms · TTS 80ms
+     ```
+
+   - 没有 timing 数据时不显示。
+
+5. **Mistakes 改成独立“错题本”视图**
+   - 不在右栏直接展示错题列表。
+   - 右栏只保留入口按钮/链接：
+     - `Mistake Book`
+     - 可显示数量：`Mistake Book (3)`。
+   - 点击后切换到独立视图；第一版可用 React state 实现，不必新增路由：
+
+     ```text
+     mainView = "practice" | "mistakes"
+     ```
+
+   - 错题本视图内容：
+     - 标题：`Mistake Book`
+     - 返回按钮：`Back to Practice`
+     - 错题列表。
+     - 每条展示：
+       - 类型：grammar / expression / pronunciation。
+       - 错误内容。
+       - 正确表达。
+       - 中文解释。
+       - Review 按钮。
+   - 当前后端 `/api/mistakes` 是全局错题，不是严格按 session 过滤。第一版先展示现有错题；若要“只显示本次会话错题”，后续需给 mistake 加 session 关联，或前端在会话开始时记录 baseline 后只展示新增项。
+
+6. **Progress 处理**
+   - `Progress` 当前表示跨会话历史进度，如完成 session 数、平均语法分、平均发音分。
+   - 它和当前会话即时反馈关系不强，演示时解释成本高。
+   - 建议先从右栏主界面隐藏。
+   - 后续如做“学习报告 / 历史记录”页面，再把 Progress 放进去。
+
+7. **右栏最终结构建议**
+   - `Pronunciation`
+   - `Correction`
+   - `Issues`（仅出错时显示）
+   - `Summary`（结束会话后显示）
+   - `Mistake Book` 入口
+   - 底部浅色 `Timing: ...`
+
+8. **测试计划**
+   - 更新前端测试，覆盖：
+     - 页面标题为 `Speaking Coach`。
+     - 顶部不再出现 `XEngineer`。
+     - 对话区不再显示 `Candidate`/user role 和 conversation goal 胶囊。
+     - 发音评测区有 `Pronunciation` 小标题。
+     - Timing 以底部浅色文本出现，而不是大块面板。
+     - Mistakes 不直接出现在右栏，点击 `Mistake Book` 后进入错题本视图。
+   - 执行：
+
+     ```bash
+     cd frontend && npm test -- --run
+     ```
+
+   - 手动检查：
+     - 首页顶部没有 `XEngineer`。
+     - 对话区没有 `Candidate` 和 goal 胶囊。
+     - 发音评测区有 `Pronunciation` 标题。
+     - Timing 只在底部浅色显示。
+     - Mistakes 不直接出现在右栏，点击入口进入错题本视图。
