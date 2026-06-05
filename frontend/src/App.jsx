@@ -89,6 +89,8 @@ export default function App() {
 
   const turns = session?.turns || [];
   const sessionEnded = session?.status === 'ended';
+  const sessionActive = Boolean(session && !sessionEnded);
+  const sessionActionLabel = sessionActive ? 'End' : 'Start';
 
   async function refreshMistakes() {
     const body = await request('/api/mistakes');
@@ -549,48 +551,51 @@ export default function App() {
       {error ? <p className="inline-error">{error}</p> : null}
 
       <section className="workspace" aria-label="Practice workspace">
-        <aside className="scenario-panel">
-          <h2>Scenario</h2>
-          <div className="scenario-list">
-            {scenarios.map((scenario) => (
-              <button
-                className={scenario.id === selectedScenarioId ? 'scenario-button active' : 'scenario-button'}
-                key={scenario.id}
-                onClick={() => {
-                  setSelectedScenarioId(scenario.id);
+        <section className="conversation-panel">
+          <div className="conversation-toolbar">
+            <div>
+              <h2>Conversation</h2>
+              {selectedScenario ? <p>{selectedScenario.user_role}</p> : null}
+            </div>
+            <label className="scenario-select-label">
+              <span>Scenario</span>
+              <select
+                aria-label="Scenario"
+                disabled={sessionActive}
+                onChange={(event) => {
+                  setSelectedScenarioId(event.target.value);
                   setSession(null);
                   resetSessionDerivedState();
                 }}
-                type="button"
+                value={selectedScenarioId}
               >
-                {scenario.name}
-              </button>
-            ))}
+                {scenarios.map((scenario) => (
+                  <option key={scenario.id} value={scenario.id}>
+                    {scenario.name}
+                  </option>
+                ))}
+                <option disabled value="custom">
+                  Custom
+                </option>
+              </select>
+            </label>
+            <button
+              className={sessionActive ? 'secondary-action session-action' : 'primary-action session-action'}
+              disabled={!selectedScenarioId || status === 'Starting' || status === 'Ending'}
+              onClick={sessionActive ? endSession : startSession}
+              type="button"
+            >
+              {sessionActionLabel}
+            </button>
           </div>
 
           {selectedScenario ? (
-            <div className="scenario-detail">
-              <h3>{selectedScenario.user_role}</h3>
-              <ul>
-                {selectedScenario.conversation_goals.map((goal) => (
-                  <li key={goal}>{goal}</li>
-                ))}
-              </ul>
+            <div className="scenario-strip">
+              {selectedScenario.conversation_goals.slice(0, 2).map((goal) => (
+                <span key={goal}>{goal}</span>
+              ))}
             </div>
           ) : null}
-
-          <button className="primary-action" disabled={!selectedScenarioId} onClick={startSession} type="button">
-            Start
-          </button>
-        </aside>
-
-        <section className="conversation-panel">
-          <div className="panel-heading">
-            <h2>Conversation</h2>
-            <button className="secondary-action" disabled={!session || sessionEnded} onClick={endSession} type="button">
-              End
-            </button>
-          </div>
 
           <div className="message-list">
             {turns.map((turn) => (

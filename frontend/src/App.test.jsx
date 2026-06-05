@@ -233,13 +233,15 @@ afterEach(() => {
 test('loads scenarios and starts a session', async () => {
   render(<App />);
 
-  expect(await screen.findByRole('button', { name: 'Job Interview' })).toBeInTheDocument();
+  expect(await screen.findByRole('combobox', { name: 'Scenario' })).toHaveValue('interview');
+  expect(screen.getByText('Introduce professional background clearly')).toBeInTheDocument();
   expect(screen.getByText('am working')).toBeInTheDocument();
   expect(screen.getByText('Sessions')).toBeInTheDocument();
   expect(screen.getByText('72')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   expect(await screen.findByText(scenario.opening_line)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'End' })).toBeInTheDocument();
 });
 
 test('sends a text turn and shows correction feedback', async () => {
@@ -321,6 +323,7 @@ test('disables turn and recording controls after ending a session', async () => 
   expect(await screen.findByText('Practice using: I have worked on...')).toBeInTheDocument();
   expect(screen.getByLabelText('Your reply')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Record' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Record Reading' })).toBeDisabled();
 });

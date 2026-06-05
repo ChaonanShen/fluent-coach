@@ -99,12 +99,11 @@ h3 {
 .workspace {
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(220px, 270px) minmax(0, 1fr) minmax(240px, 310px);
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 330px);
   margin: 0 auto;
   max-width: 1220px;
 }
 
-.scenario-panel,
 .conversation-panel,
 .coach-panel {
   background: #ffffff;
@@ -114,12 +113,6 @@ h3 {
   padding: 18px;
 }
 
-.scenario-list {
-  display: grid;
-  gap: 8px;
-}
-
-.scenario-button,
 .primary-action,
 .secondary-action {
   border-radius: 6px;
@@ -128,33 +121,11 @@ h3 {
   padding: 10px 12px;
 }
 
-.scenario-button {
-  background: #ffffff;
-  border: 1px solid #ccd5d0;
-  color: #243139;
-  text-align: left;
-}
-
-.scenario-button.active {
-  background: #e7efeb;
-  border-color: #5d8175;
-  color: #163a31;
-  font-weight: 700;
-}
-
-.scenario-detail {
-  border-top: 1px solid #edf1ee;
-  margin-top: 16px;
-  padding-top: 16px;
-}
-
-.scenario-detail ul,
 .drill-list {
   margin: 0;
   padding-left: 18px;
 }
 
-.scenario-detail li,
 .drill-list li {
   line-height: 1.45;
   margin-bottom: 8px;
@@ -187,6 +158,69 @@ h3 {
 
 .panel-heading h2 {
   margin-bottom: 0;
+}
+
+.conversation-toolbar {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(160px, 1fr) minmax(190px, 240px) 96px;
+  margin-bottom: 12px;
+}
+
+.conversation-toolbar h2,
+.conversation-toolbar p {
+  margin-bottom: 0;
+}
+
+.conversation-toolbar p {
+  color: #58706f;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  margin-top: 4px;
+}
+
+.scenario-select-label {
+  color: #49606a;
+  display: grid;
+  font-size: 0.76rem;
+  font-weight: 750;
+  gap: 5px;
+  text-transform: uppercase;
+}
+
+.scenario-select-label select {
+  background: #ffffff;
+  border: 1px solid #cbd4cf;
+  border-radius: 6px;
+  color: #243139;
+  font: inherit;
+  min-height: 42px;
+  padding: 8px 10px;
+  text-transform: none;
+}
+
+.session-action {
+  margin-top: 0;
+  width: 96px;
+}
+
+.scenario-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.scenario-strip span {
+  background: #f8faf8;
+  border: 1px solid #dbe1dd;
+  border-radius: 999px;
+  color: #49606a;
+  font-size: 0.78rem;
+  font-weight: 650;
+  line-height: 1.35;
+  padding: 6px 9px;
 }
 
 .message-list {
@@ -427,5 +461,14 @@ h3 {
 
   .workspace {
     grid-template-columns: 1fr;
+  }
+
+  .conversation-toolbar {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .session-action {
+    width: 100%;
   }
 }
