@@ -128,7 +128,11 @@ beforeEach(() => {
         grammar_result: grammarCorrection(),
       });
     }
-    if (url === '/api/pronunciation/assess') {
+    if (url === '/api/pronunciation/assess/upload') {
+      const body = JSON.parse(options.body);
+      if (!body.audio_base64 || body.reference_text !== 'THEN HE WENT TO THEME PARK') {
+        throw new Error('Invalid pronunciation upload payload');
+      }
       return jsonResponse({
         id: 'assessment_1',
         provider: 'mock',
@@ -191,13 +195,17 @@ test('reviews a saved mistake', async () => {
   expect(await screen.findByRole('button', { name: 'Review 1' })).toBeInTheDocument();
 });
 
-test('runs read aloud assessment', async () => {
+test('records read aloud audio and uploads it for assessment', async () => {
+  const voice = installVoiceMocks();
   render(<App />);
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Assess Reading' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Record Reading' }));
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
 
   expect(await screen.findByText('Overall')).toBeInTheDocument();
   expect(screen.getByText('THEME')).toHaveClass('low-word');
+  expect(global.fetch).toHaveBeenCalledWith('/api/pronunciation/assess/upload', expect.any(Object));
 });
 
 test('records microphone audio over the session websocket', async () => {
@@ -277,6 +285,7 @@ function installVoiceMocks() {
       this.ondataavailable?.({
         data: {
           size: 11,
+          type: 'audio/webm',
           arrayBuffer: () => Promise.resolve(new Uint8Array([1, 2, 3, 4]).buffer),
         },
       });

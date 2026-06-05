@@ -25,6 +25,7 @@ export default function App() {
   const [pronunciation, setPronunciation] = useState(null);
   const [partialText, setPartialText] = useState('');
   const [voiceState, setVoiceState] = useState('idle');
+  const [readingState, setReadingState] = useState('idle');
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState('Loading scenarios');
   const [error, setError] = useState('');
@@ -33,6 +34,10 @@ export default function App() {
   const voiceStreamRef = useRef(null);
   const pendingAudioSendsRef = useRef([]);
   const voiceCanceledRef = useRef(false);
+  const readingRecorderRef = useRef(null);
+  const readingStreamRef = useRef(null);
+  const readingChunksRef = useRef([]);
+  const readingCanceledRef = useRef(false);
 
   useEffect(() => {
     let active = true;
@@ -62,6 +67,8 @@ export default function App() {
     voiceCanceledRef.current = true;
     closeVoiceSocket();
     stopVoiceStream();
+    readingCanceledRef.current = true;
+    stopReadingStream();
   }, []);
 
   const selectedScenario = useMemo(
@@ -167,21 +174,116 @@ export default function App() {
     }
   }
 
-  async function assessReading() {
-    setError('');
-    setStatus('Assessing');
-    try {
-      const assessment = await request('/api/pronunciation/assess', {
-        method: 'POST',
-        body: JSON.stringify({ fixture_id: 'speechocean_000010113' }),
-      });
-      setPronunciation(assessment);
-      await refreshMistakes();
-      setStatus(sessionEnded ? 'Ended' : session ? 'In session' : 'Ready');
-    } catch (err) {
-      setError(err.message);
+  async function startReadingRecording() {
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      setError('Microphone recording is not supported in this browser.');
       setStatus('Error');
+      return;
     }
+    setError('');
+    setPronunciation(null);
+    setStatus('Requesting mic');
+    readingCanceledRef.current = false;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      readingStreamRef.current = stream;
+      const recorder = new MediaRecorder(stream);
+      readingRecorderRef.current = recorder;
+      readingChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data?.size) {
+          readingChunksRef.current = [...readingChunksRef.current, event.data];
+        }
+      };
+      recorder.onerror = () => {
+        setError('Reading recording failed.');
+        cancelReadingRecording();
+      };
+      recorder.onstop = () => {
+        if (!readingCanceledRef.current) {
+          finishReadingAssessment(recorder.mimeType).catch((err) => {
+            setError(err.message);
+            setStatus('Error');
+            setReadingState('idle');
+            stopReadingStream();
+          });
+        }
+      };
+      recorder.start();
+      setReadingState('recording');
+      setStatus('Recording');
+    } catch (err) {
+      setError(err?.message || 'Microphone permission was denied.');
+      setStatus('Error');
+      setReadingState('idle');
+      stopReadingStream();
+    }
+  }
+
+  function stopReadingRecording() {
+    if (readingState !== 'recording') {
+      return;
+    }
+    setReadingState('assessing');
+    setStatus('Assessing');
+    const recorder = readingRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') {
+      finishReadingAssessment().catch((err) => {
+        setError(err.message);
+        setStatus('Error');
+        setReadingState('idle');
+      });
+      return;
+    }
+    if (recorder.requestData) {
+      recorder.requestData();
+    }
+    recorder.stop();
+  }
+
+  function cancelReadingRecording() {
+    readingCanceledRef.current = true;
+    const recorder = readingRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.stop();
+    }
+    readingRecorderRef.current = null;
+    readingChunksRef.current = [];
+    stopReadingStream();
+    setReadingState('idle');
+    setStatus(sessionEnded ? 'Ended' : session ? 'In session' : 'Ready');
+  }
+
+  async function finishReadingAssessment(mimeType = 'audio/webm') {
+    const chunks = readingChunksRef.current;
+    if (!chunks.length) {
+      throw new Error('No reading audio was recorded.');
+    }
+    const audio = chunks.length === 1 && chunks[0].arrayBuffer
+      ? chunks[0]
+      : new Blob(chunks, { type: mimeType || 'audio/webm' });
+    const assessment = await request('/api/pronunciation/assess/upload', {
+      method: 'POST',
+      body: JSON.stringify({
+        reference_text: 'THEN HE WENT TO THEME PARK',
+        audio_base64: await blobToBase64(audio),
+        mime_type: audio.type || mimeType || 'audio/webm',
+      }),
+    });
+    setPronunciation(assessment);
+    await refreshMistakes();
+    setReadingState('idle');
+    setStatus(sessionEnded ? 'Ended' : session ? 'In session' : 'Ready');
+    stopReadingStream();
+  }
+
+  function stopReadingStream() {
+    const stream = readingStreamRef.current;
+    if (!stream) {
+      return;
+    }
+    stream.getTracks().forEach((track) => track.stop());
+    readingStreamRef.current = null;
   }
 
   async function startVoiceTurn() {
@@ -467,8 +569,13 @@ export default function App() {
           <section className="coach-block">
             <h3>Read Aloud</h3>
             <p className="read-reference">THEN HE WENT TO THEME PARK</p>
-            <button className="secondary-action assess-action" onClick={assessReading} type="button">
-              Assess Reading
+            <button
+              className="secondary-action assess-action"
+              disabled={readingState === 'assessing'}
+              onClick={readingState === 'recording' ? stopReadingRecording : startReadingRecording}
+              type="button"
+            >
+              {readingState === 'recording' ? 'Stop Reading' : readingState === 'assessing' ? 'Assessing' : 'Record Reading'}
             </button>
             {pronunciation ? (
               <div className="pronunciation-result">
@@ -572,4 +679,14 @@ function appendTurn(session, turn) {
     ...session,
     turns: [...session.turns, turn],
   };
+}
+
+async function blobToBase64(blob) {
+  const buffer = await blob.arrayBuffer();
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return window.btoa(binary);
 }
