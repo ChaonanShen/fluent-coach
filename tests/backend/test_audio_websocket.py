@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from pathlib import Path
 
 from backend.app.main import app
 from backend.app.services.sessions import session_store
@@ -35,6 +36,52 @@ def test_audio_websocket_returns_asr_and_reply_events() -> None:
     assert reply["type"] == "reply.text"
     assert reply["text"] == "Great. Which project from that experience is most relevant to this role?"
     assert reply["next_intent"] == "continue_fixture_dialogue"
+
+
+def test_audio_websocket_saves_audio_turn_file(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("APP_AUDIO_DIR", str(tmp_path))
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json(
+            {
+                "type": "start_turn",
+                "expected_text": "I have worked on backend systems for three years.",
+                "mime_type": "audio/webm",
+            }
+        )
+        websocket.receive_json()
+        websocket.send_bytes(b"fake-webm-audio")
+        websocket.send_json({"type": "end_turn"})
+        websocket.receive_json()
+        reply = websocket.receive_json()
+
+    session = session_store.get(session_id)
+    user_turn = next(turn for turn in session.turns if turn.speaker == "user")
+    audio_path = Path(user_turn.audio_path)
+
+    assert reply["type"] == "reply.text"
+    assert user_turn.mode == "audio"
+    assert audio_path.exists()
+    assert audio_path.read_bytes() == b"fake-webm-audio"
+    assert tmp_path in audio_path.parents
+
+
+def test_audio_websocket_rejects_empty_audio_turn() -> None:
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json({"type": "start_turn"})
+        websocket.receive_json()
+        websocket.send_json({"type": "end_turn"})
+        event = websocket.receive_json()
+
+    assert event["type"] == "error"
+    assert event["code"] == "empty_audio"
 
 
 def test_audio_websocket_rejects_unknown_session() -> None:

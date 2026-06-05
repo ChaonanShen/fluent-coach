@@ -33,6 +33,7 @@ from backend.app.models import (
 )
 from backend.app.services.analysis import analysis_store
 from backend.app.services.asr import asr_provider
+from backend.app.services.audio import save_turn_audio
 from backend.app.services.dialogue import dialogue_service
 from backend.app.services.grammar import grammar_service
 from backend.app.services.mistakes import mistake_service
@@ -225,6 +226,7 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
         return
 
     expected_text: str | None = None
+    audio_mime_type: str | None = None
     force_analysis_error = False
     audio = bytearray()
     try:
@@ -242,16 +244,37 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
             event_type = event.get("type")
             if event_type == "start_turn":
                 expected_text = event.get("expected_text")
+                audio_mime_type = event.get("mime_type")
                 force_analysis_error = bool(event.get("force_analysis_error", False))
                 audio.clear()
                 await websocket.send_json({"type": "asr.partial", "text": asr_provider.partial(expected_text)})
             elif event_type == "end_turn":
-                transcript = asr_provider.transcribe(bytes(audio), expected_text)
+                if not audio:
+                    await websocket.send_json(
+                        {
+                            "type": "error",
+                            "code": "empty_audio",
+                            "message": "No audio was received for this turn.",
+                        }
+                    )
+                    expected_text = None
+                    audio_mime_type = None
+                    force_analysis_error = False
+                    continue
+                stored_audio = save_turn_audio(
+                    session_id=session.id,
+                    audio_bytes=bytes(audio),
+                    mime_type=audio_mime_type,
+                )
+                asr_audio = stored_audio.preferred_path.read_bytes()
+                transcript = asr_provider.transcribe(asr_audio, expected_text)
                 await websocket.send_json({"type": "asr.final", "text": transcript})
                 user_turn, ai_turn, reply = dialogue_service.add_text_turns(
                     session=session,
                     scenario=scenario,
                     user_text=transcript,
+                    user_mode="audio",
+                    user_audio_path=str(stored_audio.preferred_path),
                 )
                 session_store.save(session)
                 await websocket.send_json(
@@ -298,6 +321,7 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     )
                 audio.clear()
                 expected_text = None
+                audio_mime_type = None
                 force_analysis_error = False
             else:
                 await websocket.send_json(

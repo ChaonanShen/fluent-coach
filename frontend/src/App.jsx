@@ -224,10 +224,10 @@ export default function App() {
     const websocket = new WebSocket(`${scheme}://${window.location.host}/ws/sessions/${session.id}/audio`);
     voiceWebSocketRef.current = websocket;
     websocket.onopen = () => {
-      websocket.send(JSON.stringify({ type: 'start_turn' }));
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       pendingAudioSendsRef.current = [];
+      websocket.send(JSON.stringify({ type: 'start_turn', mime_type: recorder.mimeType }));
       recorder.ondataavailable = (event) => queueAudioChunk(event.data);
       recorder.onerror = () => {
         setError('Recording failed.');

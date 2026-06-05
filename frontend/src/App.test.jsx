@@ -264,6 +264,7 @@ function installVoiceMocks() {
     constructor(stream) {
       this.stream = stream;
       this.state = 'inactive';
+      this.mimeType = 'audio/webm';
     }
 
     start() {

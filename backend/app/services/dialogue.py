@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 from backend.app.core.fixtures import load_text_fixture
 from backend.app.models import Scenario, Session, Turn, TurnSpeaker
@@ -71,8 +71,15 @@ class DialogueService:
         session: Session,
         scenario: Scenario,
         user_text: str,
+        user_mode: Literal["text", "audio"] = "text",
+        user_audio_path: str | None = None,
     ) -> tuple[Turn, Turn, DialogueReply]:
-        user_turn = session.add_turn(speaker=TurnSpeaker.USER, text=user_text)
+        user_turn = session.add_turn(
+            speaker=TurnSpeaker.USER,
+            text=user_text,
+            mode=user_mode,
+            audio_path=user_audio_path,
+        )
         reply = self.generate_reply(session=session, scenario=scenario, user_text=user_text)
         ai_turn = session.add_turn(speaker=TurnSpeaker.AI, text=reply.text)
         return user_turn, ai_turn, reply
