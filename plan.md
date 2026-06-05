@@ -524,6 +524,8 @@ WebSocket 事件：
 | `e28bef4` | PR-D | 已完成真实 CUDA smoke | `models/faster-whisper-small.en/` 已落位，V100/CUDA 上通过 `scripts/test_asr_provider.py`。 |
 | `d349116` | PR-D2 | 已完成 | WebSocket 音频回合改为使用保存/转码后的 `stored_audio.preferred_path` 调用文件级 ASR，并补默认离线测试验证路径调用。 |
 | `f5d7ca8` | PR-H2 | 已完成后端分类 | 腾讯 SOE 发音评测失败映射为稳定 canonical code，覆盖配置缺失、鉴权失败、连接失败、超时、限流和音频格式错误；默认测试通过 mock provider 覆盖。 |
+| `543bd1e` | PR-G2 | 已完成后端入口 | 发音评测请求支持可选 `session_id`，成功后写入 session 级 `pronunciation_results`，并通过 `/api/sessions/{id}/analysis` 返回。 |
+| `9e4d46f` | PR-G2 | 已完成前端传参 | Read Aloud 在 active session 下上传 `session_id`，无 session 时保持原独立评测请求。 |
 
 当前仍未完成或需继续增强：
 
