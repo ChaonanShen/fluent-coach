@@ -163,12 +163,18 @@ ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=tiny python3 scripts/test_asr_provide
 ```
 
 `faster-whisper` 首次使用模型名（如 `tiny`、`small`）时会尝试下载模型。
-如果服务器不能访问外网，推荐手动下载 faster-whisper 兼容模型目录，然后把
-`ASR_MODEL_SIZE` 设置为本地模型目录路径，例如：
+如果服务器不能访问外网，推荐手动下载 faster-whisper 兼容模型目录，放在
+`models/` 下，然后把 `ASR_MODEL_SIZE` 设置为本地模型目录路径，例如：
 
 ```bash
-ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/path/to/faster-whisper-small make dev-backend
-ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/path/to/faster-whisper-small python3 scripts/test_asr_provider.py
+ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/faster-whisper-small.en make dev-backend
+ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/faster-whisper-small.en python3 scripts/test_asr_provider.py
+```
+
+本机 GPU 可用时可显式启用 CUDA：
+
+```bash
+CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/faster-whisper-small.en ASR_DEVICE=cuda ASR_COMPUTE_TYPE=float16 python3 scripts/test_asr_provider.py
 ```
 
 真实 ASR 集成测试默认不会运行；需要显式执行 integration marker。
