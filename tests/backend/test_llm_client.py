@@ -46,6 +46,25 @@ def test_structured_json_caller_returns_analysis_error_after_two_failures() -> N
     assert result.attempts == 2
 
 
+def test_structured_json_caller_maps_provider_exceptions_to_analysis_error() -> None:
+    class BrokenLLMClient:
+        def complete(self, messages):
+            del messages
+            raise httpx.ConnectError("connection failed")
+
+    caller = StructuredJSONCaller(client=BrokenLLMClient(), stage=AnalysisStage.GRAMMAR)
+
+    result = caller.call([LLMMessage(role="user", content="Check this sentence")])
+
+    assert result.data is None
+    assert result.error is not None
+    assert result.error.code == "provider_request_failed"
+    assert result.error.provider == "llm"
+    assert result.error.fallback_applied is True
+    assert result.error.raw_code == "ConnectError"
+    assert result.attempts == 1
+
+
 def test_openai_compatible_client_posts_chat_completion_payload() -> None:
     captured: dict[str, object] = {}
 

@@ -115,7 +115,22 @@ class StructuredJSONCaller:
         retry_messages = list(messages)
         for _ in range(2):
             attempts += 1
-            last_content = self.client.complete(retry_messages)
+            try:
+                last_content = self.client.complete(retry_messages)
+            except Exception as exc:
+                return StructuredJSONResult(
+                    data=None,
+                    error=AnalysisError(
+                        stage=self.stage,
+                        code="provider_request_failed",
+                        user_message_zh="AI 服务暂时不可用，已使用备用结果。",
+                        severity=AnalysisErrorSeverity.WARNING,
+                        fallback_applied=True,
+                        provider="llm",
+                        raw_code=_safe_error_code(exc),
+                    ),
+                    attempts=attempts,
+                )
             try:
                 parsed = json.loads(last_content)
             except json.JSONDecodeError:
@@ -144,3 +159,9 @@ class StructuredJSONCaller:
             ),
             attempts=attempts,
         )
+
+
+def _safe_error_code(exc: Exception) -> str:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return f"http_status_{exc.response.status_code}"
+    return type(exc).__name__
