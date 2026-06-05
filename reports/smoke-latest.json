@@ -1,0 +1,48 @@
+{
+  "generated_at": "2026-06-05T08:37:47.818484+00:00",
+  "mode": "fixture_fake",
+  "external_services_used": false,
+  "checks": {
+    "asr": {
+      "status": "passed",
+      "provider": "fake",
+      "fixture_id": "librispeech_dev-clean_1272-128104-0000",
+      "expected": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL",
+      "transcript": "MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL"
+    },
+    "grammar": {
+      "status": "passed",
+      "fixture_id": "grammar_001",
+      "issue_count": 2,
+      "corrected_text": "I have been working in this field for three years."
+    },
+    "pronunciation": {
+      "status": "passed",
+      "provider": "mock",
+      "fixture_id": "speechocean_000010113",
+      "overall": 50.0,
+      "issue_count": 1
+    },
+    "dialogue_fixture": {
+      "status": "passed",
+      "fixture_id": "dialogue_001",
+      "scenario_id": "interview",
+      "turn_count": 5
+    },
+    "ui_manual": {
+      "status": "not_run",
+      "checklist": [
+        "Start a session from the browser UI.",
+        "Record one voice turn and confirm asr.final plus reply.text appear.",
+        "Record Read Aloud and confirm pronunciation score appears.",
+        "End the session and confirm summary renders."
+      ]
+    }
+  },
+  "latency_ms": {
+    "end_turn_to_asr_final": null,
+    "asr_final_to_reply_text": null,
+    "reply_text_to_tts_start": null,
+    "pronunciation_upload_to_result": null
+  }
+}
