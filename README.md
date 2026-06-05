@@ -216,17 +216,22 @@ CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/
 
 真实 ASR 集成测试默认不会运行；需要显式执行 integration marker。
 
-当前实时链路的产品决策：
+## 实时主链路决策
 
-- 浏览器录音仍按 WebSocket chunk 上传，但后端等一轮语音结束后再用
-  faster-whisper 做整句识别；不追求边说边改写 ASR partial，避免重复推理和
-  GPU 延迟抖动。
-- AI 对话回复是唯一需要强实时感的主路径：LLM 使用返回流式，前端收到
-  `reply.delta` 就展示文本，`reply.done` 后落库并触发朗读。
-- 语法纠错、错题生成和发音评测都走旁路异步；哪个分析先完成就先显示，
-  不阻塞 AI 回复。
-- 腾讯 SOE 用于发音评测，不作为主对话实时链路；当前按完整录音评测即可，
-  不要求流式上传或实时中间结果。
+当前确认的主链路是：
+
+```text
+浏览器录音 -> VAD/end_turn -> 整句 ASR -> LLM 流式返回/展示 -> 朗读
+                         -> 语法纠错/发音评测/错题生成异步补充
+```
+
+| 模块 | 决策 | 说明 |
+|---|---|---|
+| ASR | 按轮整句识别 | 浏览器录音仍按 WebSocket chunk 上传，但后端等一轮结束后再用 faster-whisper 识别；不做边说边改写的真流式 ASR，避免重复推理和 GPU 延迟抖动。 |
+| LLM 回复 | 返回流式 | 这是唯一需要强实时感的主路径；请求一次发送当前 session 上下文和本轮用户文本，服务端逐段返回 `reply.delta`，`reply.done` 后落库并触发朗读。 |
+| TTS | 回复完成后朗读 | 当前 browser TTS 在 Edge/Chrome 下听感可接受；逐 token 朗读不做，避免声音碎片化。后续如需更快，可考虑句子级缓冲朗读。 |
+| 语法纠错/错题 | 旁路异步 | 不阻塞 AI 回复，分析完成后通过 UI 逐步展示。 |
+| 腾讯 SOE 发音评测 | 旁路异步整段评测 | 用于发音反馈，不进入主对话实时链路；当前按完整录音评测即可，不要求流式上传或实时中间结果。 |
 
 TTS 默认使用 `TTS_PROVIDER=browser`，前端通过浏览器 `speechSynthesis`
 播放 AI 回复，并优先选择更自然的英文 voice。也可以启用 OpenAI-compatible
