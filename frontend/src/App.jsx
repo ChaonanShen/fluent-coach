@@ -135,8 +135,27 @@ export default function App() {
     setError(err.message || fallbackMessage);
   }
 
-  function speak(text) {
-    if (!text || !window.speechSynthesis || !window.SpeechSynthesisUtterance) {
+  async function speak(text) {
+    if (!text) {
+      return;
+    }
+    try {
+      const result = await request('/api/tts/synthesize', {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      });
+      if (result.audio_base64) {
+        await playCloudAudio(result);
+        return;
+      }
+    } catch {
+      // Browser speech remains the local fallback when cloud TTS is unavailable.
+    }
+    speakWithBrowser(text);
+  }
+
+  function speakWithBrowser(text) {
+    if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
       return;
     }
     window.speechSynthesis.cancel();
@@ -189,7 +208,7 @@ export default function App() {
       });
       setSession(turnBody.session);
       setLatestCorrection(turnBody.grammar_result);
-      speak(turnBody.ai_turn?.text || turnBody.session.turns.at(-1)?.text);
+      speak(turnBody.ai_turn?.text || turnBody.session.turns.at(-1)?.text).catch(() => {});
       await refreshMistakes();
       setStatus('In session');
     } catch (err) {
@@ -437,7 +456,7 @@ export default function App() {
           audio_path: null,
           asr_confidence: null,
         }));
-        speak(message.text);
+        speak(message.text).catch(() => {});
         setVoiceState('idle');
         setStatus('In session');
       }
@@ -469,7 +488,7 @@ export default function App() {
           asr_confidence: null,
         }));
         streamingReplyRef.current = null;
-        speak(finalText);
+        speak(finalText).catch(() => {});
         setVoiceState('idle');
         setStatus('In session');
       }
@@ -936,6 +955,15 @@ async function blobToBase64(blob) {
     binary += String.fromCharCode(byte);
   }
   return window.btoa(binary);
+}
+
+async function playCloudAudio(result) {
+  if (!window.Audio) {
+    throw new Error('Audio playback is not supported.');
+  }
+  const mimeType = result.mime_type || 'audio/mpeg';
+  const audio = new Audio(`data:${mimeType};base64,${result.audio_base64}`);
+  await audio.play();
 }
 
 function formatScore(value) {

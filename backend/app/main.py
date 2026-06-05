@@ -259,6 +259,8 @@ def synthesize_tts(request: TTSRequest) -> TTSResponse:
         provider=result.provider,
         text=result.text,
         audio_url=result.audio_url,
+        audio_base64=result.audio_base64,
+        mime_type=result.mime_type,
         fallback_applied=result.fallback_applied,
     )
 

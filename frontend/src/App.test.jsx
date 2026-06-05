@@ -27,9 +27,11 @@ const openingTurn = {
 };
 
 let pronunciationUploadFails = false;
+let cloudTtsEnabled = false;
 
 beforeEach(() => {
   pronunciationUploadFails = false;
+  cloudTtsEnabled = false;
   window.speechSynthesis = {
     cancel: vi.fn(),
     getVoices: vi.fn(() => [
@@ -41,6 +43,10 @@ beforeEach(() => {
   };
   window.SpeechSynthesisUtterance = vi.fn(function utterance(text) {
     this.text = text;
+  });
+  window.Audio = vi.fn(function audio(src) {
+    this.src = src;
+    this.play = vi.fn(() => Promise.resolve());
   });
   global.fetch = vi.fn(async (url, options = {}) => {
     if (url === '/api/scenarios') {
@@ -85,6 +91,26 @@ beforeEach(() => {
             task_completion_rate: 0.5,
           },
         ],
+      });
+    }
+    if (url === '/api/tts/synthesize') {
+      if (cloudTtsEnabled) {
+        return jsonResponse({
+          provider: 'openai_compatible',
+          text: JSON.parse(options.body).text,
+          audio_url: null,
+          audio_base64: 'YXVkaW8=',
+          mime_type: 'audio/mpeg',
+          fallback_applied: false,
+        });
+      }
+      return jsonResponse({
+        provider: 'browser',
+        text: JSON.parse(options.body).text,
+        audio_url: null,
+        audio_base64: null,
+        mime_type: null,
+        fallback_applied: true,
       });
     }
     if (url === '/api/mistakes/mistake_1/review') {
@@ -263,11 +289,26 @@ test('sends a text turn and shows correction feedback', async () => {
   expect(await screen.findByText('Great. Which project is most relevant to this role?')).toBeInTheDocument();
   expect(screen.getByText('I have been working in this field for three years.')).toBeInTheDocument();
   expect(global.fetch).not.toHaveBeenCalledWith('/api/grammar/check', expect.any(Object));
-  expect(window.speechSynthesis.speak).toHaveBeenCalled();
+  await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalled());
   const utterance = window.speechSynthesis.speak.mock.calls.at(-1)[0];
   expect(utterance.lang).toBe('en-US');
   expect(utterance.rate).toBe(0.94);
   expect(utterance.voice.name).toBe('Google US English');
+});
+
+test('plays cloud TTS audio when the backend returns audio', async () => {
+  cloudTtsEnabled = true;
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.change(screen.getByLabelText('Your reply'), {
+    target: { value: 'I have worked on backend systems for three years.' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+  await waitFor(() => expect(window.Audio).toHaveBeenCalledWith('data:audio/mpeg;base64,YXVkaW8='));
+  expect(window.speechSynthesis.speak).not.toHaveBeenCalled();
 });
 
 test('reviews a saved mistake', async () => {
@@ -358,7 +399,7 @@ test('records microphone audio over the session websocket', async () => {
     expect(voice.sentMessages.some((payload) => eventType(payload) === 'start_turn')).toBe(true);
     expect(voice.sentMessages.some((payload) => eventType(payload) === 'end_turn')).toBe(true);
   });
-  expect(window.speechSynthesis.speak).toHaveBeenCalled();
+  await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalled());
 });
 
 test('voice control becomes available after reply before delayed analysis', async () => {
@@ -388,7 +429,7 @@ test('renders streaming voice reply deltas and finalizes the turn', async () => 
   fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
 
   expect(await screen.findByText('That sounds useful. What did you own?')).toBeInTheDocument();
-  expect(window.speechSynthesis.speak).toHaveBeenCalled();
+  await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalled());
 });
 
 test('renders pronunciation analysis from a voice turn', async () => {

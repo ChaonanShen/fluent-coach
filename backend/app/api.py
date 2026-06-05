@@ -130,4 +130,6 @@ class TTSResponse(BaseModel):
     provider: str
     text: str
     audio_url: str | None
+    audio_base64: str | None = None
+    mime_type: str | None = None
     fallback_applied: bool
