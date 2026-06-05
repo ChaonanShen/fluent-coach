@@ -148,6 +148,10 @@ http://localhost:5173/
 转发而是直接用公网 IP 访问，需要在云服务器安全组/防火墙开放 `5173`
 端口；通常不需要把 `8000` 暴露给公网。
 
+浏览器 TTS 听感和浏览器内置语音引擎强相关。演示时推荐使用 Microsoft Edge
+或 Chrome；不要用 QQ 浏览器做 TTS 听感验收，实测其 `speechSynthesis`
+英文朗读明显更机械。
+
 ## 发音评测 Provider
 
 默认发音评测使用 `PRON_PROVIDER=mock`，从 SpeechOcean762 fixture 回放确定性分数，
