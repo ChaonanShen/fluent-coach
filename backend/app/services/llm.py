@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass
+from collections.abc import Iterator
 from typing import Protocol
 
 import httpx
@@ -21,6 +22,9 @@ class LLMMessage(BaseModel):
 class LLMClient(Protocol):
     def complete(self, messages: list[LLMMessage]) -> str:
         """Return assistant message content."""
+
+    def stream_complete(self, messages: list[LLMMessage]) -> Iterator[str]:
+        """Yield assistant message content deltas."""
 
 
 @dataclass(frozen=True)
@@ -41,6 +45,13 @@ class FakeLLMClient:
         if len(self._responses) > 1:
             return self._responses.pop(0)
         return self._responses[0]
+
+    def stream_complete(self, messages: list[LLMMessage]) -> Iterator[str]:
+        content = self.complete(messages)
+        words = content.split(" ")
+        for index, word in enumerate(words):
+            suffix = " " if index < len(words) - 1 else ""
+            yield word + suffix
 
 
 class OpenAICompatibleLLMClient:
@@ -69,6 +80,39 @@ class OpenAICompatibleLLMClient:
         response.raise_for_status()
         payload = response.json()
         return str(payload["choices"][0]["message"]["content"])
+
+    def stream_complete(self, messages: list[LLMMessage]) -> Iterator[str]:
+        base_url = self.config.base_url.rstrip("/")
+        with self._client.stream(
+            "POST",
+            f"{base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {self.config.api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": self.config.model,
+                "messages": [message.model_dump() for message in messages],
+                "temperature": 0.2,
+                "stream": True,
+            },
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines():
+                if not line:
+                    continue
+                if not line.startswith("data:"):
+                    continue
+                data = line.removeprefix("data:").strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    payload = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                content = _stream_delta_content(payload)
+                if content:
+                    yield content
 
 
 def create_llm_client_from_env() -> LLMClient | None:
@@ -165,3 +209,21 @@ def _safe_error_code(exc: Exception) -> str:
     if isinstance(exc, httpx.HTTPStatusError):
         return f"http_status_{exc.response.status_code}"
     return type(exc).__name__
+
+
+def _stream_delta_content(payload: object) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return ""
+    choice = choices[0]
+    if not isinstance(choice, dict):
+        return ""
+    delta = choice.get("delta")
+    if isinstance(delta, dict) and delta.get("content") is not None:
+        return str(delta["content"])
+    message = choice.get("message")
+    if isinstance(message, dict) and message.get("content") is not None:
+        return str(message["content"])
+    return ""

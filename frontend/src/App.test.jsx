@@ -376,6 +376,21 @@ test('voice control becomes available after reply before delayed analysis', asyn
   expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
 });
 
+test('renders streaming voice reply deltas and finalizes the turn', async () => {
+  const voice = installVoiceMocks({ streamingReply: true });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+
+  expect(await screen.findByText('That sounds useful. What did you own?')).toBeInTheDocument();
+  expect(window.speechSynthesis.speak).toHaveBeenCalled();
+});
+
 test('shows microphone permission errors clearly', async () => {
   const voice = installVoiceMocks({ getUserMediaError: new Error('Permission denied') });
   render(<App />);
@@ -524,6 +539,34 @@ function installVoiceMocks(options = {}) {
               user_turn_id: 'turn_user_voice_1',
             }),
           });
+          if (options.streamingReply) {
+            this.onmessage?.({
+              data: JSON.stringify({ type: 'reply.delta', text: 'That sounds useful. ' }),
+            });
+            this.onmessage?.({
+              data: JSON.stringify({ type: 'reply.delta', text: 'What did you own?' }),
+            });
+            this.onmessage?.({
+              data: JSON.stringify({
+                type: 'reply.done',
+                text: 'That sounds useful. What did you own?',
+                turn_id: 'turn_ai_stream_1',
+              }),
+            });
+            this.onmessage?.({
+              data: JSON.stringify({
+                type: 'debug.timing',
+                stage: 'reply',
+                timings: {
+                  asr_ms: 123,
+                  dialogue_reply_ms: 45,
+                  end_turn_to_reply_text_ms: 190,
+                },
+              }),
+            });
+            this.sendAnalysisResult();
+            return;
+          }
           this.onmessage?.({
             data: JSON.stringify({
               type: 'reply.text',

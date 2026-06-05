@@ -89,6 +89,38 @@ def test_dialogue_service_uses_llm_for_unmatched_text() -> None:
     assert reply.next_intent == "ask_for_specific_contribution"
 
 
+def test_dialogue_service_streams_unmatched_text() -> None:
+    scenario = get_scenario("interview")
+    assert scenario is not None
+    session = session_store.create(scenario)
+    service = DialogueService(FakeLLMClient(responses=["That sounds useful. What did you own?"]))
+
+    reply = service.generate_reply_stream(
+        session=session,
+        scenario=scenario,
+        user_text="I built an internal platform at my last company.",
+    )
+
+    assert reply is not None
+    assert "".join(reply.chunks) == "That sounds useful. What did you own?"
+    assert reply.current_goal in scenario.conversation_goals
+
+
+def test_dialogue_service_does_not_stream_fixture_replies() -> None:
+    scenario = get_scenario("interview")
+    assert scenario is not None
+    session = session_store.create(scenario)
+    service = DialogueService(FakeLLMClient(responses=["should not stream"]))
+
+    reply = service.generate_reply_stream(
+        session=session,
+        scenario=scenario,
+        user_text="Sure. I have three years of experience in backend development, mainly building APIs and data services.",
+    )
+
+    assert reply is None
+
+
 def test_text_turn_api_uses_fallback_for_unmatched_text() -> None:
     client = TestClient(app)
     created = client.post("/api/sessions", json={"scenario_id": "meeting"}).json()

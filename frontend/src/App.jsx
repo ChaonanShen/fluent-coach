@@ -44,6 +44,7 @@ export default function App() {
   const voiceWebSocketRef = useRef(null);
   const voiceStreamRef = useRef(null);
   const pendingAudioSendsRef = useRef([]);
+  const streamingReplyRef = useRef(null);
   const voiceCanceledRef = useRef(false);
   const voiceErrorRef = useRef(false);
   const readingRecorderRef = useRef(null);
@@ -364,6 +365,7 @@ export default function App() {
     setStatus('Requesting mic');
     voiceCanceledRef.current = false;
     voiceErrorRef.current = false;
+    streamingReplyRef.current = null;
     closeVoiceSocket();
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -436,6 +438,38 @@ export default function App() {
           asr_confidence: null,
         }));
         speak(message.text);
+        setVoiceState('idle');
+        setStatus('In session');
+      }
+      if (message.type === 'reply.delta') {
+        const streamId = ensureStreamingReplyId();
+        setSession((current) => upsertTurnText(current, {
+          id: streamId,
+          session_id: session.id,
+          speaker: 'ai',
+          text: (streamingReplyRef.current?.text || '') + message.text,
+          created_at: new Date().toISOString(),
+          mode: 'text',
+          audio_path: null,
+          asr_confidence: null,
+        }));
+        streamingReplyRef.current.text = (streamingReplyRef.current.text || '') + message.text;
+      }
+      if (message.type === 'reply.done') {
+        const streamId = ensureStreamingReplyId();
+        const finalText = message.text || streamingReplyRef.current?.text || '';
+        setSession((current) => replaceTurnIdAndText(current, streamId, {
+          id: message.turn_id || streamId,
+          session_id: session.id,
+          speaker: 'ai',
+          text: finalText,
+          created_at: new Date().toISOString(),
+          mode: 'text',
+          audio_path: null,
+          asr_confidence: null,
+        }));
+        streamingReplyRef.current = null;
+        speak(finalText);
         setVoiceState('idle');
         setStatus('In session');
       }
@@ -561,6 +595,16 @@ export default function App() {
     }
     stream.getTracks().forEach((track) => track.stop());
     voiceStreamRef.current = null;
+  }
+
+  function ensureStreamingReplyId() {
+    if (!streamingReplyRef.current) {
+      streamingReplyRef.current = {
+        id: `local-ai-stream-${Date.now()}`,
+        text: '',
+      };
+    }
+    return streamingReplyRef.current.id;
   }
 
   return (
@@ -843,6 +887,35 @@ function appendTurn(session, turn) {
   return {
     ...session,
     turns: [...session.turns, turn],
+  };
+}
+
+function upsertTurnText(session, turn) {
+  if (!session) {
+    return session;
+  }
+  if (!session.turns.some((existing) => existing.id === turn.id)) {
+    return {
+      ...session,
+      turns: [...session.turns, turn],
+    };
+  }
+  return {
+    ...session,
+    turns: session.turns.map((existing) => (existing.id === turn.id ? { ...existing, text: turn.text } : existing)),
+  };
+}
+
+function replaceTurnIdAndText(session, oldId, turn) {
+  if (!session) {
+    return session;
+  }
+  if (!session.turns.some((existing) => existing.id === oldId)) {
+    return appendTurn(session, turn);
+  }
+  return {
+    ...session,
+    turns: session.turns.map((existing) => (existing.id === oldId ? turn : existing)),
   };
 }
 

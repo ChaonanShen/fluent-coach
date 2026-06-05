@@ -20,6 +20,15 @@ def test_fake_llm_client_returns_configured_response() -> None:
     assert len(client.calls) == 1
 
 
+def test_fake_llm_client_streams_configured_response() -> None:
+    client = FakeLLMClient(responses=["hello there"])
+
+    chunks = list(client.stream_complete([LLMMessage(role="user", content="Hi")]))
+
+    assert chunks == ["hello ", "there"]
+    assert len(client.calls) == 1
+
+
 def test_structured_json_caller_retries_once_after_invalid_json() -> None:
     client = FakeLLMClient(responses=["not json", '{"reply": "valid"}'])
     caller = StructuredJSONCaller(client=client, stage=AnalysisStage.GRAMMAR)
@@ -101,6 +110,36 @@ def test_openai_compatible_client_posts_chat_completion_payload() -> None:
     assert captured["url"] == "https://llm.example.test/v1/chat/completions"
     assert captured["auth"] == "Bearer test-key"
     assert b'"model":"test-model"' in captured["payload"]
+
+
+def test_openai_compatible_client_streams_chat_completion_deltas() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["payload"] = request.read()
+        return httpx.Response(
+            200,
+            content=(
+                b'data: {"choices":[{"delta":{"content":"hello "}}]}\n\n'
+                b'data: {"choices":[{"delta":{"content":"there"}}]}\n\n'
+                b"data: [DONE]\n\n"
+            ),
+        )
+
+    http_client = httpx.Client(transport=httpx.MockTransport(handler))
+    client = OpenAICompatibleLLMClient(
+        config=LLMConfig(
+            base_url="https://llm.example.test/v1",
+            api_key="test-key",
+            model="test-model",
+        ),
+        http_client=http_client,
+    )
+
+    chunks = list(client.stream_complete([LLMMessage(role="user", content="Hello")]))
+
+    assert chunks == ["hello ", "there"]
+    assert b'"stream":true' in captured["payload"]
 
 
 def test_llm_factory_defaults_to_disabled(monkeypatch) -> None:

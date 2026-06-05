@@ -5,6 +5,8 @@ from pathlib import Path
 
 from backend.app.models import CorrectionTiming, GrammarCorrection, GrammarSeverity
 from backend.app.main import app
+from backend.app.services.dialogue import DialogueService
+from backend.app.services.llm import FakeLLMClient
 from backend.app.services.analysis import analysis_store
 from backend.app.services.sessions import session_store
 
@@ -118,6 +120,42 @@ def test_audio_websocket_reply_does_not_wait_for_slow_grammar(monkeypatch) -> No
     assert elapsed_before_pending < 0.25
     assert grammar_timing["type"] == "debug.timing"
     assert analysis["type"] == "analysis.result"
+
+
+def test_audio_websocket_streams_llm_reply_for_unmatched_text(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "backend.app.main.dialogue_service",
+        DialogueService(FakeLLMClient(responses=["That sounds useful. What did you own?"])),
+    )
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    chunks: list[str] = []
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json(
+            {
+                "type": "start_turn",
+                "expected_text": "I built an internal platform at my last company.",
+            }
+        )
+        websocket.receive_json()
+        websocket.send_bytes(b"fake-audio-chunk")
+        websocket.send_json({"type": "end_turn"})
+        final = websocket.receive_json()
+        while True:
+            event = websocket.receive_json()
+            if event["type"] == "reply.delta":
+                chunks.append(event["text"])
+                continue
+            done = event
+            break
+
+    assert final["type"] == "asr.final"
+    assert chunks
+    assert done["type"] == "reply.done"
+    assert done["text"] == "That sounds useful. What did you own?"
+    assert "".join(chunks) == done["text"]
 
 
 def test_audio_websocket_saves_audio_turn_file(monkeypatch, tmp_path) -> None:

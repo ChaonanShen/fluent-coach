@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
 from functools import lru_cache
 from typing import Any, Literal
 
@@ -22,6 +23,13 @@ def _normalize(text: str) -> str:
 class DialogueReply:
     def __init__(self, text: str, current_goal: str, next_intent: str) -> None:
         self.text = text
+        self.current_goal = current_goal
+        self.next_intent = next_intent
+
+
+class DialogueStreamReply:
+    def __init__(self, chunks: Iterator[str], current_goal: str, next_intent: str) -> None:
+        self.chunks = chunks
         self.current_goal = current_goal
         self.next_intent = next_intent
 
@@ -83,6 +91,30 @@ class DialogueService:
         reply = self.generate_reply(session=session, scenario=scenario, user_text=user_text)
         ai_turn = session.add_turn(speaker=TurnSpeaker.AI, text=reply.text)
         return user_turn, ai_turn, reply
+
+    def generate_reply_stream(
+        self,
+        *,
+        session: Session,
+        scenario: Scenario,
+        user_text: str,
+    ) -> DialogueStreamReply | None:
+        if self._match_fixture_reply(scenario_id=scenario.id, user_text=user_text) is not None:
+            return None
+        if self.llm_client is None or not hasattr(self.llm_client, "stream_complete"):
+            return None
+        current_goal = self._current_goal(scenario, session)
+        messages = self._streaming_messages(
+            session=session,
+            scenario=scenario,
+            user_text=user_text,
+            current_goal=current_goal,
+        )
+        return DialogueStreamReply(
+            chunks=self.llm_client.stream_complete(messages),
+            current_goal=current_goal,
+            next_intent="continue_conversation",
+        )
 
     def _match_fixture_reply(self, *, scenario_id: str, user_text: str) -> str | None:
         normalized = _normalize(user_text)
@@ -164,6 +196,42 @@ class DialogueService:
             current_goal=str(result.data.get("current_goal") or current_goal),
             next_intent=str(result.data.get("next_intent") or "continue_conversation"),
         )
+
+    def _streaming_messages(
+        self,
+        *,
+        session: Session,
+        scenario: Scenario,
+        user_text: str,
+        current_goal: str,
+    ) -> list[LLMMessage]:
+        history = [
+            {"speaker": turn.speaker.value, "text": turn.text}
+            for turn in session.turns[-8:]
+        ]
+        return [
+            LLMMessage(
+                role="system",
+                content=(
+                    "You are the AI role in an English speaking practice scenario. "
+                    "Reply as a natural conversation partner in one or two short sentences. "
+                    "Do not teach grammar in this reply. Return plain English text only."
+                ),
+            ),
+            LLMMessage(
+                role="user",
+                content=(
+                    f"scenario_id: {scenario.id}\n"
+                    f"ai_role: {scenario.ai_role}\n"
+                    f"user_role: {scenario.user_role}\n"
+                    f"conversation_goals: {scenario.conversation_goals}\n"
+                    f"target_expressions: {scenario.target_expressions}\n"
+                    f"current_goal: {current_goal}\n"
+                    f"history: {history}\n"
+                    f"latest_user_text: {user_text}"
+                ),
+            ),
+        ]
 
 
 dialogue_service = DialogueService(create_llm_client_from_env())

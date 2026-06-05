@@ -35,6 +35,7 @@ from backend.app.models import (
     MistakeItem,
     PronunciationAssessment,
     SessionSummary,
+    TurnSpeaker,
 )
 from backend.app.services.analysis import analysis_store
 from backend.app.services.asr import asr_provider
@@ -421,25 +422,90 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                 await websocket.send_json({"type": "asr.final", "text": transcript})
                 timings["end_turn_to_asr_final_ms"] = _elapsed_ms(turn_timing_started)
                 dialogue_started = time.perf_counter()
-                user_turn, ai_turn, reply = dialogue_service.add_text_turns(
+                stream_reply = dialogue_service.generate_reply_stream(
                     session=session,
                     scenario=scenario,
                     user_text=transcript,
-                    user_mode="audio",
-                    user_audio_path=str(stored_audio.preferred_path),
                 )
-                timings["dialogue_reply_ms"] = _elapsed_ms(dialogue_started)
-                session_store.save(session)
-                await websocket.send_json(
-                    {
-                        "type": "reply.text",
-                        "text": ai_turn.text,
-                        "turn_id": ai_turn.id,
-                        "user_turn_id": user_turn.id,
-                        "current_goal": reply.current_goal,
-                        "next_intent": reply.next_intent,
-                    }
-                )
+                if stream_reply is None:
+                    user_turn, ai_turn, reply = dialogue_service.add_text_turns(
+                        session=session,
+                        scenario=scenario,
+                        user_text=transcript,
+                        user_mode="audio",
+                        user_audio_path=str(stored_audio.preferred_path),
+                    )
+                    timings["dialogue_reply_ms"] = _elapsed_ms(dialogue_started)
+                    session_store.save(session)
+                    await websocket.send_json(
+                        {
+                            "type": "reply.text",
+                            "text": ai_turn.text,
+                            "turn_id": ai_turn.id,
+                            "user_turn_id": user_turn.id,
+                            "current_goal": reply.current_goal,
+                            "next_intent": reply.next_intent,
+                        }
+                    )
+                else:
+                    user_turn = session.add_turn(
+                        speaker=TurnSpeaker.USER,
+                        text=transcript,
+                        mode="audio",
+                        audio_path=str(stored_audio.preferred_path),
+                    )
+                    reply_text_parts: list[str] = []
+                    first_delta = True
+                    try:
+                        for chunk in stream_reply.chunks:
+                            if not chunk:
+                                continue
+                            if first_delta:
+                                timings["reply_first_delta_ms"] = _elapsed_ms(dialogue_started)
+                                first_delta = False
+                            reply_text_parts.append(chunk)
+                            await websocket.send_json(
+                                {
+                                    "type": "reply.delta",
+                                    "text": chunk,
+                                    "user_turn_id": user_turn.id,
+                                    "current_goal": stream_reply.current_goal,
+                                    "next_intent": stream_reply.next_intent,
+                                }
+                            )
+                    except Exception:
+                        fallback = dialogue_service.generate_reply(
+                            session=session,
+                            scenario=scenario,
+                            user_text=transcript,
+                        )
+                        reply_text_parts = [fallback.text]
+                        stream_reply.current_goal = fallback.current_goal
+                        stream_reply.next_intent = fallback.next_intent
+
+                    reply_text = "".join(reply_text_parts).strip()
+                    if not reply_text:
+                        fallback = dialogue_service.generate_reply(
+                            session=session,
+                            scenario=scenario,
+                            user_text=transcript,
+                        )
+                        reply_text = fallback.text
+                        stream_reply.current_goal = fallback.current_goal
+                        stream_reply.next_intent = fallback.next_intent
+                    ai_turn = session.add_turn(speaker=TurnSpeaker.AI, text=reply_text)
+                    timings["dialogue_reply_ms"] = _elapsed_ms(dialogue_started)
+                    session_store.save(session)
+                    await websocket.send_json(
+                        {
+                            "type": "reply.done",
+                            "text": ai_turn.text,
+                            "turn_id": ai_turn.id,
+                            "user_turn_id": user_turn.id,
+                            "current_goal": stream_reply.current_goal,
+                            "next_intent": stream_reply.next_intent,
+                        }
+                    )
                 timings["end_turn_to_reply_text_ms"] = _elapsed_ms(turn_timing_started)
                 await websocket.send_json(
                     {
