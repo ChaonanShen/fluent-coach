@@ -1,0 +1,45 @@
+import json
+import subprocess
+import sys
+
+from backend.app.eval.smoke import render_smoke_markdown, run_fixture_smoke_report
+
+
+def test_fixture_smoke_report_uses_fake_providers() -> None:
+    report = run_fixture_smoke_report()
+
+    assert report["mode"] == "fixture_fake"
+    assert report["external_services_used"] is False
+    assert report["checks"]["asr"]["status"] == "passed"
+    assert report["checks"]["asr"]["provider"] == "fake"
+    assert report["checks"]["pronunciation"]["status"] == "passed"
+    assert report["checks"]["pronunciation"]["provider"] == "mock"
+    assert report["latency_ms"]["end_turn_to_asr_final"] is None
+
+
+def test_smoke_report_renders_markdown() -> None:
+    markdown = render_smoke_markdown(run_fixture_smoke_report())
+
+    assert "# Smoke Report" in markdown
+    assert "External services used: `false`" in markdown
+    assert "end_turn -> asr.final" in markdown
+    assert "Manual UI Checklist" in markdown
+
+
+def test_smoke_report_script_writes_outputs(tmp_path) -> None:
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/run_smoke_report.py",
+            "--output-dir",
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert "smoke-latest.json" in completed.stdout
+    report = json.loads((tmp_path / "smoke-latest.json").read_text(encoding="utf-8"))
+    assert report["external_services_used"] is False
+    assert (tmp_path / "smoke-latest.md").exists()
