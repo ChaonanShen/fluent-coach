@@ -881,20 +881,11 @@ export default function App() {
             </button>
             {pronunciation ? (
               <div className="pronunciation-result">
-                <dl>
-                  <div>
-                    <dt>Overall</dt>
-                    <dd>{Math.round(pronunciation.overall)}</dd>
-                  </div>
-                  <div>
-                    <dt>Accuracy</dt>
-                    <dd>{Math.round(pronunciation.accuracy)}</dd>
-                  </div>
-                  <div>
-                    <dt>Fluency</dt>
-                    <dd>{Math.round(pronunciation.fluency)}</dd>
-                  </div>
-                </dl>
+                <div className="score-row" aria-label="Pronunciation scores">
+                  <span>Overall {Math.round(pronunciation.overall)}</span>
+                  <span>Accuracy {Math.round(pronunciation.accuracy)}</span>
+                  <span>Fluency {Math.round(pronunciation.fluency)}</span>
+                </div>
                 <p className="score-label">Low-score words</p>
                 <div className="word-score-list">
                   {pronunciation.words.map((word) => (
@@ -979,7 +970,19 @@ export default function App() {
             </button>
           </section>
 
-          {latestTiming ? <p className="timing-footnote">{formatTimingSummary(latestTiming.timings)}</p> : null}
+          {latestTiming ? (
+            <div className="timing-footnote">
+              <p>Timing:</p>
+              <ul>
+                {timingRows(latestTiming.timings).map(([label, value]) => (
+                  <li key={label}>
+                    <span>{label}</span>
+                    <span>{formatMs(value)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </aside>
       </section>
     </main>
@@ -1051,17 +1054,14 @@ function formatMs(value) {
   return value === null || value === undefined ? '-' : `${Math.round(value)} ms`;
 }
 
-function formatTimingSummary(timings) {
-  const items = [
+function timingRows(timings) {
+  return [
     ['ASR', timings.asr_ms],
     ['Reply', timings.dialogue_reply_ms],
     ['Grammar', timings.grammar_ms],
     ['Pronunciation', timings.pronunciation_ms],
     ['TTS', timings.reply_text_to_tts_start_ms],
-  ]
-    .filter(([, value]) => value !== null && value !== undefined)
-    .map(([label, value]) => `${label} ${formatMs(value)}`);
-  return items.length ? `Timing: ${items.join(' · ')}` : 'Timing: waiting for measurements';
+  ].filter(([, value]) => value !== null && value !== undefined);
 }
 
 function nowMs() {

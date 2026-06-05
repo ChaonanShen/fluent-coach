@@ -342,6 +342,22 @@ h3 {
   margin-top: 12px;
 }
 
+.score-row {
+  color: #225446;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  font-weight: 750;
+  gap: 6px 10px;
+  margin-bottom: 10px;
+}
+
+.score-row span:not(:last-child)::after {
+  color: #a5b0aa;
+  content: "·";
+  margin-left: 10px;
+}
+
 .score-label {
   color: #63726d;
   font-size: 0.76rem;
@@ -490,6 +506,24 @@ h3 {
   line-height: 1.45;
   margin: 8px 0 0;
   padding-top: 12px;
+}
+
+.timing-footnote p {
+  font-weight: 750;
+  margin-bottom: 4px;
+}
+
+.timing-footnote ul {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 10px;
+}
+
+.timing-footnote li {
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  max-width: 190px;
 }
 
 @media (max-width: 920px) {

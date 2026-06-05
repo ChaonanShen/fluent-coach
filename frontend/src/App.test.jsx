@@ -375,7 +375,9 @@ test('records read aloud audio and uploads it for assessment', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
 
   expect(screen.getByRole('heading', { name: 'Pronunciation' })).toBeInTheDocument();
-  expect(await screen.findByText('Overall')).toBeInTheDocument();
+  expect(await screen.findByLabelText('Pronunciation scores')).toHaveTextContent('Overall 50');
+  expect(screen.getByLabelText('Pronunciation scores')).toHaveTextContent('Accuracy 60');
+  expect(screen.getByLabelText('Pronunciation scores')).toHaveTextContent('Fluency 90');
   expect(screen.getByText('Low-score words')).toBeInTheDocument();
   expect(screen.getByText('THEME')).toHaveClass('low-word');
   expect(global.fetch).toHaveBeenCalledWith('/api/pronunciation/assess/upload', expect.any(Object));
@@ -404,7 +406,7 @@ test('links read aloud assessment to the active session', async () => {
   await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
   fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
 
-  expect(await screen.findByText('Overall')).toBeInTheDocument();
+  expect(await screen.findByLabelText('Pronunciation scores')).toHaveTextContent('Overall 50');
   const uploadCall = global.fetch.mock.calls.find(([url]) => url === '/api/pronunciation/assess/upload');
   expect(JSON.parse(uploadCall[1].body).session_id).toBe('session_1');
 });
@@ -441,8 +443,10 @@ test('records microphone audio over the session websocket', async () => {
   expect(await screen.findByText('Thanks for sharing that project. What impact did it have?')).toBeInTheDocument();
   expect(screen.getByText('I have worked on backend systems for three years.')).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Timing' })).not.toBeInTheDocument();
-  expect(screen.getByText(/Timing:.*ASR 123 ms/)).toBeInTheDocument();
-  expect(await screen.findByText(/TTS \d+ ms/)).toBeInTheDocument();
+  expect(screen.getByText('Timing:')).toBeInTheDocument();
+  expect(screen.getByText('ASR')).toBeInTheDocument();
+  expect(screen.getByText('123 ms')).toBeInTheDocument();
+  expect(await screen.findByText('TTS')).toBeInTheDocument();
   await waitFor(() => {
     expect(voice.sentMessages.some((payload) => payload instanceof ArrayBuffer)).toBe(true);
     expect(voice.sentMessages.some((payload) => eventType(payload) === 'start_turn')).toBe(true);
@@ -508,7 +512,7 @@ test('renders pronunciation analysis from a voice turn', async () => {
   await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
   fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
 
-  expect(await screen.findByText('Overall')).toBeInTheDocument();
+  expect(await screen.findByLabelText('Pronunciation scores')).toHaveTextContent('Overall 72');
   expect(screen.getByText('SYSTEMS')).toHaveClass('low-word');
 });
 
