@@ -39,6 +39,7 @@ export default function App() {
   const [status, setStatus] = useState('Loading scenarios');
   const [error, setError] = useState('');
   const mediaRecorderRef = useRef(null);
+  const messageListRef = useRef(null);
   const voiceWebSocketRef = useRef(null);
   const voiceStreamRef = useRef(null);
   const pendingAudioSendsRef = useRef([]);
@@ -91,6 +92,14 @@ export default function App() {
   const sessionEnded = session?.status === 'ended';
   const sessionActive = Boolean(session && !sessionEnded);
   const sessionActionLabel = sessionActive ? 'End' : 'Start';
+
+  useEffect(() => {
+    const list = messageListRef.current;
+    if (!list) {
+      return;
+    }
+    list.scrollTop = list.scrollHeight;
+  }, [turns.length]);
 
   async function refreshMistakes() {
     const body = await request('/api/mistakes');
@@ -597,7 +606,7 @@ export default function App() {
             </div>
           ) : null}
 
-          <div className="message-list">
+          <div className="message-list" aria-label="Conversation history" ref={messageListRef}>
             {turns.map((turn) => (
               <article className={`message ${turn.speaker}`} key={turn.id}>
                 <span>{turn.speaker === 'ai' ? 'AI' : 'You'}</span>

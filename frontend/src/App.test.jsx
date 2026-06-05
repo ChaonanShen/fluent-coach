@@ -238,6 +238,7 @@ test('loads scenarios and starts a session', async () => {
   expect(screen.getByText('am working')).toBeInTheDocument();
   expect(screen.getByText('Sessions')).toBeInTheDocument();
   expect(screen.getByText('72')).toBeInTheDocument();
+  expect(screen.getByLabelText('Conversation history')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   expect(await screen.findByText(scenario.opening_line)).toBeInTheDocument();
