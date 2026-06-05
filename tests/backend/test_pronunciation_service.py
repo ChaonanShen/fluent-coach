@@ -159,6 +159,10 @@ def test_pronunciation_provider_error_is_linked_to_session(monkeypatch) -> None:
     [
         ("Missing required env var: TENCENT_SECRET_KEY", "provider_config_missing"),
         ("Tencent SOE handshake failed: {'code': 401, 'message': 'signature invalid'}", "provider_auth_failed"),
+        (
+            "Tencent SOE assessment failed: {'code': 4011, 'message': '分片音频数据太大，请按照文档指引调整分片大小'}",
+            "invalid_audio",
+        ),
         ("Tencent SOE timed out waiting for final assessment result", "provider_timeout"),
         ("Tencent SOE assessment failed: {'message': 'rate limit exceeded'}", "provider_rate_limited"),
         ("Tencent SOE assessment failed: {'message': 'audio format invalid'}", "invalid_audio"),

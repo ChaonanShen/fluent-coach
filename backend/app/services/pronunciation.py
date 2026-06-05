@@ -280,9 +280,7 @@ def build_tencent_signed_url(
         "voice_format": str(voice_format),
         "voice_id": voice_id or str(uuid.uuid4()),
     }
-    rec_mode = os.environ.get("TENCENT_SOE_REC_MODE")
-    if rec_mode:
-        params["rec_mode"] = rec_mode
+    params["rec_mode"] = os.environ.get("TENCENT_SOE_REC_MODE", "1") or "1"
 
     canonical_query = "&".join(f"{key}={params[key]}" for key in sorted(params.keys()))
     sign_text = f"{host}{path_with_appid}?{canonical_query}"

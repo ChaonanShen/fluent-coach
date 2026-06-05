@@ -3,6 +3,7 @@ import base64
 import binascii
 import json
 import os
+import re
 import time
 
 from backend.app.core.env import load_dotenv, provider_status
@@ -824,10 +825,16 @@ def _classify_asr_error(exc: RuntimeError) -> tuple[str, str]:
 
 def _classify_tencent_soe_error(exc: RuntimeError) -> tuple[str, str]:
     message = str(exc).lower()
+    code_match = re.search(r"'code':\s*(\d+)|\"code\":\s*(\d+)", str(exc))
+    provider_code = next((group for group in code_match.groups() if group), None) if code_match else None
     if "missing required env var" in message:
         return "provider_config_missing", "腾讯云发音评测配置缺失，请检查服务配置。"
-    if any(token in message for token in ["auth", "signature", "secret", "unauthorized", "forbidden", "401", "403"]):
+    if provider_code in {"401", "403"} or any(
+        token in message for token in ["auth", "signature", "secret", "unauthorized", "forbidden"]
+    ):
         return "provider_auth_failed", "腾讯云发音评测鉴权失败，请检查密钥和签名配置。"
+    if provider_code in {"4000", "4008", "4011"}:
+        return "invalid_audio", "音频发送方式不符合腾讯云要求，请使用整段录音模式或降低分片发送速度。"
     if any(token in message for token in ["rate limit", "rate_limited", "too many", "throttle", "limit exceeded"]):
         return "provider_rate_limited", "腾讯云发音评测请求过于频繁，请稍后重试。"
     if any(token in message for token in ["timeout", "timed out"]):

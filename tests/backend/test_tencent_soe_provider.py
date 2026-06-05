@@ -33,7 +33,25 @@ def test_build_tencent_signed_url_uses_expected_path_and_query(monkeypatch) -> N
     assert query["secretid"] == ["secret-id"]
     assert query["timestamp"] == ["1000"]
     assert query["nonce"] == ["42"]
+    assert query["rec_mode"] == ["1"]
     assert "signature" in query
+
+
+def test_build_tencent_signed_url_allows_rec_mode_override(monkeypatch) -> None:
+    monkeypatch.setenv("TENCENT_APP_ID", "123456")
+    monkeypatch.setenv("TENCENT_SECRET_ID", "secret-id")
+    monkeypatch.setenv("TENCENT_SECRET_KEY", "secret-key")
+    monkeypatch.setenv("TENCENT_SOE_REC_MODE", "0")
+
+    url = build_tencent_signed_url(
+        ref_text="HELLO WORLD",
+        voice_format=1,
+        timestamp=1000,
+        nonce=42,
+        voice_id="voice-1",
+    )
+
+    assert parse_qs(urlsplit(url).query)["rec_mode"] == ["0"]
 
 
 def test_tencent_signed_url_diagnostics_redacts_sensitive_values(monkeypatch) -> None:
