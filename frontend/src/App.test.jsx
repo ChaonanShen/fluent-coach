@@ -351,6 +351,8 @@ test('records microphone audio over the session websocket', async () => {
 
   expect(await screen.findByText('Thanks for sharing that project. What impact did it have?')).toBeInTheDocument();
   expect(screen.getByText('I have worked on backend systems for three years.')).toBeInTheDocument();
+  expect(screen.getByText('Timing')).toBeInTheDocument();
+  expect(screen.getByText('123 ms')).toBeInTheDocument();
   await waitFor(() => {
     expect(voice.sentMessages.some((payload) => payload instanceof ArrayBuffer)).toBe(true);
     expect(voice.sentMessages.some((payload) => eventType(payload) === 'start_turn')).toBe(true);
@@ -529,6 +531,17 @@ function installVoiceMocks(options = {}) {
               turn_id: 'turn_ai_voice_1',
             }),
           });
+          this.onmessage?.({
+            data: JSON.stringify({
+              type: 'debug.timing',
+              stage: 'reply',
+              timings: {
+                asr_ms: 123,
+                dialogue_reply_ms: 45,
+                end_turn_to_reply_text_ms: 190,
+              },
+            }),
+          });
           if (options.delayedAnalysis) {
             setTimeout(() => this.sendAnalysisResult(), 80);
             return;
@@ -539,6 +552,18 @@ function installVoiceMocks(options = {}) {
     }
 
     sendAnalysisResult() {
+      this.onmessage?.({
+        data: JSON.stringify({
+          type: 'debug.timing',
+          stage: 'grammar',
+          timings: {
+            asr_ms: 123,
+            dialogue_reply_ms: 45,
+            grammar_ms: 67,
+            end_turn_to_reply_text_ms: 190,
+          },
+        }),
+      });
       this.onmessage?.({
         data: JSON.stringify({
           type: 'analysis.result',

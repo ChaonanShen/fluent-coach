@@ -36,6 +36,7 @@ export default function App() {
   const [summaryState, setSummaryState] = useState('idle');
   const [progress, setProgress] = useState(null);
   const [analysisErrors, setAnalysisErrors] = useState([]);
+  const [latestTiming, setLatestTiming] = useState(null);
   const [status, setStatus] = useState('Loading scenarios');
   const [error, setError] = useState('');
   const mediaRecorderRef = useRef(null);
@@ -118,6 +119,7 @@ export default function App() {
     setSummary(null);
     setSummaryState('idle');
     setAnalysisErrors([]);
+    setLatestTiming(null);
   }
 
   function pushAnalysisError(detail) {
@@ -443,6 +445,12 @@ export default function App() {
         refreshProgress().catch(() => {});
         closeVoiceSocket();
       }
+      if (message.type === 'debug.timing') {
+        setLatestTiming({
+          stage: message.stage,
+          timings: message.timings || {},
+        });
+      }
       if (message.type === 'error' || message.type === 'analysis.error') {
         const detail = message.error || {
           stage: message.stage || 'asr',
@@ -752,6 +760,30 @@ export default function App() {
             </section>
           ) : null}
 
+          {latestTiming ? (
+            <section className="coach-block">
+              <h3>Timing</h3>
+              <dl>
+                <div>
+                  <dt>ASR</dt>
+                  <dd>{formatMs(latestTiming.timings.asr_ms)}</dd>
+                </div>
+                <div>
+                  <dt>Reply</dt>
+                  <dd>{formatMs(latestTiming.timings.dialogue_reply_ms)}</dd>
+                </div>
+                <div>
+                  <dt>Grammar</dt>
+                  <dd>{formatMs(latestTiming.timings.grammar_ms)}</dd>
+                </div>
+                <div>
+                  <dt>Total</dt>
+                  <dd>{formatMs(latestTiming.timings.end_turn_to_reply_text_ms)}</dd>
+                </div>
+              </dl>
+            </section>
+          ) : null}
+
           <section className="coach-block">
             <h3>Progress</h3>
             {progress?.session_count ? (
@@ -826,6 +858,10 @@ async function blobToBase64(blob) {
 
 function formatScore(value) {
   return value === null || value === undefined ? '-' : Math.round(value);
+}
+
+function formatMs(value) {
+  return value === null || value === undefined ? '-' : `${Math.round(value)} ms`;
 }
 
 function chooseEnglishVoice(voices) {
