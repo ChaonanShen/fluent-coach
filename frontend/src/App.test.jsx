@@ -128,6 +128,36 @@ beforeEach(() => {
         grammar_result: grammarCorrection(),
       });
     }
+    if (url === '/api/sessions/session_1/end') {
+      return jsonResponse({
+        session: {
+          id: 'session_1',
+          scenario_id: 'interview',
+          status: 'ended',
+          created_at: '2026-06-05T00:00:00Z',
+          ended_at: '2026-06-05T00:00:09Z',
+          turns: [openingTurn],
+        },
+        scenario,
+        opening_line: scenario.opening_line,
+        conversation_goals: scenario.conversation_goals,
+        target_expressions: scenario.target_expressions,
+      });
+    }
+    if (url === '/api/sessions/session_1/summary') {
+      return jsonResponse({
+        id: 'summary_1',
+        session_id: 'session_1',
+        grammar_score: 100,
+        pronunciation_score: null,
+        fluency_score: 70,
+        vocabulary_score: 76,
+        task_completion_rate: 0.5,
+        top_issues: [],
+        next_drills: ['Practice using: I have worked on...'],
+        created_at: '2026-06-05T00:00:10Z',
+      });
+    }
     if (url === '/api/pronunciation/assess/upload') {
       const body = JSON.parse(options.body);
       if (!body.audio_base64 || body.reference_text !== 'THEN HE WENT TO THEME PARK') {
@@ -221,6 +251,23 @@ test('links read aloud assessment to the active session', async () => {
   expect(await screen.findByText('Overall')).toBeInTheDocument();
   const uploadCall = global.fetch.mock.calls.find(([url]) => url === '/api/pronunciation/assess/upload');
   expect(JSON.parse(uploadCall[1].body).session_id).toBe('session_1');
+});
+
+test('disables turn and recording controls after ending a session', async () => {
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.change(screen.getByLabelText('Your reply'), {
+    target: { value: 'I have worked on backend systems for three years.' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'End' }));
+
+  expect(await screen.findByText('Practice using: I have worked on...')).toBeInTheDocument();
+  expect(screen.getByLabelText('Your reply')).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Record' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Record Reading' })).toBeDisabled();
 });
 
 test('records microphone audio over the session websocket', async () => {

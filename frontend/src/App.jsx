@@ -576,7 +576,7 @@ export default function App() {
             <p className="read-reference">THEN HE WENT TO THEME PARK</p>
             <button
               className="secondary-action assess-action"
-              disabled={readingState === 'assessing'}
+              disabled={sessionEnded || readingState === 'assessing'}
               onClick={readingState === 'recording' ? stopReadingRecording : startReadingRecording}
               type="button"
             >
