@@ -235,6 +235,10 @@ export default function App() {
         body: JSON.stringify(payload),
       });
       setSession(body.session);
+      const openingText = body.opening_line || body.session?.turns?.find((turn) => turn.speaker === 'ai')?.text;
+      if (openingText) {
+        speak(openingText, { replyReadyAt: nowMs() }).catch(() => {});
+      }
       await refreshMistakes();
       setStatus('In session');
     } catch (err) {
@@ -788,9 +792,6 @@ export default function App() {
       <section className="workspace" aria-label="Practice workspace">
         <section className="conversation-panel">
           <div className="conversation-toolbar">
-            <div>
-              <h2>Conversation</h2>
-            </div>
             <label className="scenario-select-label">
               <span>Scenario</span>
               <select
@@ -836,7 +837,6 @@ export default function App() {
           <div className="message-list" aria-label="Conversation history" ref={messageListRef}>
             {turns.map((turn) => (
               <article className={`message ${turn.speaker}`} key={turn.id}>
-                <span>{turn.speaker === 'ai' ? 'AI' : 'You'}</span>
                 <p>{turn.text}</p>
               </article>
             ))}

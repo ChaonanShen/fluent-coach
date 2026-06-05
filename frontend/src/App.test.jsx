@@ -284,10 +284,14 @@ test('loads scenarios and starts a session', async () => {
   expect(screen.queryByText('am working')).not.toBeInTheDocument();
   expect(screen.queryByText('Progress')).not.toBeInTheDocument();
   expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Conversation' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('Conversation history')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   expect(await screen.findByText(scenario.opening_line)).toBeInTheDocument();
+  expect(screen.queryByText('AI')).not.toBeInTheDocument();
+  await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalled());
+  expect(window.speechSynthesis.speak.mock.calls.at(-1)[0].text).toBe(scenario.opening_line);
   expect(screen.getByRole('button', { name: 'End' })).toBeInTheDocument();
 });
 
@@ -344,7 +348,7 @@ test('plays cloud TTS audio when the backend returns audio', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
   await waitFor(() => expect(window.Audio).toHaveBeenCalledWith('data:audio/mpeg;base64,YXVkaW8='));
-  expect(window.speechSynthesis.speak).not.toHaveBeenCalled();
+  expect(window.speechSynthesis.speak).toHaveBeenCalledTimes(0);
 });
 
 test('reviews a saved mistake', async () => {

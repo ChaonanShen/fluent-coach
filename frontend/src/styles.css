@@ -164,7 +164,7 @@ h3 {
   align-items: end;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(160px, 1fr) minmax(190px, 240px) 96px;
+  grid-template-columns: minmax(190px, 260px) 96px;
   margin-bottom: 12px;
 }
 
@@ -241,15 +241,6 @@ h3 {
   max-width: min(76%, 680px);
   padding: 10px 12px;
   justify-self: start;
-}
-
-.message span {
-  color: #49606a;
-  display: block;
-  font-size: 0.78rem;
-  font-weight: 750;
-  margin-bottom: 4px;
-  text-transform: uppercase;
 }
 
 .message p {
