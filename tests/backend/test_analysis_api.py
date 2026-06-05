@@ -89,10 +89,14 @@ def test_audio_websocket_sends_analysis_result_event() -> None:
         websocket.send_json({"type": "end_turn"})
         websocket.receive_json()
         websocket.receive_json()
+        reply_timing = websocket.receive_json()
         pending = websocket.receive_json()
+        grammar_timing = websocket.receive_json()
         result = websocket.receive_json()
 
+    assert reply_timing["type"] == "debug.timing"
     assert pending["type"] == "analysis.pending"
+    assert grammar_timing["type"] == "debug.timing"
     assert result["type"] == "analysis.result"
     assert result["stage"] == "grammar"
     assert result["result"]["corrected_text"] == "I have been working in this field for three years."
@@ -116,10 +120,14 @@ def test_audio_websocket_sends_analysis_error_event() -> None:
         websocket.send_json({"type": "end_turn"})
         websocket.receive_json()
         websocket.receive_json()
+        reply_timing = websocket.receive_json()
         pending = websocket.receive_json()
+        grammar_timing = websocket.receive_json()
         error = websocket.receive_json()
 
+    assert reply_timing["type"] == "debug.timing"
     assert pending["type"] == "analysis.pending"
+    assert grammar_timing["type"] == "debug.timing"
     assert error["type"] == "analysis.error"
     assert error["error"]["code"] == "forced_analysis_error"
     analysis = client.get(f"/api/sessions/{session_id}/analysis").json()
