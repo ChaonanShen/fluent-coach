@@ -782,13 +782,14 @@ WebSocket 事件：
 | `7647e94` | PR-Eval2 | 已完成 TextGrid readiness | 默认 eval report 增加 L2-ARCTIC TextGrid 可用性和解析统计；当前 fixture 包未携带原始 TextGrid，hit rate 明确标为 not computed。 |
 | `de74508` | PR-L1 | 已完成前端 TTS timing | Coach timing 面板新增 `reply -> TTS start`，合并浏览器端播放启动耗时与后端分段计时。 |
 | `261e3e8` | PR-L3/VAD | 已完成自动断句第一版 | 浏览器录音端通过 Web Audio RMS 检测“说话后持续静音”，自动 stop 并发送 `end_turn`；不支持 Web Audio 时仍保留手动 Stop。 |
+| 当前修改 | PR-UX/VAD | 已改为手动结束 | 面向初学者，去掉浏览器 VAD 自动断句，语音回合完全由用户点击 Record/Stop 判断开始和结束。 |
 
 ### 2026-06-05 主链路和 provider 决策确认
 
 最终主链路确认如下：
 
 ```text
-浏览器录音 -> VAD/end_turn -> 整句 ASR -> LLM 流式返回/展示 -> 朗读
+浏览器录音 -> 用户点击 Stop/end_turn -> 整句 ASR -> LLM 流式返回/展示 -> 朗读
                          -> 语法纠错/发音评测/错题生成异步补充
 ```
 
@@ -802,7 +803,7 @@ WebSocket 事件：
 
 当前仍待继续：
 
-- 真正连续流式 ASR partial 明确不作为当前目标；当前采用浏览器 VAD 自动断句 + `end_turn` 后整句识别，这是产品上接受的方案。
+- 真正连续流式 ASR partial 明确不作为当前目标；当前采用用户手动 Stop 后 `end_turn`，再整句识别，避免初学者停顿思考时被自动截断。
 - PR-L5 后续：真实云 TTS 代码入口已完成；当前 browser TTS 在 Edge/Chrome 下听感可接受，演示避免使用 QQ 浏览器。
 - PR-Eval2 后续：完整 TextGrid 误音命中率需要原始 L2-ARCTIC TextGrid 文件和一个实时误音 detector；当前默认报告只统计 readiness，避免假算。
 - 更细的场景目标状态机仍未做，当前 custom scenario 是主题驱动的临时场景。
