@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+const VOICE_ACTIVITY_THRESHOLD = 6;
+const VAD_MIN_RECORDING_MS = 900;
+const VAD_SILENCE_MS = 1200;
+
 async function request(path, options = {}) {
   const response = await fetch(path, {
     headers: {
@@ -44,6 +48,9 @@ export default function App() {
   const messageListRef = useRef(null);
   const voiceWebSocketRef = useRef(null);
   const voiceStreamRef = useRef(null);
+  const voiceStateRef = useRef('idle');
+  const voiceAudioContextRef = useRef(null);
+  const voiceVadFrameRef = useRef(null);
   const pendingAudioSendsRef = useRef([]);
   const streamingReplyRef = useRef(null);
   const voiceCanceledRef = useRef(false);
@@ -52,6 +59,10 @@ export default function App() {
   const readingStreamRef = useRef(null);
   const readingChunksRef = useRef([]);
   const readingCanceledRef = useRef(false);
+
+  useEffect(() => {
+    voiceStateRef.current = voiceState;
+  }, [voiceState]);
 
   useEffect(() => {
     let active = true;
@@ -471,6 +482,8 @@ export default function App() {
         }
       };
       recorder.start(250);
+      startVoiceActivityWatch(stream);
+      voiceStateRef.current = 'recording';
       setVoiceState('recording');
       setStatus('Recording');
     };
@@ -591,9 +604,10 @@ export default function App() {
   }
 
   function stopVoiceTurn() {
-    if (voiceState !== 'recording') {
+    if (voiceStateRef.current !== 'recording') {
       return;
     }
+    voiceStateRef.current = 'processing';
     setVoiceState('processing');
     setStatus('Processing');
     const recorder = mediaRecorderRef.current;
@@ -613,6 +627,7 @@ export default function App() {
 
   function cancelVoiceTurn() {
     voiceCanceledRef.current = true;
+    voiceStateRef.current = 'idle';
     const recorder = mediaRecorderRef.current;
     if (recorder && recorder.state !== 'inactive') {
       recorder.stop();
@@ -659,12 +674,65 @@ export default function App() {
   }
 
   function stopVoiceStream() {
+    stopVoiceActivityWatch();
     const stream = voiceStreamRef.current;
     if (!stream) {
       return;
     }
     stream.getTracks().forEach((track) => track.stop());
     voiceStreamRef.current = null;
+  }
+
+  function startVoiceActivityWatch(stream) {
+    const AudioContextConstructor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextConstructor || !window.requestAnimationFrame) {
+      return;
+    }
+    try {
+      const audioContext = new AudioContextConstructor();
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 512;
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+      const samples = new Uint8Array(analyser.fftSize);
+      const startedAt = nowMs();
+      let speechDetected = false;
+      let silenceStartedAt = null;
+      voiceAudioContextRef.current = audioContext;
+
+      const tick = (timestamp) => {
+        if (voiceStateRef.current !== 'recording') {
+          return;
+        }
+        const currentTime = typeof timestamp === 'number' ? timestamp : nowMs();
+        analyser.getByteTimeDomainData(samples);
+        const volume = rmsVolume(samples);
+        if (volume >= VOICE_ACTIVITY_THRESHOLD) {
+          speechDetected = true;
+          silenceStartedAt = null;
+        } else if (speechDetected && currentTime - startedAt >= VAD_MIN_RECORDING_MS) {
+          silenceStartedAt = silenceStartedAt ?? currentTime;
+          if (currentTime - silenceStartedAt >= VAD_SILENCE_MS) {
+            stopVoiceTurn();
+            return;
+          }
+        }
+        voiceVadFrameRef.current = window.requestAnimationFrame(tick);
+      };
+      voiceVadFrameRef.current = window.requestAnimationFrame(tick);
+    } catch {
+      stopVoiceActivityWatch();
+    }
+  }
+
+  function stopVoiceActivityWatch() {
+    if (voiceVadFrameRef.current !== null && window.cancelAnimationFrame) {
+      window.cancelAnimationFrame(voiceVadFrameRef.current);
+    }
+    voiceVadFrameRef.current = null;
+    const audioContext = voiceAudioContextRef.current;
+    voiceAudioContextRef.current = null;
+    audioContext?.close?.();
   }
 
   function ensureStreamingReplyId() {
@@ -1036,6 +1104,18 @@ function formatMs(value) {
 
 function nowMs() {
   return window.performance?.now?.() ?? Date.now();
+}
+
+function rmsVolume(samples) {
+  if (!samples.length) {
+    return 0;
+  }
+  let sum = 0;
+  for (const sample of samples) {
+    const centered = sample - 128;
+    sum += centered * centered;
+  }
+  return Math.sqrt(sum / samples.length);
 }
 
 function chooseEnglishVoice(voices) {

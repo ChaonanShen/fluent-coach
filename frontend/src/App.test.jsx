@@ -472,6 +472,22 @@ test('voice control becomes available after reply before delayed analysis', asyn
   expect(screen.getByRole('button', { name: 'Record' })).toBeInTheDocument();
 });
 
+test('auto-stops a voice turn after speech followed by silence', async () => {
+  const voice = installVoiceMocks({ voiceActivityVolumes: [14, 0, 0, 0] });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+
+  expect(await screen.findByText('Thanks for sharing that project. What impact did it have?')).toBeInTheDocument();
+  await waitFor(() => {
+    expect(voice.sentMessages.some((payload) => eventType(payload) === 'end_turn')).toBe(true);
+  });
+});
+
 test('renders streaming voice reply deltas and finalizes the turn', async () => {
   const voice = installVoiceMocks({ streamingReply: true });
   render(<App />);
@@ -780,8 +796,47 @@ function installVoiceMocks(options = {}) {
 
   vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
   vi.stubGlobal('WebSocket', FakeWebSocket);
+  if (options.voiceActivityVolumes) {
+    installVoiceActivityMock(options.voiceActivityVolumes);
+  }
 
   return { getUserMedia, sentMessages };
+}
+
+function installVoiceActivityMock(volumes) {
+  const pendingVolumes = [...volumes];
+  class FakeAnalyser {
+    fftSize = 512;
+
+    getByteTimeDomainData(samples) {
+      const volume = pendingVolumes.length ? pendingVolumes.shift() : 0;
+      samples.fill(128 + volume);
+    }
+  }
+
+  class FakeAudioContext {
+    createAnalyser() {
+      return new FakeAnalyser();
+    }
+
+    createMediaStreamSource() {
+      return {
+        connect: vi.fn(),
+      };
+    }
+
+    close() {}
+  }
+
+  let frame = 0;
+  vi.stubGlobal('AudioContext', FakeAudioContext);
+  vi.stubGlobal('requestAnimationFrame', vi.fn((callback) => {
+    frame += 1;
+    const timestamp = frame * 1000;
+    window.setTimeout(() => callback(timestamp), 0);
+    return frame;
+  }));
+  vi.stubGlobal('cancelAnimationFrame', vi.fn());
 }
 
 function eventType(payload) {
