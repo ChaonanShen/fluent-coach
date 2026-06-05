@@ -137,6 +137,7 @@ def add_text_turn(session_id: str, request: TextTurnRequest) -> TextTurnResponse
         ai_turn=ai_turn,
         current_goal=reply.current_goal,
         next_intent=reply.next_intent,
+        grammar_result=correction,
     )
 
 

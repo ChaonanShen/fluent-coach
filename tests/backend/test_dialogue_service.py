@@ -58,6 +58,7 @@ def test_text_turn_api_appends_user_and_ai_turns() -> None:
     assert len(body["session"]["turns"]) == 3
     assert body["current_goal"]
     assert body["next_intent"] == "continue_fixture_dialogue"
+    assert body["grammar_result"]["user_text"].startswith("Sure. I have three years")
 
 
 def test_dialogue_service_uses_llm_for_unmatched_text() -> None:

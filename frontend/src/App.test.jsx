@@ -125,28 +125,7 @@ beforeEach(() => {
         ai_turn: {},
         current_goal: scenario.conversation_goals[0],
         next_intent: 'continue_fixture_dialogue',
-      });
-    }
-    if (url === '/api/grammar/check') {
-      return jsonResponse({
-        id: 'correction_1',
-        scenario_id: 'interview',
-        user_text: 'I am working in this field since three years.',
-        corrected_text: 'I have been working in this field for three years.',
-        better_expression: 'I have spent the past three years working in this field.',
-        issues: [
-          {
-            error_type: 'tense',
-            original_span: 'am working',
-            corrected_span: 'have been working',
-            severity: 'major',
-            explanation_zh: '谈论从过去持续到现在的经历，应使用现在完成进行时。',
-          },
-        ],
-        overall_severity: 'major',
-        correction_timing: 'after_turn',
-        naturalness_reason_zh: null,
-        created_at: '2026-06-05T00:00:03Z',
+        grammar_result: grammarCorrection(),
       });
     }
     if (url === '/api/pronunciation/assess') {
@@ -199,7 +178,7 @@ test('sends a text turn and shows correction feedback', async () => {
 
   expect(await screen.findByText('Great. Which project is most relevant to this role?')).toBeInTheDocument();
   expect(screen.getByText('I have been working in this field for three years.')).toBeInTheDocument();
-  await waitFor(() => expect(global.fetch).toHaveBeenCalledWith('/api/grammar/check', expect.any(Object)));
+  expect(global.fetch).not.toHaveBeenCalledWith('/api/grammar/check', expect.any(Object));
   expect(window.speechSynthesis.speak).toHaveBeenCalled();
 });
 
@@ -247,6 +226,29 @@ function jsonResponse(body) {
     ok: true,
     json: () => Promise.resolve(body),
   });
+}
+
+function grammarCorrection() {
+  return {
+    id: 'correction_1',
+    scenario_id: 'interview',
+    user_text: 'I am working in this field since three years.',
+    corrected_text: 'I have been working in this field for three years.',
+    better_expression: 'I have spent the past three years working in this field.',
+    issues: [
+      {
+        error_type: 'tense',
+        original_span: 'am working',
+        corrected_span: 'have been working',
+        severity: 'major',
+        explanation_zh: '谈论从过去持续到现在的经历，应使用现在完成进行时。',
+      },
+    ],
+    overall_severity: 'major',
+    correction_timing: 'after_turn',
+    naturalness_reason_zh: null,
+    created_at: '2026-06-05T00:00:03Z',
+  };
 }
 
 function installVoiceMocks() {

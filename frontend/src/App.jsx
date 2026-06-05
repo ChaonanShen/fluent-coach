@@ -117,22 +117,12 @@ export default function App() {
     setStatus('Sending');
     setInputText('');
     try {
-      const [turnBody, correctionBody] = await Promise.all([
-        request(`/api/sessions/${session.id}/turns/text`, {
-          method: 'POST',
-          body: JSON.stringify({ text }),
-        }),
-        request('/api/grammar/check', {
-          method: 'POST',
-          body: JSON.stringify({
-            scenario_id: session.scenario_id,
-            user_text: text,
-            conversation_context: turns.map((turn) => turn.text),
-          }),
-        }),
-      ]);
+      const turnBody = await request(`/api/sessions/${session.id}/turns/text`, {
+        method: 'POST',
+        body: JSON.stringify({ text }),
+      });
       setSession(turnBody.session);
-      setLatestCorrection(correctionBody);
+      setLatestCorrection(turnBody.grammar_result);
       speak(turnBody.ai_turn?.text || turnBody.session.turns.at(-1)?.text);
       await refreshMistakes();
       setStatus('In session');

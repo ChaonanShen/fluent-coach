@@ -49,6 +49,7 @@ class TextTurnResponse(BaseModel):
     ai_turn: Turn
     current_goal: str
     next_intent: str
+    grammar_result: GrammarCorrection
 
 
 class PronunciationAssessRequest(BaseModel):
