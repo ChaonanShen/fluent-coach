@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-06-05T04:41:36.926285+00:00",
+  "asr": {
+    "librispeech_count": 30,
+    "librispeech_wer": 0.0,
+    "l2_arctic_count": 45,
+    "l2_arctic_wer": 0.0
+  },
+  "grammar": {
+    "jfleg_count": 160,
+    "schema_pass_rate": 1.0,
+    "gleu": 0.7896294889709894
+  },
+  "pronunciation": {
+    "speechocean_count": 45,
+    "provider_return_rate": 1.0,
+    "sentence_total_correlation": 1.0,
+    "sentence_total_mae": 0.0
+  },
+  "summary": {
+    "default_provider_mode": "fixture_fake",
+    "external_services_used": false
+  }
+}
