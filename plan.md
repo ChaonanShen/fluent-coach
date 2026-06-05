@@ -774,11 +774,16 @@ WebSocket 事件：
 | `b4f452c` | PR-L5 | 已完成云 TTS 入口 | 新增 OpenAI-compatible TTS provider，前端优先播放后端音频，失败回退浏览器 TTS。 |
 | `90a63ca` | PR-Eval2 | 已完成第一步 | 默认评测报告增加 L2-ARCTIC native language 分布和手工标注覆盖率；真实口音 ASR/误音命中仍待后续。 |
 | `5242501` | PR-E2E | 已完成 | 新增 Playwright UI smoke，显式覆盖进入页面、Start、文本回合、End 和 Summary；不加入默认 `make test`。 |
+| `bceb3c2` | PR-U1 | 已完成 custom 入口 | Scenario 下拉框的 `Custom` 已可用，用户输入主题后创建临时 scenario；后续 turn、summary、progress 都能解析。 |
+| `a4705c6` | PR-Eval2 | 已完成真实 ASR smoke 第一版 | 真实 smoke report 增加少量 L2-ARCTIC 口音 ASR 抽测，记录平均 WER 和耗时；默认 fake 模式不访问真实 ASR。 |
+| `7647e94` | PR-Eval2 | 已完成 TextGrid readiness | 默认 eval report 增加 L2-ARCTIC TextGrid 可用性和解析统计；当前 fixture 包未携带原始 TextGrid，hit rate 明确标为 not computed。 |
+| `de74508` | PR-L1 | 已完成前端 TTS timing | Coach timing 面板新增 `reply -> TTS start`，合并浏览器端播放启动耗时与后端分段计时。 |
+| `261e3e8` | PR-L3/VAD | 已完成自动断句第一版 | 浏览器录音端通过 Web Audio RMS 检测“说话后持续静音”，自动 stop 并发送 `end_turn`；不支持 Web Audio 时仍保留手动 Stop。 |
 
 当前仍待继续：
 
-- 真正连续流式 ASR partial / VAD 自动断句，目前仍是“按轮录音 + end_turn 后识别”。
-- PR-L5 后续：真实云 TTS 需要可用账号做人工听感和延迟验收；代码已具备 OpenAI-compatible 接入口。
-- PR-Eval2 后续：L2-ARCTIC 真实 faster-whisper 口音 WER 和 TextGrid 误音命中率。
-- 更细的场景目标状态机和 custom scenario 完整创建流程。
-- 浏览器端 TTS start timing 与截图级 UI 回归仍可继续增强。
+- 真正连续流式 ASR partial 仍未实现；当前是浏览器 VAD 自动断句 + `end_turn` 后识别。
+- PR-L5 后续：真实云 TTS 代码入口已完成，但自然度仍需要可用账号/voice 做人工听感验收。
+- PR-Eval2 后续：完整 TextGrid 误音命中率需要原始 L2-ARCTIC TextGrid 文件和一个实时误音 detector；当前默认报告只统计 readiness，避免假算。
+- 更细的场景目标状态机仍未做，当前 custom scenario 是主题驱动的临时场景。
+- 截图级 UI 视觉回归可继续增强；当前已有功能型 Playwright smoke。
