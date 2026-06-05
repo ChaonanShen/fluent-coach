@@ -96,6 +96,15 @@ GET /api/health
 
 前端开发服务由 Vite 启动，`/api` 和 `/ws` 会代理到本地 FastAPI 后端。
 
+生成默认离线 smoke report：
+
+```bash
+python3 scripts/run_smoke_report.py
+```
+
+该报告输出到 `reports/smoke-latest.json` 和 `reports/smoke-latest.md`，
+只使用 fixtures 与 fake/mock provider，不访问真实 LLM、ASR 模型或腾讯云服务。
+
 ### 从本地电脑访问服务器上的开发服务
 
 如果服务跑在远程服务器上，`10.x.x.x` 这类地址通常是服务器内网地址，

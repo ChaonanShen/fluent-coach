@@ -527,6 +527,7 @@ WebSocket 事件：
 | `543bd1e` | PR-G2 | 已完成后端入口 | 发音评测请求支持可选 `session_id`，成功后写入 session 级 `pronunciation_results`，并通过 `/api/sessions/{id}/analysis` 返回。 |
 | `9e4d46f` | PR-G2 | 已完成前端传参 | Read Aloud 在 active session 下上传 `session_id`，无 session 时保持原独立评测请求。 |
 | `d3bb415` | PR-I | 已完成 Summary 第一版 | Summary 优先使用 session 已有 grammar/pronunciation analysis；发音结果进入 `pronunciation_score`、`top_issues` 和 `next_drills`，无已有 grammar 时保留 fallback。 |
+| `877a7a7` | PR-J | 已完成离线骨架 | 新增 fixture-backed smoke report 和脚本，默认覆盖 ASR、Grammar、Pronunciation、dialogue fixture、UI 手动清单与延迟字段占位，不访问真实服务。 |
 
 当前仍未完成或需继续增强：
 
@@ -535,7 +536,7 @@ WebSocket 事件：
   `CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/faster-whisper-small.en ASR_DEVICE=cuda ASR_COMPUTE_TYPE=float16 python3 scripts/test_asr_provider.py`。
 - PR-H2 后端腾讯 SOE 错误分类已完成；前端 inline 展示已有基础能力，后续 PR-K 继续补权限失败、WS error、pronunciation 502 等 UI 状态测试。
 - PR-I Summary 服务层已接入已有 analysis/pronunciation 结果；后续还需补前端 summary 展示状态和真实 smoke report。
-- PR-J 尚未开始：真实服务 smoke report 和手动测试清单还需补。
+- PR-J 离线 smoke report 骨架已完成；真实服务 LLM/ASR/Tencent SOE 延迟采集和 UI 手动结果填充仍需继续补。
 
 ### 2026-06-05 可执行计划 v2：真实服务可用后的收口计划
 
