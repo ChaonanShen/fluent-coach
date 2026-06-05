@@ -154,6 +154,78 @@ def test_audio_websocket_reports_asr_provider_error(monkeypatch, tmp_path) -> No
     assert analysis["errors"][0]["code"] == "provider_dependency_missing"
 
 
+def test_audio_websocket_reports_missing_ffmpeg_for_real_asr(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("APP_AUDIO_DIR", str(tmp_path))
+    monkeypatch.setattr("backend.app.services.audio.shutil.which", lambda name: None)
+
+    class RealASR:
+        provider_name = "faster_whisper"
+
+        def partial(self, expected_text=None):
+            del expected_text
+            return ""
+
+        def transcribe(self, audio_bytes, expected_text=None):
+            del audio_bytes, expected_text
+            raise AssertionError("websocket should not call byte ASR")
+
+        def transcribe_file(self, audio_path, expected_text=None):
+            del audio_path, expected_text
+            raise AssertionError("websocket should stop before ASR when ffmpeg is missing")
+
+    monkeypatch.setattr("backend.app.main.asr_provider", RealASR())
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json({"type": "start_turn", "mime_type": "audio/webm"})
+        websocket.receive_json()
+        websocket.send_bytes(b"fake-webm-audio")
+        websocket.send_json({"type": "end_turn"})
+        event = websocket.receive_json()
+
+    assert event["type"] == "analysis.error"
+    assert event["stage"] == "asr"
+    assert event["error"]["code"] == "provider_dependency_missing"
+    assert "ffmpeg" in event["error"]["user_message_zh"]
+
+
+def test_audio_websocket_reports_empty_asr_transcript(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("APP_AUDIO_DIR", str(tmp_path))
+
+    class EmptyASR:
+        provider_name = "faster_whisper"
+
+        def partial(self, expected_text=None):
+            del expected_text
+            return ""
+
+        def transcribe(self, audio_bytes, expected_text=None):
+            del audio_bytes, expected_text
+            raise AssertionError("websocket should transcribe stored files")
+
+        def transcribe_file(self, audio_path, expected_text=None):
+            del audio_path, expected_text
+            return "   "
+
+    monkeypatch.setattr("backend.app.main.asr_provider", EmptyASR())
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json({"type": "start_turn", "mime_type": "audio/wav"})
+        websocket.receive_json()
+        websocket.send_bytes(b"fake-wav-audio")
+        websocket.send_json({"type": "end_turn"})
+        event = websocket.receive_json()
+
+    assert event["type"] == "analysis.error"
+    assert event["stage"] == "asr"
+    assert event["error"]["code"] == "asr_no_speech"
+
+
 def test_audio_websocket_rejects_empty_audio_turn() -> None:
     client = TestClient(app)
     created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
