@@ -181,12 +181,18 @@ h3 {
 }
 
 .scenario-select-label {
+  align-items: center;
   color: #49606a;
   display: grid;
   font-size: 0.76rem;
   font-weight: 750;
-  gap: 5px;
+  gap: 6px 10px;
+  grid-template-columns: auto minmax(0, 1fr);
   text-transform: uppercase;
+}
+
+.scenario-select-label span {
+  white-space: nowrap;
 }
 
 .scenario-select-label select,
@@ -202,6 +208,10 @@ h3 {
 
 .scenario-select-label select {
   text-transform: none;
+}
+
+.scenario-select-label input {
+  grid-column: 2;
 }
 
 .session-action {
@@ -508,6 +518,15 @@ h3 {
   .conversation-toolbar {
     align-items: stretch;
     grid-template-columns: 1fr;
+  }
+
+  .scenario-select-label {
+    align-items: stretch;
+    grid-template-columns: 1fr;
+  }
+
+  .scenario-select-label input {
+    grid-column: auto;
   }
 
   .session-action {
