@@ -1176,6 +1176,35 @@ export default function App() {
                                               <span>{target.label}</span>
                                               {target.text}
                                             </p>
+                                            <div className="mistake-target-actions">
+                                              <button
+                                                aria-label={`Play ${target.type} pronunciation`}
+                                                className="icon-action pronunciation-play-action"
+                                                onClick={() => speak(target.text)}
+                                                title={`Play ${target.type} pronunciation`}
+                                                type="button"
+                                              >
+                                                ▶
+                                              </button>
+                                              <button
+                                                className="secondary-action mistake-read-action"
+                                                disabled={isMistakeReadingDisabled(mistakeReadingState, mistake.id, target.type)}
+                                                onClick={() => {
+                                                  if (
+                                                    mistakeReadingState.mistakeId === mistake.id
+                                                    && mistakeReadingState.targetType === target.type
+                                                    && mistakeReadingState.status === 'recording'
+                                                  ) {
+                                                    stopMistakeReading(mistake.id, target.type);
+                                                    return;
+                                                  }
+                                                  startMistakeReading(mistake, target.type, target.text);
+                                                }}
+                                                type="button"
+                                              >
+                                                {mistakeReadingLabel(mistakeReadingState, mistake.id, target.type)}
+                                              </button>
+                                            </div>
                                             {mistakePracticeResults[mistake.id]?.[target.type] ? (
                                               <PronunciationResult
                                                 ariaLabel="Practice result"
@@ -1190,29 +1219,6 @@ export default function App() {
                                     ) : null}
                                   </div>
                                   <div className="mistake-actions">
-                                    {mistake.type === 'pronunciation'
-                                      ? practiceTargets.map((target) => (
-                                        <button
-                                          className="secondary-action mistake-read-action"
-                                          disabled={isMistakeReadingDisabled(mistakeReadingState, mistake.id, target.type)}
-                                          key={target.type}
-                                          onClick={() => {
-                                            if (
-                                              mistakeReadingState.mistakeId === mistake.id
-                                              && mistakeReadingState.targetType === target.type
-                                              && mistakeReadingState.status === 'recording'
-                                            ) {
-                                              stopMistakeReading(mistake.id, target.type);
-                                              return;
-                                            }
-                                            startMistakeReading(mistake, target.type, target.text);
-                                          }}
-                                          type="button"
-                                        >
-                                          {mistakeReadingLabel(mistakeReadingState, mistake.id, target.type)}
-                                        </button>
-                                      ))
-                                      : null}
                                     <button className="delete-button" onClick={() => deleteMistake(mistake.id)} type="button">
                                       Delete
                                     </button>

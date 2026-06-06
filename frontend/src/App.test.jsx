@@ -827,8 +827,14 @@ test('reassesses a pronunciation mistake without changing the saved mistake', as
   expect(screen.queryByText('am working')).not.toBeInTheDocument();
   expect(screen.getByText('Word:')).toBeInTheDocument();
   expect(screen.getByText('Practice sentence:')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Play word pronunciation' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Play sentence pronunciation' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Read word' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Read sentence' })).toBeInTheDocument();
+  window.speechSynthesis.speak.mockClear();
+  fireEvent.click(screen.getByRole('button', { name: 'Play word pronunciation' }));
+  await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalled());
+  expect(window.speechSynthesis.speak.mock.calls.at(-1)[0].text).toBe('systems');
   fireEvent.click(screen.getByRole('button', { name: 'Read word' }));
   await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
   fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
