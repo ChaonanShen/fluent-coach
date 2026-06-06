@@ -885,6 +885,12 @@ test('records read aloud audio and uploads it for assessment', async () => {
   expect(screen.getByLabelText('Practice result')).toHaveTextContent('Accuracy 60');
   expect(screen.getByLabelText('Practice result')).toHaveTextContent('Fluency 90');
   expect(screen.getByText('Low-score words')).toBeInTheDocument();
+  const practiceResult = screen.getByLabelText('Practice result').closest('.pronunciation-result');
+  expect(
+    within(practiceResult).getByText('Low-score words')
+      .compareDocumentPosition(within(practiceResult).getByLabelText('Practice result'))
+      & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   expect(screen.getByText('THEME')).toHaveClass('low-word');
   const uploadCall = global.fetch.mock.calls.find(([url]) => url === '/api/pronunciation/practice/upload');
   expect(JSON.parse(uploadCall[1].body)).toMatchObject({
@@ -1021,6 +1027,14 @@ test('renders pronunciation analysis from a voice turn', async () => {
   const assessmentPanel = await screen.findByLabelText('Conversation Assessment');
   await waitFor(() => expect(within(assessmentPanel).getByLabelText('Pronunciation history')).toHaveClass('assessment-scroll-list'));
   await waitFor(() => expect(within(assessmentPanel).getByLabelText('Pronunciation scores')).toHaveTextContent('Overall 72'));
+  expect(within(within(assessmentPanel).getByLabelText('Pronunciation')).queryByText('I have worked on backend systems for three years.'))
+    .not.toBeInTheDocument();
+  const pronunciationResult = within(assessmentPanel).getByLabelText('Pronunciation scores').closest('.pronunciation-result');
+  expect(
+    within(pronunciationResult).getByText('Low-score words')
+      .compareDocumentPosition(within(pronunciationResult).getByLabelText('Pronunciation scores'))
+      & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
   expect(within(assessmentPanel).getByText('SYSTEMS')).toHaveClass('low-word');
 });
 

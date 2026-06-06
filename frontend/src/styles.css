@@ -398,7 +398,7 @@ h3 {
   font-size: 0.82rem;
   font-weight: 750;
   gap: 6px 10px;
-  margin-bottom: 10px;
+  margin-top: 10px;
 }
 
 .score-row span:not(:last-child)::after {

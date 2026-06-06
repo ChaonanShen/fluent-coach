@@ -1632,7 +1632,6 @@ function ConversationAssessmentPanel({
           <div className="assessment-list assessment-scroll-list" aria-label="Pronunciation history" ref={pronunciationListRef}>
             {pronunciationItems.map(({ turn, pronunciation: turnPronunciation, errors }) => (
               <article className="assessment-item" key={turn.id}>
-                <p className="assessment-turn-text">{turn.text}</p>
                 {turnPronunciation ? (
                   <PronunciationResult assessment={turnPronunciation} ariaLabel="Pronunciation scores" />
                 ) : (
@@ -1797,11 +1796,6 @@ function PronunciationResult({
   return (
     <div className="pronunciation-result">
       {referenceText ? <p className="practice-reference">{referenceLabel}: {referenceText}</p> : null}
-      <div className="score-row" aria-label={ariaLabel}>
-        <span>Overall {Math.round(assessment.overall)}</span>
-        <span>Accuracy {Math.round(assessment.accuracy)}</span>
-        <span>Fluency {Math.round(assessment.fluency)}</span>
-      </div>
       <p className="score-label">Low-score words</p>
       <div className="word-score-list">
         {assessment.words.map((word) => (
@@ -1809,6 +1803,11 @@ function PronunciationResult({
             {word.word}
           </span>
         ))}
+      </div>
+      <div className="score-row" aria-label={ariaLabel}>
+        <span>Overall {Math.round(assessment.overall)}</span>
+        <span>Accuracy {Math.round(assessment.accuracy)}</span>
+        <span>Fluency {Math.round(assessment.fluency)}</span>
       </div>
     </div>
   );
