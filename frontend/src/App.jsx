@@ -908,7 +908,7 @@ export default function App() {
                 <>
                   <div className="mistake-book-heading">
                     <h2>{mistakeBookDetail.record.title}</h2>
-                    <SummaryScores summary={mistakeBookDetail.record.summary} />
+                    <SummaryScores summary={mistakeBookDetail.record.summary} variant="detail" />
                     <SummaryTrend progress={mistakeBookProgress} sessionId={mistakeBookDetail.record.session_id} />
                     <div className="mistake-book-counts" aria-label="Mistake counts">
                       {mistakeTypeFilters(mistakeBookDetail.record).map((item) => (
@@ -1023,7 +1023,7 @@ export default function App() {
                     >
                       <div>
                         <strong>{book.title}</strong>
-                        <SummaryScores summary={book.summary} />
+                        <SummaryScores summary={book.summary} variant="overall" />
                       </div>
                       <div className="mistake-book-counts" aria-label={`${book.title} counts`}>
                         <span>{book.mistake_count} total</span>
@@ -1331,13 +1331,14 @@ function formatDateTime(value) {
   }).format(date);
 }
 
-function SummaryScores({ summary }) {
+function SummaryScores({ summary, variant = 'detail' }) {
   if (!summary) {
     return <p className="summary-pending">Summary pending</p>;
   }
+  const items = variant === 'overall' ? overallScoreItems(summary) : detailScoreItems(summary);
   return (
-    <div className="summary-score-row" aria-label="Summary scores">
-      {summaryScoreItems(summary).map((item) => (
+    <div className="summary-score-row" aria-label={variant === 'overall' ? 'Overall score' : 'Summary scores'}>
+      {items.map((item) => (
         <span key={item.label}>
           {item.label} {item.value}
         </span>
@@ -1378,8 +1379,20 @@ function summaryScoreItems(summary) {
   ];
 }
 
+function overallScoreItems(summary) {
+  return [{ label: 'Overall', value: formatScore(overallScore(summary)) }];
+}
+
+function detailScoreItems(summary) {
+  return [
+    ...overallScoreItems(summary),
+    ...summaryScoreItems(summary),
+  ];
+}
+
 function summaryDeltaItems(current, previous) {
   return [
+    { label: 'Overall', value: formatDelta(overallScore(current), overallScore(previous)) },
     { label: 'Grammar', value: formatDelta(current.grammar_score, previous.grammar_score) },
     { label: 'Pronunciation', value: formatDelta(current.pronunciation_score, previous.pronunciation_score) },
     { label: 'Fluency', value: formatDelta(current.fluency_score, previous.fluency_score) },

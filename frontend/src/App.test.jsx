@@ -680,21 +680,26 @@ test('shows summary scores on mistake book records and details', async () => {
 
   fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
 
-  const listScores = await screen.findByLabelText('Summary scores');
-  expect(listScores).toHaveTextContent('Grammar 100.0');
-  expect(listScores).toHaveTextContent('Pronunciation -');
-  expect(listScores).toHaveTextContent('Fluency 70.0');
-  expect(listScores).toHaveTextContent('Vocabulary 76.0');
+  const listScores = await screen.findByLabelText('Overall score');
+  expect(listScores).toHaveTextContent('Overall 85.6');
+  expect(listScores).not.toHaveTextContent('Grammar');
+  expect(listScores).not.toHaveTextContent('Pronunciation');
+  expect(listScores).not.toHaveTextContent('Fluency');
+  expect(listScores).not.toHaveTextContent('Vocabulary');
   expect(listScores).not.toHaveTextContent('Tasks');
   expect(screen.queryByText(/Job Interview - 06\/05/)).not.toBeInTheDocument();
 
   fireEvent.click(await screen.findByRole('button', { name: /Open Job Interview/ }));
 
   const detailScores = await screen.findByLabelText('Summary scores');
+  expect(detailScores).toHaveTextContent('Overall 85.6');
   expect(detailScores).toHaveTextContent('Grammar 100.0');
+  expect(detailScores).toHaveTextContent('Pronunciation -');
+  expect(detailScores).toHaveTextContent('Fluency 70.0');
   expect(detailScores).toHaveTextContent('Vocabulary 76.0');
   expect(detailScores).not.toHaveTextContent('Tasks');
   const scoreChanges = await screen.findByLabelText('Score changes');
+  expect(scoreChanges).toHaveTextContent('Overall +9.4');
   expect(scoreChanges).toHaveTextContent('Grammar +8.0');
   expect(scoreChanges).toHaveTextContent('Pronunciation -');
   expect(scoreChanges).toHaveTextContent('Fluency +5.0');
