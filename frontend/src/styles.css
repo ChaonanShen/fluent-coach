@@ -507,6 +507,10 @@ h3 {
   justify-content: space-between;
 }
 
+.mistake-book-toolbar {
+  margin-bottom: 6px;
+}
+
 .mistake-book-select-all,
 .mistake-book-select {
   align-items: center;
