@@ -1155,7 +1155,6 @@ export default function App() {
                     <div className="mistake-turn-list">
                       {visibleMistakeTurnGroups.map((group, index) => (
                         <section className="mistake-turn-group" key={group.turn?.id || `other-${index}`}>
-                          <p className="mistake-turn-text">{group.turn?.text || 'Other practice'}</p>
                           <div className="mistake-list">
                             {group.mistakes.map((mistake) => {
                               const practiceTargets = pronunciationPracticeTargets(mistake);
@@ -1168,8 +1167,12 @@ export default function App() {
                                     </button>
                                   </div>
                                   <div className="mistake-item-body">
-                                    <p>{mistake.wrong}</p>
-                                    <strong>{mistake.correct}</strong>
+                                    {mistake.type === 'pronunciation' ? null : (
+                                      <>
+                                        <p>{mistake.wrong}</p>
+                                        <strong>{mistake.correct}</strong>
+                                      </>
+                                    )}
                                     {mistake.explanation_zh ? (
                                       <p className="mistake-explanation">{mistake.explanation_zh}</p>
                                     ) : null}
@@ -1177,38 +1180,42 @@ export default function App() {
                                       <div className="mistake-practice-targets">
                                         {practiceTargets.map((target) => (
                                           <div className="mistake-practice-target" key={target.type}>
-                                            <p>
-                                              <span>{target.label}</span>
-                                              {target.text}
-                                            </p>
-                                            <div className="mistake-target-actions">
-                                              <button
-                                                aria-label={`Play ${target.type} pronunciation`}
-                                                className="icon-action pronunciation-play-action"
-                                                onClick={() => speak(target.text)}
-                                                title={`Play ${target.type} pronunciation`}
-                                                type="button"
-                                              >
-                                                ▶
-                                              </button>
-                                              <button
-                                                className="secondary-action mistake-read-action"
-                                                disabled={isMistakeReadingDisabled(mistakeReadingState, mistake.id, target.type)}
-                                                onClick={() => {
-                                                  if (
-                                                    mistakeReadingState.mistakeId === mistake.id
-                                                    && mistakeReadingState.targetType === target.type
-                                                    && mistakeReadingState.status === 'recording'
-                                                  ) {
-                                                    stopMistakeReading(mistake.id, target.type);
-                                                    return;
-                                                  }
-                                                  startMistakeReading(mistake, target.type, target.text);
-                                                }}
-                                                type="button"
-                                              >
-                                                {mistakeReadingLabel(mistakeReadingState, mistake.id, target.type)}
-                                              </button>
+                                            <div className="mistake-practice-target-row">
+                                              <div className="mistake-target-actions">
+                                                <button
+                                                  aria-label={`Play ${target.type} pronunciation`}
+                                                  className="icon-action pronunciation-play-action"
+                                                  onClick={() => speak(target.text)}
+                                                  title={`Play ${target.type} pronunciation`}
+                                                  type="button"
+                                                >
+                                                  ▶
+                                                </button>
+                                                <button
+                                                  aria-label={mistakeReadingAriaLabel(mistakeReadingState, mistake.id, target.type)}
+                                                  className={`icon-action mistake-record-action${
+                                                    isCurrentMistakeReading(mistakeReadingState, mistake.id, target.type, 'recording')
+                                                      ? ' recording'
+                                                      : ''
+                                                  }`}
+                                                  disabled={isMistakeReadingDisabled(mistakeReadingState, mistake.id, target.type)}
+                                                  onClick={() => {
+                                                    if (isCurrentMistakeReading(mistakeReadingState, mistake.id, target.type, 'recording')) {
+                                                      stopMistakeReading(mistake.id, target.type);
+                                                      return;
+                                                    }
+                                                    startMistakeReading(mistake, target.type, target.text);
+                                                  }}
+                                                  title={mistakeReadingAriaLabel(mistakeReadingState, mistake.id, target.type)}
+                                                  type="button"
+                                                >
+                                                  {mistakeReadingIcon(mistakeReadingState, mistake.id, target.type)}
+                                                </button>
+                                              </div>
+                                              <p className="mistake-practice-target-text">
+                                                <span>{target.label}</span>
+                                                {target.text}
+                                              </p>
                                             </div>
                                             {mistakePracticeResults[mistake.id]?.[target.type] ? (
                                               <PronunciationResult
@@ -1221,6 +1228,8 @@ export default function App() {
                                           </div>
                                         ))}
                                       </div>
+                                    ) : mistake.type === 'pronunciation' ? (
+                                      <p>{mistake.word || mistake.wrong}</p>
                                     ) : null}
                                   </div>
                                 </article>
@@ -1865,8 +1874,7 @@ function pronunciationPracticeTargets(mistake) {
       type: 'word',
       label: 'Word:',
       text: wordTarget,
-      idleLabel: 'Read word',
-      resultLabel: 'Read word',
+      resultLabel: 'Word',
     });
   }
   if (sentenceTarget) {
@@ -1874,8 +1882,7 @@ function pronunciationPracticeTargets(mistake) {
       type: 'sentence',
       label: 'Practice sentence:',
       text: sentenceTarget,
-      idleLabel: 'Read sentence',
-      resultLabel: 'Read sentence',
+      resultLabel: 'Practice sentence',
     });
   }
   return targets;
@@ -1885,18 +1892,36 @@ function pronunciationPracticeTargetByType(mistake, targetType) {
   return pronunciationPracticeTargets(mistake).find((target) => target.type === targetType) || null;
 }
 
-function mistakeReadingLabel(state, mistakeId, targetType) {
-  const target = targetType === 'sentence' ? 'Read sentence' : 'Read word';
-  if (state.mistakeId !== mistakeId || state.targetType !== targetType) {
-    return target;
+function isCurrentMistakeReading(state, mistakeId, targetType, status = null) {
+  const isCurrent = state.mistakeId === mistakeId && state.targetType === targetType;
+  return status ? isCurrent && state.status === status : isCurrent;
+}
+
+function mistakeReadingAriaLabel(state, mistakeId, targetType) {
+  const target = targetType === 'sentence' ? 'sentence' : 'word';
+  if (!isCurrentMistakeReading(state, mistakeId, targetType)) {
+    return `Record ${target}`;
   }
   if (state.status === 'recording') {
-    return 'Stop Reading';
+    return `Stop ${target} recording`;
   }
   if (state.status === 'assessing' || state.status === 'requesting') {
-    return 'Assessing';
+    return `Assessing ${target} recording`;
   }
-  return target;
+  return `Record ${target}`;
+}
+
+function mistakeReadingIcon(state, mistakeId, targetType) {
+  if (isCurrentMistakeReading(state, mistakeId, targetType, 'recording')) {
+    return '■';
+  }
+  if (
+    isCurrentMistakeReading(state, mistakeId, targetType, 'assessing')
+    || isCurrentMistakeReading(state, mistakeId, targetType, 'requesting')
+  ) {
+    return '...';
+  }
+  return '●';
 }
 
 function isOtherMistakeReading(state, mistakeId, targetType) {

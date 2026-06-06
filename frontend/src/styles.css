@@ -882,18 +882,25 @@ h3 {
   background: #f8faf8;
   border: 1px solid #e3e8e4;
   border-radius: 8px;
-  padding: 10px;
+  padding: 8px;
 }
 
 .mistake-practice-target p {
   margin-bottom: 0;
 }
 
-.mistake-target-actions {
+.mistake-practice-target-row {
   align-items: center;
   display: flex;
   gap: 8px;
-  margin-top: 8px;
+  min-width: 0;
+}
+
+.mistake-target-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
 }
 
 .icon-action {
@@ -918,6 +925,22 @@ h3 {
   border-color: #9fb2a9;
 }
 
+.icon-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.mistake-record-action.recording {
+  background: #fff7f5;
+  border-color: #efc8c0;
+  color: #8a3a2d;
+}
+
+.mistake-practice-target-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .mistake-practice-target span {
   display: inline;
   margin: 0 6px 0 0;
@@ -931,11 +954,6 @@ h3 {
 
 .mistake-item-delete {
   flex: 0 0 auto;
-}
-
-.mistake-read-action {
-  min-height: 34px;
-  padding: 0 12px;
 }
 
 .delete-button {
