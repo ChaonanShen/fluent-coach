@@ -102,7 +102,7 @@ cp .env.example .env
 ```bash
 # 本地 ASR
 ASR_PROVIDER=faster_whisper
-ASR_MODEL_SIZE=/absolute/path/to/xe2/models/asr/faster-whisper-small.en
+ASR_MODEL_SIZE=/absolute/path/to/fluent-coach/models/asr/faster-whisper-small.en
 ASR_DEVICE=cpu
 ASR_COMPUTE_TYPE=int8
 
@@ -205,7 +205,7 @@ curl http://127.0.0.1:8000/api/health
 
 ```bash
 ASR_PROVIDER=faster_whisper \
-ASR_MODEL_SIZE=/absolute/path/to/xe2/models/asr/faster-whisper-small.en \
+ASR_MODEL_SIZE=/absolute/path/to/fluent-coach/models/asr/faster-whisper-small.en \
 python3 scripts/test_asr_provider.py
 ```
 
@@ -350,7 +350,7 @@ dashboard 主要面板：
 APP_DB_PATH=/tmp/grammar-tts.sqlite \
 APP_AUDIO_DIR=/tmp/grammar-tts-audio \
 ASR_PROVIDER=faster_whisper \
-ASR_MODEL_SIZE=/absolute/path/to/xe2/models/asr/faster-whisper-small.en \
+ASR_MODEL_SIZE=/absolute/path/to/fluent-coach/models/asr/faster-whisper-small.en \
 ASR_DEVICE=cpu \
 ASR_COMPUTE_TYPE=int8 \
 LLM_PROVIDER=openai_compatible \
@@ -359,7 +359,7 @@ LLM_API_KEY=your_api_key \
 LLM_MODEL=your_model_name \
 PRON_ASSESS_AUDIO_TURNS=0 \
 TTS_PROVIDER=kokoro \
-KOKORO_MODEL_DIR=/absolute/path/to/xe2/models/tts/Kokoro-82M \
+KOKORO_MODEL_DIR=/absolute/path/to/fluent-coach/models/tts/Kokoro-82M \
 python3 scripts/run_conversation_bench.py \
   --mode grammar_tts \
   --scenario meeting \

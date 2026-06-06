@@ -540,7 +540,7 @@ WebSocket 事件：
 
 - PR-D 的依赖已在当前环境安装：`faster-whisper` 作为本地 ASR 推理库，`ffmpeg` 作为音频解码/转码工具。
 - PR-D 的模型文件已放入 `models/faster-whisper-small.en/`，并已通过 V100/CUDA smoke：
-  `CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/faster-whisper-small.en ASR_DEVICE=cuda ASR_COMPUTE_TYPE=float16 python3 scripts/test_asr_provider.py`。
+  `CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/fluent-coach/models/faster-whisper-small.en ASR_DEVICE=cuda ASR_COMPUTE_TYPE=float16 python3 scripts/test_asr_provider.py`。
 - PR-H2 后端腾讯 SOE 错误分类已完成，前端 inline 展示已覆盖权限失败、WS `analysis.error`、pronunciation 502/provider 错误。
 - PR-I Summary 服务层已接入已有 analysis/pronunciation 结果，前端 summary loading/error 状态已补。
 - PR-J 离线 smoke report 和真实 provider smoke report 均已完成。当前真实 smoke 结果：LLM passed、faster-whisper ASR passed、Tencent SOE passed；ASR fixture WER 约 `0.0588`。
@@ -826,8 +826,8 @@ WebSocket 事件：
 #### 计划
 
 1. **页面标题和顶部清理**
-   - `frontend/index.html`：浏览器标题从 `XEngineer Speaking Coach` 改为 `Speaking Coach`。
-   - 页面顶部去掉 `XEngineer` eyebrow。
+   - `frontend/index.html`：浏览器标题改为 `Speaking Coach`。
+   - 页面顶部去掉旧品牌 eyebrow。
    - 主标题建议改为 `Speaking Coach`。
    - 对话框上方的 `selectedScenario.user_role`（如 `Candidate`）去掉。
    - 保留 `Conversation` 标题、场景选择、Start/End。
@@ -907,7 +907,7 @@ WebSocket 事件：
 8. **测试计划**
    - 更新前端测试，覆盖：
      - 页面标题为 `Speaking Coach`。
-     - 顶部不再出现 `XEngineer`。
+     - 顶部不再出现旧品牌。
      - 对话区不再显示 `Candidate`/user role 和 conversation goal 胶囊。
      - 发音评测区有 `Pronunciation` 小标题。
      - Timing 以底部浅色文本出现，而不是大块面板。
@@ -919,7 +919,7 @@ WebSocket 事件：
      ```
 
    - 手动检查：
-     - 首页顶部没有 `XEngineer`。
+     - 首页顶部没有旧品牌。
      - 对话区没有 `Candidate` 和 goal 胶囊。
      - 发音评测区有 `Pronunciation` 标题。
      - Timing 只在底部浅色显示。

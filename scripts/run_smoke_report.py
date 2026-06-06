@@ -11,6 +11,10 @@ import argparse
 import json
 from pathlib import Path
 
+try:
+    from scripts import _bootstrap  # noqa: F401
+except ModuleNotFoundError:
+    import _bootstrap  # noqa: F401
 from backend.app.core.env import load_dotenv
 
 

@@ -87,9 +87,9 @@ meeting
 运行完成后会看到类似输出：
 
 ```text
-wrote /home/scn/xe2/reports/runs/20260606T084445Z-interview-offline_fake.json
-wrote /home/scn/xe2/reports/bench-latest.json
-wrote /home/scn/xe2/reports/bench-latest.md
+wrote /home/scn/fluent-coach/reports/runs/20260606T084445Z-interview-offline_fake.json
+wrote /home/scn/fluent-coach/reports/bench-latest.json
+wrote /home/scn/fluent-coach/reports/bench-latest.md
 reply_first_delta_ms: p50=...
 reply_itl_ms: p50=...
 grammar_ms: p50=...
@@ -427,7 +427,7 @@ models/tts/Kokoro-82M/
 
 ```bash
 TTS_PROVIDER=kokoro \
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+KOKORO_MODEL_DIR=/home/scn/fluent-coach/models/tts/Kokoro-82M \
 python3 scripts/test_kokoro_tts.py --output /tmp/kokoro-smoke.wav
 ```
 
@@ -437,14 +437,14 @@ python3 scripts/test_kokoro_tts.py --output /tmp/kokoro-smoke.wav
 APP_DB_PATH=/tmp/grammar-tts.sqlite \
 APP_AUDIO_DIR=/tmp/grammar-tts-audio \
 ASR_PROVIDER=faster_whisper \
-ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+ASR_MODEL_SIZE=/home/scn/fluent-coach/models/asr/faster-whisper-small.en \
 LLM_PROVIDER=openai_compatible \
 LLM_BASE_URL=... \
 LLM_API_KEY=... \
 LLM_MODEL=... \
 TTS_PROVIDER=kokoro \
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
-KOKORO_MODEL_PATH=/home/scn/xe2/models/tts/Kokoro-82M/kokoro-v1_0.pth \
+KOKORO_MODEL_DIR=/home/scn/fluent-coach/models/tts/Kokoro-82M \
+KOKORO_MODEL_PATH=/home/scn/fluent-coach/models/tts/Kokoro-82M/kokoro-v1_0.pth \
 KOKORO_VOICE=af_heart \
 KOKORO_LANG_CODE=a \
 python3 scripts/run_conversation_bench.py \
@@ -512,7 +512,7 @@ python3 scripts/run_conversation_bench.py \
 
 ```bash
 ASR_PROVIDER=faster_whisper
-ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en
+ASR_MODEL_SIZE=/home/scn/fluent-coach/models/asr/faster-whisper-small.en
 LLM_PROVIDER=openai_compatible
 LLM_BASE_URL=...
 LLM_API_KEY=...

@@ -12,7 +12,7 @@ from backend.app.testkit import run_store
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DASHBOARD_DIR = Path(__file__).resolve().parent / "dashboard"
 
-dashboard_app = FastAPI(title="XEngineer Bench Dashboard")
+dashboard_app = FastAPI(title="Fluent Coach Bench Dashboard")
 
 
 @dashboard_app.get("/")

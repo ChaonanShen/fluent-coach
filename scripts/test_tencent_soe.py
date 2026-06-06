@@ -24,6 +24,10 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlencode, urlsplit
 
+try:
+    from scripts import _bootstrap  # noqa: F401
+except ModuleNotFoundError:
+    import _bootstrap  # noqa: F401
 from backend.app.services.pronunciation import tencent_signed_url_diagnostics
 
 

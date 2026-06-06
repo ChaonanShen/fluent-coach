@@ -196,7 +196,7 @@ kokoro:         文本 -> 本地 TTS 模型 -> wav 音频
 
 ```bash
 TTS_PROVIDER=kokoro
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M
+KOKORO_MODEL_DIR=/home/scn/fluent-coach/models/tts/Kokoro-82M
 KOKORO_VOICE=af_heart
 KOKORO_LANG_CODE=a
 KOKORO_SAMPLE_RATE=24000
@@ -241,10 +241,10 @@ KOKORO_SAMPLE_RATE=24000
 APP_DB_PATH=/tmp/grammar-tts.sqlite \
 APP_AUDIO_DIR=/tmp/grammar-tts-audio \
 ASR_PROVIDER=faster_whisper \
-ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+ASR_MODEL_SIZE=/home/scn/fluent-coach/models/asr/faster-whisper-small.en \
 LLM_PROVIDER=openai_compatible \
 TTS_PROVIDER=kokoro \
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+KOKORO_MODEL_DIR=/home/scn/fluent-coach/models/tts/Kokoro-82M \
 python3 scripts/run_conversation_bench.py \
   --mode grammar_tts \
   --scenario interview \

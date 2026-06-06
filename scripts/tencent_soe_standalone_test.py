@@ -284,7 +284,7 @@ class MinimalWebSocket:
             "Connection: Upgrade\r\n"
             f"Sec-WebSocket-Key: {key}\r\n"
             "Sec-WebSocket-Version: 13\r\n"
-            "User-Agent: xe2-tencent-soe-standalone-test/1.0\r\n"
+            "User-Agent: fluent-coach-tencent-soe-standalone-test/1.0\r\n"
             "\r\n"
         )
         self.sock.sendall(request.encode("ascii"))

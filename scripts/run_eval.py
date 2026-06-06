@@ -7,6 +7,10 @@ import argparse
 import json
 from pathlib import Path
 
+try:
+    from scripts import _bootstrap  # noqa: F401
+except ModuleNotFoundError:
+    import _bootstrap  # noqa: F401
 from backend.app.eval.harness import render_markdown, run_all_evaluations
 
 

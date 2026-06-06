@@ -10,6 +10,10 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+try:
+    from scripts import _bootstrap  # noqa: F401
+except ModuleNotFoundError:
+    import _bootstrap  # noqa: F401
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 AUDIO_SUFFIXES = {".wav", ".mp3", ".ogg", ".webm", ".flac"}

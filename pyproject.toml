@@ -1,5 +1,5 @@
 [project]
-name = "xengineer-speaking-coach"
+name = "fluent-coach"
 version = "0.1.0"
 description = "AI English speaking coach demo backend and test harness."
 requires-python = ">=3.11"

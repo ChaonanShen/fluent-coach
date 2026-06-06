@@ -178,7 +178,7 @@ def list_runs() -> list[dict]                  # [{run_id, scenario_id, mode, ge
 
 ### 4.1 `backend/app/testkit/dashboard.py` — 独立 FastAPI app
 ```python
-dashboard_app = FastAPI(title="XEngineer Bench Dashboard")
+dashboard_app = FastAPI(title="Fluent Coach Bench Dashboard")
 # 不 import 产品业务逻辑（main/services），仅 import run_store + models
 @dashboard_app.get("/")                         -> FileResponse(dashboard/index.html)
 @dashboard_app.get("/api/runs")                 -> run_store.list_runs()
@@ -341,7 +341,7 @@ class KokoroTTSProvider:
 
 ```bash
 TTS_PROVIDER=kokoro \
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+KOKORO_MODEL_DIR=/home/scn/fluent-coach/models/tts/Kokoro-82M \
 python3 scripts/test_kokoro_tts.py \
   --text "I has three year experience." \
   --output /tmp/kokoro-smoke.wav
@@ -522,10 +522,10 @@ mode="grammar_tts"
 APP_DB_PATH=/tmp/grammar-tts.sqlite \
 APP_AUDIO_DIR=/tmp/grammar-tts-audio \
 ASR_PROVIDER=faster_whisper \
-ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+ASR_MODEL_SIZE=/home/scn/fluent-coach/models/asr/faster-whisper-small.en \
 LLM_PROVIDER=openai_compatible \
 TTS_PROVIDER=kokoro \
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+KOKORO_MODEL_DIR=/home/scn/fluent-coach/models/tts/Kokoro-82M \
 python3 scripts/run_conversation_bench.py \
   --mode grammar_tts \
   --scenario interview \
@@ -609,7 +609,7 @@ Latency 图把 `tts_ms` 纳入关键指标。
 - `.env` 示例:
   ```bash
   TTS_PROVIDER=kokoro
-  KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M
+  KOKORO_MODEL_DIR=/home/scn/fluent-coach/models/tts/Kokoro-82M
   KOKORO_VOICE=af_heart
   ```
 - `grammar_tts` 命令和 dashboard 查看方式。
@@ -628,7 +628,7 @@ Kokoro smoke:
 
 ```bash
 TTS_PROVIDER=kokoro \
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+KOKORO_MODEL_DIR=/home/scn/fluent-coach/models/tts/Kokoro-82M \
 python3 scripts/test_kokoro_tts.py --output /tmp/kokoro-smoke.wav
 ```
 
@@ -638,10 +638,10 @@ python3 scripts/test_kokoro_tts.py --output /tmp/kokoro-smoke.wav
 APP_DB_PATH=/tmp/grammar-tts.sqlite \
 APP_AUDIO_DIR=/tmp/grammar-tts-audio \
 ASR_PROVIDER=faster_whisper \
-ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+ASR_MODEL_SIZE=/home/scn/fluent-coach/models/asr/faster-whisper-small.en \
 LLM_PROVIDER=openai_compatible \
 TTS_PROVIDER=kokoro \
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+KOKORO_MODEL_DIR=/home/scn/fluent-coach/models/tts/Kokoro-82M \
 python3 scripts/run_conversation_bench.py \
   --mode grammar_tts \
   --scenario interview \

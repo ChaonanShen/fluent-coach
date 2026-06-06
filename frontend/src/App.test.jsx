@@ -518,9 +518,10 @@ afterEach(() => {
 test('loads scenarios and starts a session', async () => {
   render(<App />);
 
+  const legacyBrand = ['X', 'Engineer'].join('');
   expect(await screen.findByRole('heading', { name: 'Speaking Coach' })).toBeInTheDocument();
   expect(await screen.findByRole('combobox', { name: 'Scenario' })).toHaveValue('interview');
-  expect(screen.queryByText('XEngineer')).not.toBeInTheDocument();
+  expect(screen.queryByText(legacyBrand)).not.toBeInTheDocument();
   expect(screen.queryByText('Candidate')).not.toBeInTheDocument();
   expect(screen.queryByText('Introduce professional background clearly')).not.toBeInTheDocument();
   const readingPracticePanel = screen.getByLabelText('Reading Practice');

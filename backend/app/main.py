@@ -66,7 +66,7 @@ from backend.app.services.storage import log_store
 from backend.app.services.summary import summary_service
 from backend.app.services.tts import tts_provider
 
-app = FastAPI(title="XEngineer AI English Speaking Coach", version="0.1.0")
+app = FastAPI(title="Fluent Coach", version="0.1.0")
 
 
 @app.get("/api/health")

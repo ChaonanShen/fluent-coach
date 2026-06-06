@@ -35,7 +35,7 @@ Example GPU smoke test:
 ```bash
 CUDA_VISIBLE_DEVICES=0 \
 ASR_PROVIDER=faster_whisper \
-ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+ASR_MODEL_SIZE=/home/scn/fluent-coach/models/asr/faster-whisper-small.en \
 ASR_DEVICE=cuda \
 ASR_COMPUTE_TYPE=float16 \
 python3 scripts/test_asr_provider.py

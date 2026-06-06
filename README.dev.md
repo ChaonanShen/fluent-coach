@@ -1,4 +1,4 @@
-# XEngineer 开发者 README
+# Fluent Coach 开发者 README
 
 ## 题目：AI 英语口语陪练
 
@@ -117,7 +117,7 @@ python3 scripts/run_smoke_report.py
 
 ```bash
 ASR_PROVIDER=faster_whisper \
-ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+ASR_MODEL_SIZE=/home/scn/fluent-coach/models/asr/faster-whisper-small.en \
 ASR_DEVICE=cuda \
 ASR_COMPUTE_TYPE=float16 \
 python3 scripts/run_smoke_report.py --mode real
@@ -144,13 +144,13 @@ python3 scripts/bench_dashboard.py
 APP_DB_PATH=/tmp/grammar-tts.sqlite \
 APP_AUDIO_DIR=/tmp/grammar-tts-audio \
 ASR_PROVIDER=faster_whisper \
-ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+ASR_MODEL_SIZE=/home/scn/fluent-coach/models/asr/faster-whisper-small.en \
 LLM_PROVIDER=openai_compatible \
 LLM_BASE_URL=... \
 LLM_API_KEY=... \
 LLM_MODEL=... \
 TTS_PROVIDER=kokoro \
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+KOKORO_MODEL_DIR=/home/scn/fluent-coach/models/tts/Kokoro-82M \
 python3 scripts/run_conversation_bench.py \
   --mode grammar_tts \
   --virtual-user llm \
@@ -234,14 +234,14 @@ ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=tiny python3 scripts/test_asr_provide
 `models/asr/` 下，然后把 `ASR_MODEL_SIZE` 设置为本地模型目录路径，例如：
 
 ```bash
-ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en make dev-backend
-ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en python3 scripts/test_asr_provider.py
+ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/fluent-coach/models/asr/faster-whisper-small.en make dev-backend
+ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/fluent-coach/models/asr/faster-whisper-small.en python3 scripts/test_asr_provider.py
 ```
 
 本机 GPU 可用时可显式启用 CUDA：
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en ASR_DEVICE=cuda ASR_COMPUTE_TYPE=float16 python3 scripts/test_asr_provider.py
+CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/fluent-coach/models/asr/faster-whisper-small.en ASR_DEVICE=cuda ASR_COMPUTE_TYPE=float16 python3 scripts/test_asr_provider.py
 ```
 
 真实 ASR 集成测试默认不会运行；需要显式执行 integration marker。
@@ -288,8 +288,8 @@ python3 -m pip install -e ".[tts]"
 conda install -y -c conda-forge espeak-ng
 
 TTS_PROVIDER=kokoro
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M
-KOKORO_MODEL_PATH=/home/scn/xe2/models/tts/Kokoro-82M/kokoro-v1_0.pth
+KOKORO_MODEL_DIR=/home/scn/fluent-coach/models/tts/Kokoro-82M
+KOKORO_MODEL_PATH=/home/scn/fluent-coach/models/tts/Kokoro-82M/kokoro-v1_0.pth
 KOKORO_VOICE=af_heart
 KOKORO_LANG_CODE=a
 ```

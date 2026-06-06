@@ -5,6 +5,10 @@ from __future__ import annotations
 
 import os
 
+try:
+    from scripts import _bootstrap  # noqa: F401
+except ModuleNotFoundError:
+    import _bootstrap  # noqa: F401
 import uvicorn
 
 from backend.app.testkit.dashboard import dashboard_app

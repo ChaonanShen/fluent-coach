@@ -6,6 +6,10 @@ from __future__ import annotations
 import argparse
 import os
 
+try:
+    from scripts import _bootstrap  # noqa: F401
+except ModuleNotFoundError:
+    import _bootstrap  # noqa: F401
 from backend.app.core.env import load_dotenv
 from backend.app.core.fixtures import load_generated_manifest, resolve_fixture_audio
 from backend.app.services.asr import FakeASR, FasterWhisperASR, create_asr_provider
