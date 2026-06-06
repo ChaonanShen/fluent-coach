@@ -807,17 +807,29 @@ test('reassesses a pronunciation mistake without changing the saved mistake', as
 
   expect((await screen.findAllByText('systems')).length).toBeGreaterThan(0);
   expect(screen.queryByText('am working')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Read again' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Read again' }));
+  expect(screen.getByText('Word:')).toBeInTheDocument();
+  expect(screen.getByText('Practice sentence:')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Read word' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Read sentence' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Read word' }));
   await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
   fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
 
-  expect(await screen.findByText('Read: I have worked on backend systems for three years.')).toBeInTheDocument();
-  expect(await screen.findByLabelText('Pronunciation scores')).toHaveTextContent('Overall 50');
+  expect(await screen.findByText('Read word: systems')).toBeInTheDocument();
+  expect(await screen.findByLabelText('Practice result')).toHaveTextContent('Overall 50');
   expect(screen.getAllByText('systems').length).toBeGreaterThan(0);
   expect(screen.getByRole('button', { name: 'Pronunciation 1' })).toBeInTheDocument();
-  const uploadCall = global.fetch.mock.calls.find(([url]) => url === '/api/pronunciation/practice/upload');
-  expect(JSON.parse(uploadCall[1].body)).toMatchObject({
+  const uploadCalls = global.fetch.mock.calls.filter(([url]) => url === '/api/pronunciation/practice/upload');
+  expect(JSON.parse(uploadCalls.at(-1)[1].body)).toMatchObject({
+    reference_text: 'systems',
+  });
+
+  fireEvent.click(screen.getByRole('button', { name: 'Read sentence' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
+
+  expect(await screen.findByText('Read sentence: I have worked on backend systems for three years.')).toBeInTheDocument();
+  const nextUploadCalls = global.fetch.mock.calls.filter(([url]) => url === '/api/pronunciation/practice/upload');
+  expect(JSON.parse(nextUploadCalls.at(-1)[1].body)).toMatchObject({
     reference_text: 'I have worked on backend systems for three years.',
   });
 });

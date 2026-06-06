@@ -784,6 +784,28 @@ h3 {
   margin-top: 8px;
 }
 
+.mistake-practice-targets {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.mistake-practice-target {
+  background: #f8faf8;
+  border: 1px solid #e3e8e4;
+  border-radius: 8px;
+  padding: 10px;
+}
+
+.mistake-practice-target p {
+  margin-bottom: 0;
+}
+
+.mistake-practice-target span {
+  display: inline;
+  margin: 0 6px 0 0;
+}
+
 .mistake-actions {
   display: flex;
   flex-wrap: wrap;

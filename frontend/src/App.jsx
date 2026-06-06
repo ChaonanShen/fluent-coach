@@ -52,7 +52,7 @@ export default function App() {
   const [partialText, setPartialText] = useState('');
   const [voiceState, setVoiceState] = useState('idle');
   const [readingState, setReadingState] = useState('idle');
-  const [mistakeReadingState, setMistakeReadingState] = useState({ mistakeId: null, status: 'idle' });
+  const [mistakeReadingState, setMistakeReadingState] = useState({ mistakeId: null, targetType: null, status: 'idle' });
   const [mistakePracticeResults, setMistakePracticeResults] = useState({});
   const [summary, setSummary] = useState(null);
   const [summaryState, setSummaryState] = useState('idle');
@@ -635,25 +635,33 @@ export default function App() {
     readingStreamRef.current = null;
   }
 
-  async function startMistakeReading(mistake) {
+  async function startMistakeReading(mistake, targetType, referenceText) {
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
       setError('Microphone recording is not supported in this browser.');
       setStatus('Error');
       return;
     }
-    const referenceText = mistakePracticeReference(mistake);
-    if (!referenceText) {
+    if (!referenceText?.trim()) {
       setError('No pronunciation text is available for this mistake.');
       return;
     }
     setError('');
     setMistakePracticeResults((current) => {
-      const next = { ...current };
-      delete next[mistake.id];
+      const currentTargets = current[mistake.id] || {};
+      const next = {
+        ...current,
+        [mistake.id]: {
+          ...currentTargets,
+        },
+      };
+      delete next[mistake.id][targetType];
+      if (!Object.keys(next[mistake.id]).length) {
+        delete next[mistake.id];
+      }
       return next;
     });
     mistakeReadingCanceledRef.current = false;
-    setMistakeReadingState({ mistakeId: mistake.id, status: 'requesting' });
+    setMistakeReadingState({ mistakeId: mistake.id, targetType, status: 'requesting' });
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       mistakeReadingStreamRef.current = stream;
@@ -671,32 +679,36 @@ export default function App() {
       };
       recorder.onstop = () => {
         if (!mistakeReadingCanceledRef.current) {
-          finishMistakeReadingAssessment(mistake, recorder.mimeType).catch((err) => {
+          finishMistakeReadingAssessment(mistake, targetType, referenceText, recorder.mimeType).catch((err) => {
             handleRequestError(err, 'Pronunciation practice failed.');
-            setMistakeReadingState({ mistakeId: null, status: 'idle' });
+            setMistakeReadingState({ mistakeId: null, targetType: null, status: 'idle' });
             stopMistakeReadingStream();
           });
         }
       };
       recorder.start();
-      setMistakeReadingState({ mistakeId: mistake.id, status: 'recording' });
+      setMistakeReadingState({ mistakeId: mistake.id, targetType, status: 'recording' });
     } catch (err) {
       setError(err?.message || 'Microphone permission was denied.');
-      setMistakeReadingState({ mistakeId: null, status: 'idle' });
+      setMistakeReadingState({ mistakeId: null, targetType: null, status: 'idle' });
       stopMistakeReadingStream();
     }
   }
 
-  function stopMistakeReading(mistakeId) {
-    if (mistakeReadingState.status !== 'recording' || mistakeReadingState.mistakeId !== mistakeId) {
+  function stopMistakeReading(mistakeId, targetType) {
+    if (
+      mistakeReadingState.status !== 'recording'
+      || mistakeReadingState.mistakeId !== mistakeId
+      || mistakeReadingState.targetType !== targetType
+    ) {
       return;
     }
-    setMistakeReadingState({ mistakeId, status: 'assessing' });
+    setMistakeReadingState({ mistakeId, targetType, status: 'assessing' });
     const recorder = mistakeReadingRecorderRef.current;
     if (!recorder || recorder.state === 'inactive') {
-      finishMistakeReadingAssessmentById(mistakeId).catch((err) => {
+      finishMistakeReadingAssessmentById(mistakeId, targetType).catch((err) => {
         setError(err.message);
-        setMistakeReadingState({ mistakeId: null, status: 'idle' });
+        setMistakeReadingState({ mistakeId: null, targetType: null, status: 'idle' });
       });
       return;
     }
@@ -715,20 +727,24 @@ export default function App() {
     mistakeReadingRecorderRef.current = null;
     mistakeReadingChunksRef.current = [];
     stopMistakeReadingStream();
-    setMistakeReadingState({ mistakeId: null, status: 'idle' });
+    setMistakeReadingState({ mistakeId: null, targetType: null, status: 'idle' });
   }
 
-  async function finishMistakeReadingAssessmentById(mistakeId, mimeType = 'audio/webm') {
+  async function finishMistakeReadingAssessmentById(mistakeId, targetType, mimeType = 'audio/webm') {
     const mistake = mistakeBookDetail?.turn_groups
       ?.flatMap((group) => group.mistakes)
       .find((item) => item.id === mistakeId);
     if (!mistake) {
       throw new Error('Pronunciation mistake is no longer available.');
     }
-    return finishMistakeReadingAssessment(mistake, mimeType);
+    const target = pronunciationPracticeTargetByType(mistake, targetType);
+    if (!target) {
+      throw new Error('Pronunciation practice target is no longer available.');
+    }
+    return finishMistakeReadingAssessment(mistake, target.type, target.text, mimeType);
   }
 
-  async function finishMistakeReadingAssessment(mistake, mimeType = 'audio/webm') {
+  async function finishMistakeReadingAssessment(mistake, targetType, referenceText, mimeType = 'audio/webm') {
     const chunks = mistakeReadingChunksRef.current;
     if (!chunks.length) {
       throw new Error('No reading audio was recorded.');
@@ -736,7 +752,6 @@ export default function App() {
     const audio = chunks.length === 1 && chunks[0].arrayBuffer
       ? chunks[0]
       : new Blob(chunks, { type: mimeType || 'audio/webm' });
-    const referenceText = mistakePracticeReference(mistake);
     const assessment = await uploadPracticePronunciation({
       referenceText,
       audio,
@@ -745,11 +760,15 @@ export default function App() {
     setMistakePracticeResults((current) => ({
       ...current,
       [mistake.id]: {
-        assessment,
-        referenceText,
+        ...(current[mistake.id] || {}),
+        [targetType]: {
+          assessment,
+          referenceText,
+          targetType,
+        },
       },
     }));
-    setMistakeReadingState({ mistakeId: null, status: 'idle' });
+    setMistakeReadingState({ mistakeId: null, targetType: null, status: 'idle' });
     stopMistakeReadingStream();
   }
 
@@ -1127,48 +1146,69 @@ export default function App() {
                         <section className="mistake-turn-group" key={group.turn?.id || `other-${index}`}>
                           <p className="mistake-turn-text">{group.turn?.text || 'Other practice'}</p>
                           <div className="mistake-list">
-                            {group.mistakes.map((mistake) => (
-                              <article className="mistake-item" key={mistake.id}>
-                                <div>
-                                  <span>{mistake.subtype || mistake.type}</span>
-                                  <p>{mistake.wrong}</p>
-                                  <strong>{mistake.correct}</strong>
-                                  {mistake.explanation_zh ? (
-                                    <p className="mistake-explanation">{mistake.explanation_zh}</p>
-                                  ) : null}
-                                  {mistakePracticeResults[mistake.id] ? (
-                                    <PronunciationResult
-                                      assessment={mistakePracticeResults[mistake.id].assessment}
-                                      referenceText={mistakePracticeResults[mistake.id].referenceText}
-                                    />
-                                  ) : null}
-                                </div>
-                                <div className="mistake-actions">
-                                  {mistake.type === 'pronunciation' ? (
-                                    <button
-                                      className="secondary-action mistake-read-action"
-                                      disabled={isMistakeReadingDisabled(mistakeReadingState, mistake.id)}
-                                      onClick={() => {
-                                        if (
-                                          mistakeReadingState.mistakeId === mistake.id
-                                          && mistakeReadingState.status === 'recording'
-                                        ) {
-                                          stopMistakeReading(mistake.id);
-                                          return;
-                                        }
-                                        startMistakeReading(mistake);
-                                      }}
-                                      type="button"
-                                    >
-                                      {mistakeReadingLabel(mistakeReadingState, mistake.id)}
+                            {group.mistakes.map((mistake) => {
+                              const practiceTargets = pronunciationPracticeTargets(mistake);
+                              return (
+                                <article className="mistake-item" key={mistake.id}>
+                                  <div>
+                                    <span>{mistake.subtype || mistake.type}</span>
+                                    <p>{mistake.wrong}</p>
+                                    <strong>{mistake.correct}</strong>
+                                    {mistake.explanation_zh ? (
+                                      <p className="mistake-explanation">{mistake.explanation_zh}</p>
+                                    ) : null}
+                                    {mistake.type === 'pronunciation' && practiceTargets.length ? (
+                                      <div className="mistake-practice-targets">
+                                        {practiceTargets.map((target) => (
+                                          <div className="mistake-practice-target" key={target.type}>
+                                            <p>
+                                              <span>{target.label}</span>
+                                              {target.text}
+                                            </p>
+                                            {mistakePracticeResults[mistake.id]?.[target.type] ? (
+                                              <PronunciationResult
+                                                ariaLabel="Practice result"
+                                                assessment={mistakePracticeResults[mistake.id][target.type].assessment}
+                                                referenceLabel={target.resultLabel}
+                                                referenceText={mistakePracticeResults[mistake.id][target.type].referenceText}
+                                              />
+                                            ) : null}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                  <div className="mistake-actions">
+                                    {mistake.type === 'pronunciation'
+                                      ? practiceTargets.map((target) => (
+                                        <button
+                                          className="secondary-action mistake-read-action"
+                                          disabled={isMistakeReadingDisabled(mistakeReadingState, mistake.id, target.type)}
+                                          key={target.type}
+                                          onClick={() => {
+                                            if (
+                                              mistakeReadingState.mistakeId === mistake.id
+                                              && mistakeReadingState.targetType === target.type
+                                              && mistakeReadingState.status === 'recording'
+                                            ) {
+                                              stopMistakeReading(mistake.id, target.type);
+                                              return;
+                                            }
+                                            startMistakeReading(mistake, target.type, target.text);
+                                          }}
+                                          type="button"
+                                        >
+                                          {mistakeReadingLabel(mistakeReadingState, mistake.id, target.type)}
+                                        </button>
+                                      ))
+                                      : null}
+                                    <button className="delete-button" onClick={() => deleteMistake(mistake.id)} type="button">
+                                      Delete
                                     </button>
-                                  ) : null}
-                                  <button className="delete-button" onClick={() => deleteMistake(mistake.id)} type="button">
-                                    Delete
-                                  </button>
-                                </div>
-                              </article>
-                            ))}
+                                  </div>
+                                </article>
+                              );
+                            })}
                           </div>
                         </section>
                       ))}
@@ -1738,13 +1778,42 @@ function isVoiceTurn(turn) {
   return turn?.mode === 'audio' || turn?.mode === 'voice';
 }
 
-function mistakePracticeReference(mistake) {
-  return (mistake.practice_sentence || mistake.word || mistake.wrong || '').trim();
+function pronunciationPracticeTargets(mistake) {
+  if (mistake?.type !== 'pronunciation') {
+    return [];
+  }
+  const wordTarget = (mistake.word || mistake.wrong || '').trim();
+  const sentenceTarget = (mistake.practice_sentence || '').trim();
+  const targets = [];
+  if (wordTarget) {
+    targets.push({
+      type: 'word',
+      label: 'Word:',
+      text: wordTarget,
+      idleLabel: 'Read word',
+      resultLabel: 'Read word',
+    });
+  }
+  if (sentenceTarget) {
+    targets.push({
+      type: 'sentence',
+      label: 'Practice sentence:',
+      text: sentenceTarget,
+      idleLabel: 'Read sentence',
+      resultLabel: 'Read sentence',
+    });
+  }
+  return targets;
 }
 
-function mistakeReadingLabel(state, mistakeId) {
-  if (state.mistakeId !== mistakeId) {
-    return 'Read again';
+function pronunciationPracticeTargetByType(mistake, targetType) {
+  return pronunciationPracticeTargets(mistake).find((target) => target.type === targetType) || null;
+}
+
+function mistakeReadingLabel(state, mistakeId, targetType) {
+  const target = targetType === 'sentence' ? 'Read sentence' : 'Read word';
+  if (state.mistakeId !== mistakeId || state.targetType !== targetType) {
+    return target;
   }
   if (state.status === 'recording') {
     return 'Stop Reading';
@@ -1752,18 +1821,26 @@ function mistakeReadingLabel(state, mistakeId) {
   if (state.status === 'assessing' || state.status === 'requesting') {
     return 'Assessing';
   }
-  return 'Read again';
+  return target;
 }
 
-function isOtherMistakeReading(state, mistakeId) {
-  return Boolean(state.mistakeId && state.mistakeId !== mistakeId && state.status !== 'idle');
+function isOtherMistakeReading(state, mistakeId, targetType) {
+  return Boolean(
+    state.mistakeId
+    && state.status !== 'idle'
+    && (state.mistakeId !== mistakeId || state.targetType !== targetType),
+  );
 }
 
-function isMistakeReadingDisabled(state, mistakeId) {
-  if (isOtherMistakeReading(state, mistakeId)) {
+function isMistakeReadingDisabled(state, mistakeId, targetType) {
+  if (isOtherMistakeReading(state, mistakeId, targetType)) {
     return true;
   }
-  return state.mistakeId === mistakeId && !['idle', 'recording'].includes(state.status);
+  return (
+    state.mistakeId === mistakeId
+    && state.targetType === targetType
+    && !['idle', 'recording'].includes(state.status)
+  );
 }
 
 function SummaryTrend({ progress, sessionId }) {
