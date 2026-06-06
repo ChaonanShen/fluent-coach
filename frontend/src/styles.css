@@ -470,8 +470,13 @@ h3 {
 }
 
 .mistake-book {
+  flex: 1;
   margin: 0 auto;
   max-width: 860px;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 24px;
+  width: 100%;
 }
 
 .mistake-book-list,
@@ -772,6 +777,10 @@ h3 {
   .mistake-book-record {
     align-items: start;
     grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .mistake-book {
+    overflow-y: visible;
   }
 
   .mistake-book-record-main {
