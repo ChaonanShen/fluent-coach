@@ -9,7 +9,7 @@
 数据流是：
 
 ```text
-固定用户台词或真实音频
+固定用户台词 / 真实音频 / grammar_tts 合成音频
   -> scripts/run_conversation_bench.py
   -> backend WS /ws/sessions/{id}/audio
   -> 收集 WS 事件和 debug.timing
@@ -26,6 +26,7 @@
 - TTFT、ITL、ASR、grammar 等延迟大概是多少。
 - 改代码后和上一轮 bench 数据相比有没有明显退化。
 - 真实 provider 模式下，ASR 或腾讯 SOE 有没有明显失败或超时。
+- `grammar_tts` 模式下，系统能不能在无人值守时发现预先注入的语法/表达错误。
 
 不适合把它理解成：
 
@@ -40,6 +41,10 @@
 backend/app/testkit/
   models.py              RunRecord / TurnRecord / LatencyStat 数据契约
   scripts_data.py        离线 scripted 固定用户台词
+  grammar_cases.py       grammar_tts 的 clean/injected/corrected 真值样例
+  grammar_injection.py   把 clean_text 确定性改成带错 injected_text，并计算命中率
+  virtual_user.py        模板/LLM 虚拟用户，生成下一句用户台词
+  tts_audio.py           调 TTS provider 合成音频 bytes
   ws_driver.py           自动驱动 WebSocket 多轮对话
   report.py              汇总延迟分位数，渲染 Markdown 报告
   run_store.py           读写 reports/runs/<run_id>.json
@@ -56,7 +61,10 @@ reports/
   bench-latest.md            最近一次 bench 的 Markdown 汇总
 ```
 
-生产代码只改了一处：`backend/app/main.py` 的流式回复循环会额外记录 `reply_itl_ms`、`reply_total_stream_ms` 和 `reply_delta_count`。其他 bench 逻辑都在 `testkit` 和 `scripts` 里。
+第一阶段只改了一处生产代码：`backend/app/main.py` 的流式回复循环会额外记录
+`reply_itl_ms`、`reply_total_stream_ms` 和 `reply_delta_count`。第二阶段新增了
+服务端 Kokoro TTS provider，供 `grammar_tts` bench 合成音频；其余 bench 逻辑都在
+`testkit` 和 `scripts` 里。
 
 ## 最常用的离线流程
 
@@ -116,6 +124,8 @@ python3 scripts/bench_dashboard.py
 ```text
 http://localhost:8100/
 ```
+
+要跑全自动语法错误真实链路，看下面的 `grammar_tts` 模式。
 
 ## 默认输出目录
 
@@ -196,7 +206,7 @@ BENCH_DASHBOARD_HOST=0.0.0.0 python3 scripts/bench_dashboard.py
 
 - `run_id`：这次 bench 的唯一 ID，通常包含 UTC 时间、场景和模式。
 - `scenario_id`：场景，例如 `interview`。
-- `mode`：模式，例如 `offline_fake` 或 `real`。
+- `mode`：模式，例如 `offline_fake`、`real` 或 `grammar_tts`。
 - `turn_count`：这次 bench 跑了多少轮用户输入。
 
 点击某个 run，右侧会切换到这次 run 的详情。
@@ -217,8 +227,13 @@ Summary 是这次 run 的总览。
 | Providers | 本次记录到的 provider 配置 |
 | Median TTFT | `reply_first_delta_ms` 的 p50 |
 | Median ITL | `reply_itl_ms` 的 p50 |
+| Median TTS | `tts_ms` 的 p50，仅 `grammar_tts` 或服务端 TTS 模式有值 |
+| Avg Grammar Recall | 平均命中多少预先注入的错误类型，仅 `grammar_tts` 有值 |
+| Corrected Match | grammar 输出的 corrected text 与真值完全一致的比例，仅 `grammar_tts` 有值 |
 
 注意：离线模式的 provider 通常是 fake/mock。真实模式是否真的走真实 provider，要看 `.env` 和启动参数。
+`grammar_tts` 默认会拒绝 fake ASR、fake LLM 和 browser fallback TTS，除非你显式传
+`--allow-fake-providers`。
 
 ### Latency
 
@@ -248,7 +263,7 @@ Turns 是逐轮明细。每一行是一轮用户说话和 AI 回复。
 |---|---|
 | # | 第几轮，从 0 开始 |
 | Audio | 本轮保存下来的音频文件，可回放 |
-| Expected / ASR | 期望文本和 ASR 实际识别文本 |
+| Input / ASR | 本轮输入文本和 ASR 实际识别文本 |
 | Reply | AI 对话回复 |
 | Grammar | 语法纠错结果或错误 |
 | Pronunciation | 发音评测结果，离线默认为空 |
@@ -261,6 +276,15 @@ Turns 是逐轮明细。每一行是一轮用户说话和 AI 回复。
 - `WER` 通常是 `0.0000`。
 - `Audio` 是后端保存的假 wav bytes，只用于跑通文件路径和回放链路，不代表真实录音。
 - `Pronunciation` 默认为空，因为 mock provider 下普通音频回合默认不跑发音评测。
+
+`grammar_tts` 模式里：
+
+- `Clean` 是虚拟用户本来想说的正确句子。
+- `Injected` 是错误注入器改坏后的句子，也是 TTS 实际朗读的文本。
+- `Expected` 是 grammar 应该纠正回来的标准答案。
+- `ASR` 是真实 ASR 听完 TTS 音频后的转写。
+- `WER` 是 ASR 相对 `Injected` 的词错误率，主要用来判断 TTS→ASR 是否把错误保留下来。
+- `Grammar` 会显示预期错误类型、实际检测到的问题、expected error recall 和 corrected text 是否匹配。
 
 真实模式里：
 
@@ -278,6 +302,7 @@ Turns 是逐轮明细。每一行是一轮用户说话和 AI 回复。
 | `audio_write_ms` | 后端把本轮音频 bytes 写入文件的耗时 |
 | `audio_transcode_ms` | ffmpeg 转码到 wav 的耗时。离线 wav 假音频通常接近 0 |
 | `audio_total_ms` | 写文件加转码的总耗时 |
+| `tts_ms` | 服务端 TTS 从文本合成音频的耗时，主要出现在 `grammar_tts` |
 | `asr_ms` | ASR provider 识别音频的耗时 |
 | `end_turn_to_asr_final_ms` | 收到 `end_turn` 到发出 `asr.final` 的总耗时 |
 
@@ -302,6 +327,16 @@ TTFT 影响“AI 多久开始出字”。ITL 影响“开始出字之后吐字�
 | `pronunciation_ms` | 发音评测耗时 |
 
 语法和发音是旁路异步分析，不阻塞 AI 回复。dashboard 会把它们合并到同一轮里展示。
+
+`grammar_tts` 还会在每轮 `grammar_metrics` 里记录：
+
+| 指标 | 含义 |
+|---|---|
+| `expected_error_recall` | 预先注入的错误类型里，有多少被 grammar 结果命中 |
+| `matched_error_types` | 命中的预期错误类型 |
+| `detected_error_types` | grammar 实际返回的问题类型，做过简单别名归一 |
+| `corrected_text_match` | grammar 的 corrected text 是否与 `expected_corrected_text` 完全一致 |
+| `asr_preserved_injected_error` | ASR 文本是否还保留了注入错误，用来区分 grammar 漏检和 ASR/TTS 抹平错误 |
 
 ## RunRecord JSON 怎么看
 
@@ -331,9 +366,15 @@ reports/runs/<run_id>.json
       "user_text": "...",
       "asr_text": "...",
       "expected_text": "...",
+      "clean_text": "...",
+      "injected_text": "...",
+      "expected_corrected_text": "...",
+      "expected_error_types": ["subject_verb_agreement"],
       "audio_path": ".local/audio/...",
       "reply_text": "...",
       "grammar": {},
+      "grammar_metrics": {},
+      "tts": {},
       "pronunciation": null,
       "errors": [],
       "timings_ms": {},
@@ -345,6 +386,101 @@ reports/runs/<run_id>.json
 ```
 
 如果 dashboard 看不懂，可以先打开 JSON。JSON 是最完整、最原始的 bench 结果，页面只是把它表格化。
+
+## grammar_tts 全自动语法错误模式怎么跑
+
+这个模式最接近你想要的真实自动测试：
+
+```text
+虚拟用户生成 clean_text
+  -> 错误注入器改成 injected_text，并保存 expected_corrected_text / expected_error_types
+  -> Kokoro 本地 TTS 合成 wav
+  -> WebSocket 音频链路
+  -> faster-whisper ASR
+  -> LLM 流式对话回复
+  -> grammar_service 纠错
+  -> RunRecord 计算 WER、grammar recall、corrected match
+```
+
+先安装本地 TTS 依赖。Kokoro 需要 Python 包和 `espeak-ng`：
+
+```bash
+python3 -m pip install -e ".[tts]"
+conda install -y -c conda-forge espeak-ng
+```
+
+如果不用 conda，也可以在 Linux 系统环境安装 `espeak-ng`：
+
+```bash
+sudo apt-get install -y espeak-ng
+```
+
+模型目录按现在的项目约定放在：
+
+```text
+models/tts/Kokoro-82M/
+  kokoro-v1_0.pth
+  voices/af_heart.pt
+```
+
+可先做一次 TTS smoke test：
+
+```bash
+TTS_PROVIDER=kokoro \
+KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+python3 scripts/test_kokoro_tts.py --output /tmp/kokoro-smoke.wav
+```
+
+然后跑完整 `grammar_tts` bench：
+
+```bash
+APP_DB_PATH=/tmp/grammar-tts.sqlite \
+APP_AUDIO_DIR=/tmp/grammar-tts-audio \
+ASR_PROVIDER=faster_whisper \
+ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+LLM_PROVIDER=openai_compatible \
+LLM_BASE_URL=... \
+LLM_API_KEY=... \
+LLM_MODEL=... \
+TTS_PROVIDER=kokoro \
+KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+KOKORO_MODEL_PATH=/home/scn/xe2/models/tts/Kokoro-82M/kokoro-v1_0.pth \
+KOKORO_VOICE=af_heart \
+KOKORO_LANG_CODE=a \
+python3 scripts/run_conversation_bench.py \
+  --mode grammar_tts \
+  --scenario interview \
+  --turns 10 \
+  --output-dir /tmp/grammar-tts-report
+```
+
+`--virtual-user template` 是默认值，使用固定 clean_text，最稳定、最容易对比回归。
+如果要让用户回复内容也由 LLM 根据上下文生成，可以加：
+
+```bash
+--virtual-user llm
+```
+
+但错误注入仍是确定性的，最终真值仍来自 `expected_corrected_text` 和
+`expected_error_types`，不是让 LLM 自己裁判自己。
+
+查看结果：
+
+```bash
+BENCH_RUNS_DIR=/tmp/grammar-tts-report/runs \
+APP_AUDIO_DIR=/tmp/grammar-tts-audio \
+python3 scripts/bench_dashboard.py
+```
+
+`grammar_tts` 的重点看：
+
+- Summary 里的 `Avg Grammar Recall` 和 `Corrected Match`。
+- Turns 里 `Injected`、`ASR`、`Grammar` 是否能对应上。
+- `WER` 是否很高。如果 WER 高，说明 ASR 没听准 TTS，grammar 分数要谨慎解释。
+- Timing 里的 `tts_ms`、`asr_ms`、`reply_first_delta_ms`、`grammar_ms`。
+
+这个模式不制造发音错误。TTS 声音通常是标准发音，适合测语法/表达纠错；发音错误检测性能应单独用
+L2-ARCTIC、SpeechOcean 或真人录音做 pronunciation eval。
 
 ## 真实模式怎么跑
 
@@ -509,7 +645,7 @@ BENCH_DASHBOARD_PORT=8101 python3 scripts/bench_dashboard.py
 
 ## 推荐日常流程
 
-每次改后端 WS、ASR、LLM、grammar 或 pronunciation 相关逻辑后：
+每次改后端 WS、ASR、LLM、grammar、TTS 或 pronunciation 相关逻辑后：
 
 ```bash
 make test
@@ -523,6 +659,7 @@ python3 scripts/bench_dashboard.py
 - `Turns` 里每轮是否都有 ASR、Reply、Grammar。
 - `errors` 是否为空。
 - 如果是真实模式，看 `asr_ms`、`pronunciation_ms` 和错误信息。
+- 如果是 `grammar_tts`，看 `Avg Grammar Recall`、`Corrected Match`、`tts_ms` 和 `WER`。
 
 如果只想快速确认 CLI：
 
@@ -530,3 +667,6 @@ python3 scripts/bench_dashboard.py
 python3 scripts/run_conversation_bench.py --scenario interview --turns 2 --output-dir /tmp/bench-test
 BENCH_RUNS_DIR=/tmp/bench-test/runs python3 scripts/bench_dashboard.py
 ```
+
+如果只想快速确认 `grammar_tts` 参数和报告结构、但还没装真实 TTS/ASR，可以临时加
+`--allow-fake-providers`。这个结果只能验证框架结构，不能代表真实测试效果。

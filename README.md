@@ -137,6 +137,27 @@ python3 scripts/run_conversation_bench.py --scenario interview --turns 10
 python3 scripts/bench_dashboard.py
 ```
 
+如果要跑“虚拟用户自动生成语法错误 + 本地 TTS 合成语音 + 真实 ASR/LLM/grammar 链路”的
+全自动语法 bench，先配置真实 provider 后执行：
+
+```bash
+APP_DB_PATH=/tmp/grammar-tts.sqlite \
+APP_AUDIO_DIR=/tmp/grammar-tts-audio \
+ASR_PROVIDER=faster_whisper \
+ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+LLM_PROVIDER=openai_compatible \
+LLM_BASE_URL=... \
+LLM_API_KEY=... \
+LLM_MODEL=... \
+TTS_PROVIDER=kokoro \
+KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+python3 scripts/run_conversation_bench.py \
+  --mode grammar_tts \
+  --scenario interview \
+  --turns 10 \
+  --output-dir /tmp/grammar-tts-report
+```
+
 ### 从本地电脑访问服务器上的开发服务
 
 如果服务跑在远程服务器上，`10.x.x.x` 这类地址通常是服务器内网地址，
@@ -256,6 +277,27 @@ TTS_RESPONSE_FORMAT=mp3
 
 `TTS_BASE_URL` / `TTS_API_KEY` 为空时会自动回退到浏览器 TTS；默认测试仍走
 browser fallback，不访问外部服务。
+
+服务端本地 TTS 支持 `TTS_PROVIDER=kokoro`，主要用于后端全自动 bench
+把带语法错误的文本合成为 wav 音频。模型目录建议放在 `models/tts/`：
+
+```bash
+python3 -m pip install -e ".[tts]"
+# Linux 还需要 espeak-ng；conda 环境可优先用 conda-forge，系统环境可用 apt。
+conda install -y -c conda-forge espeak-ng
+
+TTS_PROVIDER=kokoro
+KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M
+KOKORO_MODEL_PATH=/home/scn/xe2/models/tts/Kokoro-82M/kokoro-v1_0.pth
+KOKORO_VOICE=af_heart
+KOKORO_LANG_CODE=a
+```
+
+本地 TTS smoke test：
+
+```bash
+TTS_PROVIDER=kokoro python3 scripts/test_kokoro_tts.py --output /tmp/kokoro-smoke.wav
+```
 
 普通语音对话每轮发音评测是旁路异步任务，不会阻塞 AI 回复。可用
 `PRON_ASSESS_AUDIO_TURNS=1` 显式开启，`0` 显式关闭；未设置时 mock provider

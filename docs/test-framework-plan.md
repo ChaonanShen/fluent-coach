@@ -83,8 +83,8 @@ bench **只采集、不重新埋点**。已在测的段:
 ```jsonc
 {
   "run_id": "20260606-interview-...", "scenario_id": "interview",
-  "mode": "offline_fake | real", "generated_at": "...",
-  "providers": { "llm": "...", "asr": "...", "pronunciation": "..." },
+  "mode": "offline_fake | real | real_audio | grammar_tts", "generated_at": "...",
+  "providers": { "llm": "...", "asr": "...", "pronunciation": "...", "tts": "..." },
   "turns": [{
     "index": 0,
     "input":  { "audio_path": ".local/audio/.../x.wav", "asr_text": "...", "expected_text": "..." },
@@ -138,8 +138,13 @@ session/turn,因此默认会进入当前 `APP_DB_PATH`;如需完全隔离,脚本
 - `python3 scripts/bench_dashboard.py` → 浏览器看 run 列表、每轮表格(音频回放 + ASR + 回复 + 语法;真实/显式发音档含发音分)+ 延迟分位图。
 - `... --turns 10 --real` → 需真实音频输入、`.env`、本地 ASR 模型;TTFT/ITL/ASR/可选腾讯发音段为真实数值。
 
-### 提交节奏(小步直提 master)
+### 提交节奏(小步 PR 分支)
+按 README PR 规范走新分支,每个提交只做一件事。第一阶段拆分为:
 ① WS ITL(生产)+ 测试 → ② ws_driver + run_store + report + CLI + 测试 → ③ 只读面板 dashboard + 启动脚本 + 测试。
+
+第二阶段拆分为:
+① Kokoro 本地 TTS provider + smoke 脚本 → ② grammar 错误注入与真值评分 →
+③ `grammar_tts` bench 驱动 → ④ dashboard grammar_tts 指标展示 → ⑤ README/guide/env 文档与整体验收。
 
 ## 5. 第二阶段目标:grammar_tts 全自动 bench
 
