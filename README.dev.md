@@ -104,6 +104,20 @@ GET /api/health
 cd frontend && npx playwright install chromium
 ```
 
+### 环境配置与测试隔离约定
+
+项目根目录 `.env` 是本机正常开发/演示服务配置，可能包含真实 LLM、ASR、腾讯云
+SOE 等 provider 和密钥；不要为了跑自动测试或临时验证直接改 `.env`。需要另一套
+provider 组合时，新建独立 env 文件，并用 `APP_ENV_FILE=<path>` 显式选择。
+
+自动化测试必须和正常服务隔离：
+
+- Playwright e2e 使用 `config/e2e.env`，保持 fake/mock provider 和独立存储目录。
+- Playwright 默认监听 `127.0.0.1:18000` / `127.0.0.1:15173`，不复用正常服务的
+  `8000` / `5173`。
+- 不要把测试用的 `LLM_PROVIDER=fake`、`ASR_PROVIDER=fake` 等环境变量用于正常后端启动。
+- 如果要验证真实 provider，使用 `.env` 或另一份明确命名的 env 文件启动服务；测试配置不要共享真实 provider。
+
 生成默认离线 smoke report：
 
 ```bash
