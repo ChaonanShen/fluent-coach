@@ -129,6 +129,14 @@ python3 scripts/run_smoke_report.py --mode real
 `SMOKE_L2_ARCTIC_LIMIT` 调整样本数。
 默认测试和默认 smoke report 仍不访问真实服务。
 
+后端多轮 WebSocket bench 和只读测试面板的详细说明见
+[`docs/bench-framework-guide.md`](docs/bench-framework-guide.md)。常用入口：
+
+```bash
+python3 scripts/run_conversation_bench.py --scenario interview --turns 10
+python3 scripts/bench_dashboard.py
+```
+
 ### 从本地电脑访问服务器上的开发服务
 
 如果服务跑在远程服务器上，`10.x.x.x` 这类地址通常是服务器内网地址，
