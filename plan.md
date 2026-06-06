@@ -2031,3 +2031,213 @@ WebSocket 事件：
 - Custom 场景只显示输入框和英文 placeholder，不显示 `Custom scenario` 文案。
 - `Clear` 与 `Delete selected` 尺寸一致，且 `Clear` 只清空选择。
 - 默认测试通过。
+
+### 2026-06-06 Follow-up: Pronunciation 重读重评与 Review 清理
+
+#### 背景
+
+- 现有 mistake item 的 `Review` 只是把 `review_count + 1`、`mastery + 0.15`，没有真实验证用户是否已经改正。
+- `Review` 文案容易让用户误解为“系统已确认这个错误被解决”，但当前实现并没有重新评测。
+- 后续 pronunciation 错题会提供真正有意义的 `Read again` 重读评测；保留 `Review` 会抢占注意力并造成概念混乱。
+- 现有 `/api/pronunciation/assess/upload` 会保存 assessment、挂到 session analysis、生成 pronunciation mistake，并可能影响 summary / mistake book，不适合直接用于“练习性重读”。
+- 练习性重读应当只显示本次评测结果，不修改原 mistake item，不影响 correction、mistake book、summary。
+- Mistake Book 批量 toolbar 和下方列表边框之间目前间距偏紧，需要增加一点垂直空隙。
+
+#### 设计原则
+
+- `conversation` 中的正式语音回合评测仍可写入 session analysis，并参与 summary。
+- `practice pronunciation` 是无副作用练习评测：
+  - 不写入 session analysis。
+  - 不生成 mistake item。
+  - 不刷新 mistake book 计数。
+  - 不修改原 pronunciation mistake。
+  - 只在当前 UI 区域展示本次结果。
+- 用户认为某条 pronunciation mistake 已经不需要保留时，通过 `Delete` 删除原 mistake item。
+- `Review` 按钮从 UI 删除；后端 review API 和字段先保留兼容，不在界面展示。
+
+#### PR-READ-A：文档计划追加
+
+功能描述：
+
+- 记录删除 `Review`、新增无副作用发音练习评测、错题本 pronunciation `Read again` 和 toolbar 间距的计划。
+
+实现思路：
+
+- 在 `plan.md` 追加本节。
+- 明确 `Review` 当前价值不足，前端先删除。
+- 明确 practice pronunciation 不影响 summary / mistake book。
+- 明确后续小步 PR 切分。
+
+测试方式：
+
+- 文档变更，无需运行自动化测试。
+
+#### PR-READ-B：新增无副作用发音练习 API
+
+功能描述：
+
+- 新增用于重读练习的 pronunciation practice upload API。
+
+接口建议：
+
+```http
+POST /api/pronunciation/practice/upload
+```
+
+请求体：
+
+```json
+{
+  "reference_text": "backend systems",
+  "audio_base64": "...",
+  "mime_type": "audio/webm"
+}
+```
+
+返回：
+
+- 复用 `PronunciationAssessment`。
+
+实现思路：
+
+- 新增 request schema，或复用现有 upload schema 但不接收/不使用 `session_id`。
+- 保存上传音频到 practice/temporary 语义路径，便于 provider 使用。
+- 调用 `pronunciation_provider.assess(reference_text=..., audio_file=...)`。
+- 保存 provider 原始 assessment 到 log store 可以保留，用于排查；但不调用：
+  - `_record_pronunciation_for_session`
+  - `mistake_service.add_from_pronunciation`
+- provider runtime error 继续映射为 pronunciation analysis error HTTP 响应，但不写入某个 session 的 analysis errors。
+
+测试方式：
+
+- 调用 practice upload 返回 pronunciation assessment。
+- practice upload 不增加 mistake 数量。
+- practice upload 不增加 session analysis 中的 pronunciation results。
+- invalid base64 返回 400。
+- provider error 返回现有 pronunciation error 结构。
+
+#### PR-READ-C：对话页 Pronunciation 练习区改造
+
+功能描述：
+
+- 将现有固定 `Record Reading` 区改为可输入 reference text 的重读练习区。
+- 支持读一个词、一个词组或一句话。
+
+实现思路：
+
+- 新增前端 state：
+  - `readingReferenceText`
+  - `practicePronunciation`
+- UI：
+  - 保留 Coach 面板中的 `Pronunciation` section。
+  - 用输入框/textarea 替代固定 `THEN HE WENT TO THEME PARK` 文案。
+  - placeholder 示例：`Word, phrase, or sentence to read`
+  - 按钮保留为 `Record Reading` / `Stop Reading` / `Assessing`。
+- `finishReadingAssessment` 调用新的 `/api/pronunciation/practice/upload`。
+- 不携带 `session_id`。
+- 成功后只更新本地 `practicePronunciation` 结果。
+- 不调用 `refreshMistakes()`。
+- 结果展示：
+  - Overall / Accuracy / Fluency。
+  - Low-score words。
+  - 可显示最近一次 reference text，避免用户改输入后看不清结果对应哪段文本。
+
+测试方式：
+
+- 输入 `backend systems` 后录音并上传到 practice API。
+- 请求体 reference_text 等于用户输入。
+- 练习结果显示在 Pronunciation 区。
+- 不调用 `/api/mistakes` 或 `/api/mistake-books` 刷新。
+- 空 reference text 时 `Record Reading` disabled。
+- 结束 session 后仍可按产品决策继续练习或禁用：
+  - 建议允许继续练习，因为它不影响 session 结果。
+
+#### PR-READ-D：Mistake Book 删除 Review UI
+
+功能描述：
+
+- 从 mistake item UI 中删除 `Review {count}` 按钮。
+
+实现思路：
+
+- 删除前端 `reviewMistake` handler。
+- mistake item actions 中不再渲染 `Review`。
+- 保留 `Delete`。
+- 后端 `/api/mistakes/{mistake_id}/review`、`review_count`、`mastery` 字段先保留，避免破坏已有 API 和后端测试。
+- 后续如果确认不再需要 spaced repetition，再单独清理后端字段/API。
+
+测试方式：
+
+- Mistake Book detail 中不再出现 `Review 0`。
+- 删除 mistake 仍正常。
+- 前端不再调用 review API。
+- 后端现有 review 测试可继续保留。
+
+#### PR-READ-E：Mistake Book pronunciation item 支持 Read again
+
+功能描述：
+
+- pronunciation 类型 mistake item 增加 `Read again` 重读评测按钮。
+
+实现思路：
+
+- 仅当 `mistake.type === 'pronunciation'` 时显示 `Read again`。
+- reference text 选择规则：
+  1. 优先 `mistake.practice_sentence`。
+  2. 没有时用 `mistake.word`。
+  3. 再没有时用 `mistake.wrong`。
+- 点击 `Read again`：
+  - 在该 item 内启动录音。
+  - 停止后调用 `/api/pronunciation/practice/upload`。
+  - 只在该 mistake item 内显示本次 practice assessment。
+- 不修改原 mistake item。
+- 不刷新 mistake book。
+- 用户认为该错误已解决时，手动点击 `Delete` 删除原 mistake。
+- 同一时间只允许一个 mistake item 处于重读录音/评测状态，避免麦克风状态混乱。
+
+测试方式：
+
+- grammar/expression mistake 不显示 `Read again`。
+- pronunciation mistake 显示 `Read again`。
+- 点击后发送 practice upload 请求。
+- 返回结果只展示在当前 item。
+- 原 mistake 仍存在，计数不变。
+- 点击 `Delete` 后原 mistake 才删除，计数更新。
+
+#### PR-READ-F：Mistake Book toolbar 间距
+
+功能描述：
+
+- 修复 Mistake Book 批量操作 toolbar 与下方列表边框贴得过近的问题。
+
+实现思路：
+
+- 给 `.mistake-book-toolbar` 增加 `margin-bottom`，建议 4px 到 8px。
+- 或在列表容器上增加顶部间距，但优先改 toolbar，影响范围更小。
+- 保持 Clear / Delete selected 按钮现有统一高度。
+
+测试方式：
+
+- 视觉检查 Mistake Book 列表页。
+- 前端 snapshot 不存在时，不需要新增样式测试。
+- 前端测试保持通过。
+
+#### PR 切分建议
+
+1. `PR-READ-A`：只改 `plan.md`。
+2. `PR-READ-B`：只加后端 practice pronunciation API 和后端测试。
+3. `PR-READ-C`：只改对话页 Pronunciation 练习区和前端测试。
+4. `PR-READ-D`：只删除 Mistake Book 的 Review UI 和前端测试。
+5. `PR-READ-E`：只给 pronunciation mistake item 加 `Read again` 和前端测试。
+6. `PR-READ-F`：只修 toolbar/list 间距样式。
+
+#### 验收标准
+
+- Mistake Book mistake item 不再显示 `Review` 按钮。
+- pronunciation mistake item 显示 `Read again`，grammar/expression 不显示。
+- 对话页 Pronunciation 区可以输入任意词、词组、句子并重读重评。
+- 练习性重读不会新增 mistake，不会修改 mistake book 计数，不会影响 summary。
+- 重读结果只在当前 UI 区域展示。
+- 用户删除 pronunciation mistake 后，错题本相关计数正常更新。
+- Mistake Book 批量 toolbar 与下方列表之间有自然间距。
+- 默认 `make test` 通过。
