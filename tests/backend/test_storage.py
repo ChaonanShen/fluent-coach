@@ -6,6 +6,7 @@ from backend.app.models import (
     GrammarIssue,
     GrammarSeverity,
     MistakeItem,
+    MistakeSourceStage,
     MistakeType,
     PronunciationAssessment,
     Session,
@@ -56,6 +57,13 @@ def test_sqlite_log_store_persists_analysis_outputs(tmp_path) -> None:
     )
     mistake = MistakeItem(
         type=MistakeType.GRAMMAR,
+        session_id="session_1",
+        turn_id="turn_1",
+        source_stage=MistakeSourceStage.GRAMMAR,
+        source_id=correction.id,
+        subtype="word_choice",
+        severity=GrammarSeverity.MAJOR,
+        tags=["interview", "word_choice"],
         wrong="I am interest this role.",
         correct="I am interested in this role.",
         explanation_zh="这里需要形容词 interested。",
@@ -78,4 +86,9 @@ def test_sqlite_log_store_persists_analysis_outputs(tmp_path) -> None:
     assert store.count_rows("pronunciation_assessments") == 1
     assert store.count_rows("mistake_items") == 1
     assert store.count_rows("analysis_errors") == 1
-    assert store.list_mistake_items()[0].id == mistake.id
+    restored_mistake = store.list_mistake_items(session_id="session_1")[0]
+    assert restored_mistake.id == mistake.id
+    assert restored_mistake.turn_id == "turn_1"
+    assert restored_mistake.source_stage == MistakeSourceStage.GRAMMAR
+    assert restored_mistake.subtype == "word_choice"
+    assert store.list_mistake_items(session_id="missing") == []

@@ -10,7 +10,7 @@ from backend.app.core.env import load_dotenv, provider_status
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from backend.app.api import (
@@ -35,6 +35,7 @@ from backend.app.models import (
     AnalysisStage,
     GrammarCorrection,
     MistakeItem,
+    MistakeType,
     PronunciationAssessment,
     SessionSummary,
     TurnSpeaker,
@@ -143,7 +144,7 @@ def add_text_turn(session_id: str, request: TextTurnRequest) -> TextTurnResponse
         conversation_context=[turn.text for turn in session.turns],
     )
     log_store.save_grammar_correction(correction)
-    mistake_service.add_from_grammar(correction)
+    mistake_service.add_from_grammar(correction, session_id=session.id, turn_id=user_turn.id)
     analysis_store.add_grammar_result(session.id, correction)
     session_store.save(session)
     return TextTurnResponse(
@@ -178,7 +179,7 @@ def assess_pronunciation(request: PronunciationAssessRequest) -> PronunciationAs
         raise HTTPException(status_code=404, detail="Pronunciation fixture not found")
     log_store.save_pronunciation_assessment(assessment)
     _record_pronunciation_for_session(request.session_id, assessment)
-    mistake_service.add_from_pronunciation(assessment)
+    mistake_service.add_from_pronunciation(assessment, session_id=request.session_id)
     return assessment
 
 
@@ -215,7 +216,7 @@ def assess_uploaded_pronunciation(request: PronunciationUploadRequest) -> Pronun
         raise HTTPException(status_code=404, detail="Pronunciation assessment failed")
     log_store.save_pronunciation_assessment(assessment)
     _record_pronunciation_for_session(request.session_id, assessment)
-    mistake_service.add_from_pronunciation(assessment)
+    mistake_service.add_from_pronunciation(assessment, session_id=request.session_id)
     return assessment
 
 
@@ -243,8 +244,18 @@ def get_session_analysis(session_id: str) -> SessionAnalysisResponse:
 
 
 @app.get("/api/mistakes", response_model=MistakeListResponse)
-def list_mistakes() -> MistakeListResponse:
-    return MistakeListResponse(mistakes=mistake_service.list())
+def list_mistakes(
+    session_id: str | None = None,
+    mistake_type: MistakeType | None = Query(default=None, alias="type"),
+    subtype: str | None = None,
+) -> MistakeListResponse:
+    return MistakeListResponse(
+        mistakes=mistake_service.list(
+            session_id=session_id,
+            mistake_type=mistake_type,
+            subtype=subtype,
+        )
+    )
 
 
 @app.post("/api/mistakes/{mistake_id}/review", response_model=MistakeItem)
@@ -534,6 +545,7 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     _run_ws_grammar_analysis(
                         websocket=websocket,
                         session_id=session.id,
+                        turn_id=user_turn.id,
                         scenario_id=scenario.id,
                         user_text=transcript,
                         conversation_context=[turn.text for turn in session.turns],
@@ -546,6 +558,7 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                         _run_ws_pronunciation_analysis(
                             websocket=websocket,
                             session_id=session.id,
+                            turn_id=user_turn.id,
                             reference_text=transcript,
                             audio_file=str(stored_audio.preferred_path.resolve()),
                             timings=dict(timings),
@@ -571,6 +584,7 @@ async def _run_ws_grammar_analysis(
     *,
     websocket: WebSocket,
     session_id: str,
+    turn_id: str,
     scenario_id: str,
     user_text: str,
     conversation_context: list[str],
@@ -612,7 +626,7 @@ async def _run_ws_grammar_analysis(
         conversation_context=conversation_context,
     )
     log_store.save_grammar_correction(correction)
-    mistake_service.add_from_grammar(correction)
+    mistake_service.add_from_grammar(correction, session_id=session_id, turn_id=turn_id)
     analysis_store.add_grammar_result(session_id, correction)
     timings["grammar_ms"] = _elapsed_ms(grammar_started)
     await _safe_send_json(
@@ -637,6 +651,7 @@ async def _run_ws_pronunciation_analysis(
     *,
     websocket: WebSocket,
     session_id: str,
+    turn_id: str,
     reference_text: str,
     audio_file: str,
     timings: dict[str, float],
@@ -706,7 +721,7 @@ async def _run_ws_pronunciation_analysis(
 
     log_store.save_pronunciation_assessment(assessment)
     analysis_store.add_pronunciation_result(session_id, assessment)
-    mistake_service.add_from_pronunciation(assessment)
+    mistake_service.add_from_pronunciation(assessment, session_id=session_id, turn_id=turn_id)
     await _safe_send_json(
         websocket,
         {

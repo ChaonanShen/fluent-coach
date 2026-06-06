@@ -41,6 +41,12 @@ class MistakeType(StrEnum):
     PRONUNCIATION = "pronunciation"
 
 
+class MistakeSourceStage(StrEnum):
+    GRAMMAR = "grammar"
+    EXPRESSION = "expression"
+    PRONUNCIATION = "pronunciation"
+
+
 class GrammarIssue(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -130,6 +136,13 @@ class MistakeItem(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid4()))
     type: MistakeType
+    session_id: str | None = None
+    turn_id: str | None = None
+    source_stage: MistakeSourceStage | None = None
+    source_id: str | None = None
+    subtype: str | None = None
+    severity: GrammarSeverity | None = None
+    tags: list[str] = Field(default_factory=list)
     wrong: str = Field(min_length=1)
     correct: str = Field(min_length=1)
     explanation_zh: str = Field(min_length=1)
@@ -139,6 +152,8 @@ class MistakeItem(BaseModel):
     mastery: float = Field(default=0.0, ge=0.0, le=1.0)
     review_count: int = Field(default=0, ge=0)
     created_at: datetime = Field(default_factory=utc_now)
+    last_seen_at: datetime | None = None
+    next_review_at: datetime | None = None
 
 
 class AnalysisError(BaseModel):

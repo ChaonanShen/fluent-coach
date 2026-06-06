@@ -3,12 +3,14 @@ from fastapi.testclient import TestClient
 
 from backend.app.core.fixtures import load_generated_manifest, load_text_fixture
 from backend.app.main import app
+from backend.app.services.sessions import session_store
 from backend.app.services.storage import log_store
 
 
 @pytest.fixture(autouse=True)
 def clear_log_store() -> None:
     log_store.clear_all()
+    session_store.clear()
 
 
 def test_grammar_check_generates_and_merges_mistakes() -> None:
@@ -29,6 +31,29 @@ def test_grammar_check_generates_and_merges_mistakes() -> None:
     grammar_mistakes = [mistake for mistake in mistakes if mistake["type"] == "grammar"]
     assert len(grammar_mistakes) == 1
     assert grammar_mistakes[0]["wrong"] == item["error_span"]
+
+
+def test_text_turn_mistakes_keep_session_and_turn_source() -> None:
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    turn_response = client.post(
+        f"/api/sessions/{session_id}/turns/text",
+        json={"text": "I am working in this field since three years."},
+    )
+    mistakes = client.get("/api/mistakes", params={"session_id": session_id}).json()["mistakes"]
+    other_session_mistakes = client.get("/api/mistakes", params={"session_id": "not-this-session"}).json()["mistakes"]
+
+    assert turn_response.status_code == 200
+    user_turn_id = turn_response.json()["user_turn"]["id"]
+    assert mistakes
+    assert {mistake["session_id"] for mistake in mistakes} == {session_id}
+    assert {mistake["turn_id"] for mistake in mistakes} == {user_turn_id}
+    assert {mistake["source_stage"] for mistake in mistakes} >= {"grammar"}
+    assert all(mistake["source_id"] for mistake in mistakes)
+    assert all(mistake["subtype"] for mistake in mistakes)
+    assert other_session_mistakes == []
 
 
 def test_pronunciation_assessment_generates_pronunciation_mistakes() -> None:

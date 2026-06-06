@@ -10,6 +10,7 @@ from backend.app.models import (
     AnalysisError,
     GrammarCorrection,
     MistakeItem,
+    MistakeType,
     PronunciationAssessment,
     Session,
     Turn,
@@ -68,6 +69,10 @@ class SQLiteLogStore:
                 CREATE TABLE IF NOT EXISTS mistake_items (
                     id TEXT PRIMARY KEY,
                     type TEXT NOT NULL,
+                    session_id TEXT,
+                    turn_id TEXT,
+                    source_stage TEXT,
+                    subtype TEXT,
                     created_at TEXT NOT NULL,
                     payload TEXT NOT NULL
                 );
@@ -81,6 +86,10 @@ class SQLiteLogStore:
                 );
                 """
             )
+            _ensure_column(connection, "mistake_items", "session_id", "TEXT")
+            _ensure_column(connection, "mistake_items", "turn_id", "TEXT")
+            _ensure_column(connection, "mistake_items", "source_stage", "TEXT")
+            _ensure_column(connection, "mistake_items", "subtype", "TEXT")
 
     def save_session(self, session: Session) -> None:
         with self._connect() as connection:
@@ -160,19 +169,53 @@ class SQLiteLogStore:
         with self._connect() as connection:
             connection.execute(
                 """
-                INSERT OR REPLACE INTO mistake_items (id, type, created_at, payload)
-                VALUES (?, ?, ?, ?)
+                INSERT OR REPLACE INTO mistake_items (
+                    id,
+                    type,
+                    session_id,
+                    turn_id,
+                    source_stage,
+                    subtype,
+                    created_at,
+                    payload
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     mistake.id,
                     mistake.type.value,
+                    mistake.session_id,
+                    mistake.turn_id,
+                    mistake.source_stage.value if mistake.source_stage else None,
+                    mistake.subtype,
                     mistake.created_at.isoformat(),
                     _dump_model(mistake),
                 ),
             )
 
-    def list_mistake_items(self) -> list[MistakeItem]:
-        rows = self._fetch_all("SELECT payload FROM mistake_items ORDER BY created_at DESC", ())
+    def list_mistake_items(
+        self,
+        *,
+        session_id: str | None = None,
+        mistake_type: MistakeType | None = None,
+        subtype: str | None = None,
+    ) -> list[MistakeItem]:
+        clauses: list[str] = []
+        params: list[Any] = []
+        if session_id is not None:
+            clauses.append("session_id = ?")
+            params.append(session_id)
+        if mistake_type is not None:
+            clauses.append("type = ?")
+            params.append(mistake_type.value)
+        if subtype is not None:
+            clauses.append("subtype = ?")
+            params.append(subtype)
+        where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
+        rows = self._fetch_all(
+            f"SELECT payload FROM mistake_items{where} ORDER BY created_at DESC",
+            tuple(params),
+        )
         return [MistakeItem.model_validate(json.loads(row["payload"])) for row in rows]
 
     def get_mistake_item(self, mistake_id: str) -> MistakeItem | None:
@@ -252,6 +295,13 @@ class SQLiteLogStore:
 
 def _dump_model(model: object) -> str:
     return json.dumps(model.model_dump(mode="json"), ensure_ascii=False, separators=(",", ":"))
+
+
+def _ensure_column(connection: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    existing = {row["name"] for row in connection.execute(f"PRAGMA table_info({table})")}
+    if column in existing:
+        return
+    connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 log_store = SQLiteLogStore()
