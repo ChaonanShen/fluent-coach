@@ -3,7 +3,9 @@ from fastapi.testclient import TestClient
 
 from backend.app.core.fixtures import load_generated_manifest, load_text_fixture
 from backend.app.main import app
-from backend.app.services.mistakes import _pronunciation_practice_sentence
+from backend.app.models import PronunciationAssessment, PronunciationIssue
+from backend.app.services.llm import FakeLLMClient
+from backend.app.services.mistakes import MistakeService, _pronunciation_practice_sentence
 from backend.app.services.sessions import session_store
 from backend.app.services.storage import log_store
 
@@ -78,11 +80,47 @@ def test_pronunciation_assessment_generates_pronunciation_mistakes() -> None:
 def test_pronunciation_practice_sentence_uses_real_examples() -> None:
     systems_sentence = _pronunciation_practice_sentence("systems")
     working_sentence = _pronunciation_practice_sentence("working")
+    three_sentence = _pronunciation_practice_sentence("three")
 
     assert systems_sentence == "The team reviewed the systems before launch."
     assert "please say" not in systems_sentence.lower()
     assert working_sentence == "I am working with the team this afternoon."
     assert "working" in working_sentence
+    assert three_sentence == "I have three ideas for tomorrow's meeting."
+    assert "short answer" not in three_sentence.lower()
+
+
+def test_pronunciation_practice_sentence_uses_llm_when_available() -> None:
+    llm = FakeLLMClient(responses=["I have three meetings before lunch."])
+    service = MistakeService(log_store, llm_client=llm)
+    assessment = PronunciationAssessment(
+        provider="mock",
+        reference_text="I have three meetings.",
+        overall=52,
+        accuracy=48,
+        fluency=70,
+        issues=[
+            PronunciationIssue(
+                kind="word_accuracy",
+                target="three",
+                message_zh="`three` 发音准确度偏低，建议单独跟读。",
+            )
+        ],
+    )
+
+    mistakes = service.add_from_pronunciation(assessment, session_id="session_1", turn_id="turn_1")
+
+    assert llm.calls
+    assert mistakes[0].practice_sentence == "I have three meetings before lunch."
+
+
+def test_pronunciation_practice_sentence_rejects_prompt_like_llm_output() -> None:
+    llm = FakeLLMClient(responses=["Please say three clearly in this short sentence."])
+
+    sentence = _pronunciation_practice_sentence("three", llm)
+
+    assert sentence == "I have three ideas for tomorrow's meeting."
+    assert "please say" not in sentence.lower()
 
 
 def test_review_mistake_updates_count_and_mastery() -> None:

@@ -9,12 +9,18 @@ from backend.app.models import (
     MistakeType,
     PronunciationAssessment,
 )
+from backend.app.services.llm import LLMClient, LLMMessage, create_llm_client_from_env
 from backend.app.services.storage import SQLiteLogStore, log_store
 
 
 class MistakeService:
-    def __init__(self, storage: SQLiteLogStore = log_store) -> None:
+    def __init__(
+        self,
+        storage: SQLiteLogStore = log_store,
+        llm_client: LLMClient | None = None,
+    ) -> None:
         self.storage = storage
+        self.llm_client = llm_client
 
     def list(
         self,
@@ -108,7 +114,7 @@ class MistakeService:
                 wrong=issue.target,
                 correct=issue.target,
                 explanation_zh=issue.message_zh,
-                practice_sentence=_pronunciation_practice_sentence(issue.target),
+                practice_sentence=_pronunciation_practice_sentence(issue.target, self.llm_client),
                 word=issue.target,
                 mastery=0.1,
             )
@@ -159,18 +165,22 @@ class MistakeService:
 _PRONUNCIATION_SENTENCE_EXAMPLES = {
     "systems": "The team reviewed the systems before launch.",
     "theme": "The theme of the presentation was clear and focused.",
+    "three": "I have three ideas for tomorrow's meeting.",
 }
 
 
-def _pronunciation_practice_sentence(word: str) -> str:
+def _pronunciation_practice_sentence(word: str, llm_client: LLMClient | None = None) -> str:
     clean_word = re.sub(r"[^A-Za-z'-]+", " ", word).strip()
     target = clean_word or word.strip() or "word"
     normalized = target.lower()
 
+    llm_sentence = _llm_pronunciation_practice_sentence(target, llm_client)
+    if llm_sentence:
+        return llm_sentence
     if normalized in _PRONUNCIATION_SENTENCE_EXAMPLES:
         return _PRONUNCIATION_SENTENCE_EXAMPLES[normalized]
     if " " in normalized:
-        return f"The speaker used {target} in a short answer."
+        return f"I heard {target} during the meeting."
     if normalized.endswith("ing"):
         return f"I am {target} with the team this afternoon."
     if normalized.endswith("ed"):
@@ -179,7 +189,72 @@ def _pronunciation_practice_sentence(word: str) -> str:
         return f"She spoke {target} during the presentation."
     if normalized.endswith("s") and not normalized.endswith(("ss", "is", "us")):
         return f"The team reviewed the {target} before launch."
-    return f"The speaker used {target} in a short answer."
+    return f"I heard {target} during the meeting."
 
 
-mistake_service = MistakeService()
+def _llm_pronunciation_practice_sentence(target: str, llm_client: LLMClient | None) -> str | None:
+    if llm_client is None:
+        return None
+    try:
+        content = llm_client.complete(
+            [
+                LLMMessage(
+                    role="system",
+                    content=(
+                        "You write natural English pronunciation practice sentences. "
+                        "Return exactly one short, natural English sentence. "
+                        "Do not explain, do not use markdown, and do not mention that this is practice."
+                    ),
+                ),
+                LLMMessage(
+                    role="user",
+                    content=(
+                        f'Target word or phrase: "{target}". '
+                        "Write one sentence that naturally includes it once. "
+                        "Keep the sentence suitable for speaking practice and under 16 words."
+                    ),
+                ),
+            ]
+        )
+    except Exception:
+        return None
+    return _clean_pronunciation_sentence(content, target)
+
+
+def _clean_pronunciation_sentence(content: str, target: str) -> str | None:
+    sentence = content.strip().strip('"').strip("'").strip()
+    sentence = re.sub(r"^[-*]\s*", "", sentence)
+    sentence = re.sub(r"\s+", " ", sentence)
+    if not sentence:
+        return None
+    sentence = sentence.splitlines()[0].strip()
+    if not sentence.endswith((".", "?", "!")):
+        sentence = f"{sentence}."
+
+    lowered = sentence.lower()
+    blocked_phrases = [
+        "please say",
+        "target word",
+        "practice sentence",
+        "short answer",
+        "the speaker used",
+    ]
+    if any(phrase in lowered for phrase in blocked_phrases):
+        return None
+    if not _sentence_contains_target(sentence, target):
+        return None
+    if len(sentence.split()) > 18:
+        return None
+    return sentence
+
+
+def _sentence_contains_target(sentence: str, target: str) -> bool:
+    normalized_target = target.strip().lower()
+    if not normalized_target:
+        return False
+    if " " in normalized_target:
+        return normalized_target in sentence.lower()
+    return re.search(rf"\b{re.escape(normalized_target)}\b", sentence.lower()) is not None
+
+
+mistake_service = MistakeService(llm_client=create_llm_client_from_env())
