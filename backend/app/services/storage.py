@@ -224,6 +224,27 @@ class SQLiteLogStore:
             return None
         return MistakeItem.model_validate(json.loads(row["payload"]))
 
+    def delete_mistake_item(self, mistake_id: str) -> bool:
+        with self._connect() as connection:
+            cursor = connection.execute("DELETE FROM mistake_items WHERE id = ?", (mistake_id,))
+            return cursor.rowcount > 0
+
+    def delete_mistake_items_for_session(self, session_id: str) -> int:
+        with self._connect() as connection:
+            cursor = connection.execute("DELETE FROM mistake_items WHERE session_id = ?", (session_id,))
+            return int(cursor.rowcount)
+
+    def delete_mistake_items_for_sessions(self, session_ids: list[str]) -> int:
+        if not session_ids:
+            return 0
+        placeholders = ", ".join("?" for _ in session_ids)
+        with self._connect() as connection:
+            cursor = connection.execute(
+                f"DELETE FROM mistake_items WHERE session_id IN ({placeholders})",
+                tuple(session_ids),
+            )
+            return int(cursor.rowcount)
+
     def save_analysis_error(self, error: AnalysisError) -> None:
         with self._connect() as connection:
             connection.execute(

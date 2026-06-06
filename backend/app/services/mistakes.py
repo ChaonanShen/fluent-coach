@@ -30,6 +30,16 @@ class MistakeService:
     def get(self, mistake_id: str) -> MistakeItem | None:
         return self.storage.get_mistake_item(mistake_id)
 
+    def delete(self, mistake_id: str) -> bool:
+        return self.storage.delete_mistake_item(mistake_id)
+
+    def delete_for_session(self, session_id: str) -> int:
+        return self.storage.delete_mistake_items_for_session(session_id)
+
+    def delete_for_sessions(self, session_ids: list[str]) -> int:
+        unique_session_ids = list(dict.fromkeys(session_ids))
+        return self.storage.delete_mistake_items_for_sessions(unique_session_ids)
+
     def add_from_grammar(
         self,
         correction: GrammarCorrection,

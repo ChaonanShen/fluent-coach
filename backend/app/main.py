@@ -16,6 +16,8 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from backend.app.api import (
     CreateSessionRequest,
+    DeleteMistakeBooksRequest,
+    DeleteResponse,
     GrammarCheckRequest,
     MistakeBookDetail,
     MistakeBookListResponse,
@@ -314,12 +316,32 @@ def get_mistake_book(session_id: str) -> MistakeBookDetail:
     )
 
 
+@app.post("/api/mistake-books/delete", response_model=DeleteResponse)
+def delete_mistake_books(request: DeleteMistakeBooksRequest) -> DeleteResponse:
+    deleted_count = mistake_service.delete_for_sessions(request.session_ids)
+    return DeleteResponse(deleted_count=deleted_count)
+
+
+@app.delete("/api/mistake-books/{session_id}", response_model=DeleteResponse)
+def delete_mistake_book(session_id: str) -> DeleteResponse:
+    deleted_count = mistake_service.delete_for_session(session_id)
+    return DeleteResponse(deleted_count=deleted_count)
+
+
 @app.post("/api/mistakes/{mistake_id}/review", response_model=MistakeItem)
 def review_mistake(mistake_id: str) -> MistakeItem:
     mistake = mistake_service.review(mistake_id)
     if mistake is None:
         raise HTTPException(status_code=404, detail="Unknown mistake")
     return mistake
+
+
+@app.delete("/api/mistakes/{mistake_id}", response_model=DeleteResponse)
+def delete_mistake(mistake_id: str) -> DeleteResponse:
+    deleted = mistake_service.delete(mistake_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Unknown mistake")
+    return DeleteResponse(deleted_count=1)
 
 
 @app.get("/api/progress", response_model=ProgressResponse)

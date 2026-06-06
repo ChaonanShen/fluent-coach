@@ -70,3 +70,58 @@ def test_mistake_book_detail_rejects_unknown_session() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Unknown session"
+
+
+def test_delete_mistake_book_removes_all_session_mistakes() -> None:
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+    client.post(
+        f"/api/sessions/{session_id}/turns/text",
+        json={"text": "I am working in this field since three years."},
+    )
+
+    response = client.delete(f"/api/mistake-books/{session_id}")
+    books = client.get("/api/mistake-books").json()["books"]
+    detail = client.get(f"/api/mistake-books/{session_id}").json()
+
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == 2
+    assert books == []
+    assert detail["record"]["mistake_count"] == 0
+    assert detail["turn_groups"] == []
+
+
+def test_delete_mistake_book_is_idempotent_for_empty_session() -> None:
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "meeting"}).json()
+    session_id = created["session"]["id"]
+
+    response = client.delete(f"/api/mistake-books/{session_id}")
+
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == 0
+
+
+def test_bulk_delete_mistake_books_removes_selected_sessions_only() -> None:
+    client = TestClient(app)
+    first = _create_session_with_mistakes(client, "interview", "I am working in this field since three years.")
+    second = _create_session_with_mistakes(client, "interview", "I am working in this field since three years.")
+    third = _create_session_with_mistakes(client, "interview", "I am working in this field since three years.")
+
+    response = client.post(
+        "/api/mistake-books/delete",
+        json={"session_ids": [first, second]},
+    )
+    remaining_books = client.get("/api/mistake-books").json()["books"]
+
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == 4
+    assert [book["session_id"] for book in remaining_books] == [third]
+
+
+def _create_session_with_mistakes(client: TestClient, scenario_id: str, text: str) -> str:
+    created = client.post("/api/sessions", json={"scenario_id": scenario_id}).json()
+    session_id = created["session"]["id"]
+    client.post(f"/api/sessions/{session_id}/turns/text", json={"text": text})
+    return session_id

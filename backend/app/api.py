@@ -133,6 +133,18 @@ class MistakeBookDetail(BaseModel):
     turn_groups: list[MistakeTurnGroup]
 
 
+class DeleteMistakeBooksRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_ids: list[str] = Field(default_factory=list)
+
+
+class DeleteResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    deleted_count: int = Field(ge=0)
+
+
 class SessionAnalysisResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

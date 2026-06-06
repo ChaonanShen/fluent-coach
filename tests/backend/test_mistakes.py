@@ -97,3 +97,35 @@ def test_review_mistake_rejects_unknown_id() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Unknown mistake"
+
+
+def test_delete_mistake_removes_item_and_updates_book_counts() -> None:
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+    client.post(
+        f"/api/sessions/{session_id}/turns/text",
+        json={"text": "I am working in this field since three years."},
+    )
+    mistakes = client.get("/api/mistakes", params={"session_id": session_id}).json()["mistakes"]
+
+    response = client.delete(f"/api/mistakes/{mistakes[0]['id']}")
+    remaining_book = client.get(f"/api/mistake-books/{session_id}").json()
+
+    assert response.status_code == 200
+    assert response.json()["deleted_count"] == 1
+    assert remaining_book["record"]["mistake_count"] == len(mistakes) - 1
+    assert mistakes[0]["id"] not in {
+        mistake["id"]
+        for group in remaining_book["turn_groups"]
+        for mistake in group["mistakes"]
+    }
+
+
+def test_delete_mistake_rejects_unknown_id() -> None:
+    client = TestClient(app)
+
+    response = client.delete("/api/mistakes/not-found")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Unknown mistake"
