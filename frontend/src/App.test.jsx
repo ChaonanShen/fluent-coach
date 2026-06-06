@@ -522,11 +522,12 @@ test('loads scenarios and starts a session', async () => {
   expect(screen.queryByText('XEngineer')).not.toBeInTheDocument();
   expect(screen.queryByText('Candidate')).not.toBeInTheDocument();
   expect(screen.queryByText('Introduce professional background clearly')).not.toBeInTheDocument();
-  expect(screen.getByLabelText('Reading Practice')).toBeInTheDocument();
+  const readingPracticePanel = screen.getByLabelText('Reading Practice');
+  expect(readingPracticePanel).toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Coach' })).not.toBeInTheDocument();
   expect(screen.queryByDisplayValue('THEN HE WENT TO THEME PARK')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Record Reading' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Mistake Book (2)' })).toBeInTheDocument();
+  expect(within(readingPracticePanel).getByRole('button', { name: 'Mistake Book (2)' })).toBeInTheDocument();
   expect(screen.queryByText('am working')).not.toBeInTheDocument();
   expect(screen.queryByText('Progress')).not.toBeInTheDocument();
   expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
@@ -539,6 +540,7 @@ test('loads scenarios and starts a session', async () => {
   expect(within(assessmentPanel).getByText('No correction yet.')).toBeInTheDocument();
   expect(within(assessmentPanel).getByText('No pronunciation result yet.')).toBeInTheDocument();
   expect(within(assessmentPanel).getByText('No timing yet.')).toBeInTheDocument();
+  expect(within(assessmentPanel).queryByRole('button', { name: 'Mistake Book (2)' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   expect(await screen.findByText(scenario.opening_line)).toBeInTheDocument();

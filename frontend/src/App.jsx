@@ -1419,8 +1419,6 @@ export default function App() {
           analysisErrors={analysisErrors}
           latestCorrection={latestCorrection}
           latestTiming={latestTiming}
-          mistakes={mistakes}
-          openMistakeBook={() => setMainView('mistakes')}
           session={session}
           summary={summary}
           summaryState={summaryState}
@@ -1432,6 +1430,8 @@ export default function App() {
         <aside className="coach-panel reading-practice-panel" aria-label="Reading Practice">
           <ReadingPracticePanel
             assessedPracticeReferenceText={assessedPracticeReferenceText}
+            mistakeCount={mistakes.length}
+            openMistakeBook={() => setMainView('mistakes')}
             practicePronunciation={practicePronunciation}
             practiceReferenceText={practiceReferenceText}
             readingState={readingState}
@@ -1550,8 +1550,6 @@ function ConversationAssessmentPanel({
   analysisErrors,
   latestCorrection,
   latestTiming,
-  mistakes,
-  openMistakeBook,
   session,
   summary,
   summaryState,
@@ -1686,12 +1684,6 @@ function ConversationAssessmentPanel({
           </ul>
         </section>
       ) : null}
-      <section className="coach-block">
-        <h3>Mistake Book</h3>
-        <button className="secondary-action mistake-book-action" onClick={openMistakeBook} type="button">
-          Mistake Book ({mistakes.length})
-        </button>
-      </section>
     </aside>
   );
 }
@@ -1714,6 +1706,8 @@ function TurnAssessmentErrors({ errors, turnId }) {
 
 function ReadingPracticePanel({
   assessedPracticeReferenceText,
+  mistakeCount,
+  openMistakeBook,
   practicePronunciation,
   practiceReferenceText,
   readingState,
@@ -1747,6 +1741,14 @@ function ReadingPracticePanel({
         referenceLabel="Practice result"
         referenceText={assessedPracticeReferenceText}
       />
+      {openMistakeBook ? (
+        <section className="reading-practice-link">
+          <h3>Mistake Book</h3>
+          <button className="secondary-action mistake-book-action" onClick={openMistakeBook} type="button">
+            Mistake Book ({mistakeCount})
+          </button>
+        </section>
+      ) : null}
     </section>
   );
 }
