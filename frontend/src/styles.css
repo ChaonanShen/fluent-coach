@@ -181,7 +181,7 @@ h3 {
   align-items: end;
   display: grid;
   gap: 12px;
-  grid-template-columns: minmax(190px, 260px) 96px;
+  grid-template-columns: minmax(190px, 260px) minmax(0, 1fr);
   margin-bottom: 12px;
 }
 
@@ -197,7 +197,8 @@ h3 {
   margin-top: 4px;
 }
 
-.scenario-select-label {
+.scenario-select-label,
+.custom-scenario-label {
   align-items: center;
   color: #49606a;
   display: grid;
@@ -208,13 +209,13 @@ h3 {
   text-transform: uppercase;
 }
 
-.scenario-select-label span {
+.scenario-select-label span,
+.custom-scenario-label span {
   white-space: nowrap;
 }
 
 .scenario-select-label select,
-.scenario-select-label input,
-.scenario-select-label textarea {
+.custom-scenario-label textarea {
   background: #ffffff;
   border: 1px solid #cbd4cf;
   border-radius: 6px;
@@ -228,21 +229,20 @@ h3 {
   text-transform: none;
 }
 
-.scenario-select-label input,
-.scenario-select-label textarea {
-  grid-column: 2;
-}
-
-.scenario-select-label textarea {
+.custom-scenario-label textarea {
   line-height: 1.35;
-  min-height: 72px;
+  min-height: 42px;
   resize: vertical;
   text-transform: none;
 }
 
+.conversation-toolbar-fill {
+  min-height: 42px;
+}
+
 .session-action {
   margin-top: 0;
-  width: 96px;
+  width: 108px;
 }
 
 .message-list {
@@ -288,7 +288,7 @@ h3 {
   border-top: 1px solid #edf1ee;
   display: grid;
   gap: 10px;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr;
   margin-top: 16px;
   padding-top: 16px;
 }
@@ -296,21 +296,31 @@ h3 {
 .turn-form textarea {
   border: 1px solid #cbd4cf;
   border-radius: 8px;
+  grid-column: 1;
   min-height: 92px;
   padding: 12px;
   resize: vertical;
   width: 100%;
-  grid-column: 1 / -1;
 }
 
-.turn-form .primary-action {
-  justify-self: end;
+.turn-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.turn-actions .primary-action,
+.turn-actions .secondary-action {
   margin-top: 0;
+}
+
+.send-action {
   width: 120px;
 }
 
 .voice-action {
-  justify-self: end;
   width: 92px;
 }
 
@@ -764,14 +774,16 @@ h3 {
     grid-template-columns: 1fr;
   }
 
-  .scenario-select-label {
+  .scenario-select-label,
+  .custom-scenario-label {
     align-items: stretch;
     grid-template-columns: 1fr;
   }
 
-  .scenario-select-label input,
-  .scenario-select-label textarea {
-    grid-column: auto;
+  .turn-actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
   }
 
   .mistake-book-record {
@@ -796,7 +808,9 @@ h3 {
     justify-content: flex-start;
   }
 
-  .session-action {
+  .session-action,
+  .send-action,
+  .voice-action {
     width: 100%;
   }
 }

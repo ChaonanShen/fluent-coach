@@ -1084,7 +1084,10 @@ export default function App() {
                   Custom
                 </option>
               </select>
-              {selectedScenarioId === 'custom' ? (
+            </label>
+            {selectedScenarioId === 'custom' ? (
+              <label className="custom-scenario-label">
+                <span>Custom scenario</span>
                 <textarea
                   aria-label="Custom scenario"
                   disabled={sessionActive}
@@ -1094,16 +1097,10 @@ export default function App() {
                   rows={3}
                   value={customScenarioText}
                 />
-              ) : null}
-            </label>
-            <button
-              className={sessionActive ? 'secondary-action session-action' : 'primary-action session-action'}
-              disabled={!canStartSession || status === 'Starting' || status === 'Ending'}
-              onClick={sessionActive ? endSession : startSession}
-              type="button"
-            >
-              {sessionActionLabel}
-            </button>
+              </label>
+            ) : (
+              <div className="conversation-toolbar-fill" aria-hidden="true" />
+            )}
           </div>
 
           <div className="message-list" aria-label="Conversation history" ref={messageListRef}>
@@ -1123,17 +1120,27 @@ export default function App() {
               rows={3}
               value={inputText}
             />
-            <button className="primary-action" disabled={!session || !inputText.trim() || sessionEnded} type="submit">
-              Send
-            </button>
-            <button
-              className="secondary-action voice-action"
-              disabled={!session || sessionEnded || voiceState === 'processing'}
-              onClick={voiceState === 'recording' ? stopVoiceTurn : startVoiceTurn}
-              type="button"
-            >
-              {voiceState === 'recording' ? 'Stop' : voiceState === 'processing' ? 'Wait' : 'Record'}
-            </button>
+            <div className="turn-actions">
+              <button
+                className={sessionActive ? 'secondary-action session-action' : 'primary-action session-action'}
+                disabled={!canStartSession || status === 'Starting' || status === 'Ending'}
+                onClick={sessionActive ? endSession : startSession}
+                type="button"
+              >
+                {sessionActionLabel}
+              </button>
+              <button className="primary-action send-action" disabled={!session || !inputText.trim() || sessionEnded} type="submit">
+                Send
+              </button>
+              <button
+                className="secondary-action voice-action"
+                disabled={!session || sessionEnded || voiceState === 'processing'}
+                onClick={voiceState === 'recording' ? stopVoiceTurn : startVoiceTurn}
+                type="button"
+              >
+                {voiceState === 'recording' ? 'Stop' : voiceState === 'processing' ? 'Wait' : 'Record'}
+              </button>
+            </div>
           </form>
           {partialText ? <p className="partial-line">Partial: {partialText}</p> : null}
         </section>
