@@ -1229,11 +1229,11 @@ export default function App() {
                 </div>
                 <div>
                   <dt>Pronunciation</dt>
-                  <dd>{summary.pronunciation_score ?? '-'}</dd>
+                  <dd>{formatScore(summary.pronunciation_score)}</dd>
                 </div>
                 <div>
                   <dt>Tasks</dt>
-                  <dd>{Math.round(summary.task_completion_rate * 100)}%</dd>
+                  <dd>{formatPercent(summary.task_completion_rate)}</dd>
                 </div>
               </dl>
               <ul className="drill-list">
@@ -1387,23 +1387,23 @@ function summaryDeltaItems(current, previous) {
 }
 
 function formatScore(value) {
-  return typeof value === 'number' ? String(Math.round(value)) : '-';
+  return typeof value === 'number' ? value.toFixed(1) : '-';
 }
 
 function formatPercent(value) {
-  return typeof value === 'number' ? `${Math.round(value * 100)}%` : '-';
+  return typeof value === 'number' ? `${(value * 100).toFixed(1)}%` : '-';
 }
 
 function formatDelta(current, previous, percent = false) {
   if (typeof current !== 'number' || typeof previous !== 'number') {
     return '-';
   }
-  const delta = percent ? Math.round((current - previous) * 100) : Math.round(current - previous);
+  const delta = percent ? (current - previous) * 100 : current - previous;
   if (delta === 0) {
-    return percent ? '0pp' : '0';
+    return percent ? '0.0pp' : '0.0';
   }
   const prefix = delta > 0 ? '+' : '';
-  return `${prefix}${delta}${percent ? 'pp' : ''}`;
+  return `${prefix}${delta.toFixed(1)}${percent ? 'pp' : ''}`;
 }
 
 function mistakeTypeFilters(record) {
