@@ -28,7 +28,13 @@ def test_bench_dashboard_serves_runs_and_audio(monkeypatch, tmp_path) -> None:
                     expected_text="hello",
                     audio_path=str(audio_path),
                     reply_text="hi",
-                    timings_ms={"reply_first_delta_ms": 1.0},
+                    clean_text="I have three years of experience.",
+                    injected_text="I has three year experience.",
+                    expected_corrected_text="I have three years of experience.",
+                    expected_error_types=["subject_verb_agreement", "plural_noun"],
+                    grammar_metrics={"expected_error_recall": 1.0, "corrected_text_match": True},
+                    tts={"provider": "fake_audio", "voice": "test"},
+                    timings_ms={"reply_first_delta_ms": 1.0, "tts_ms": 2.0},
                     wer=0.0,
                 )
             ],
@@ -44,6 +50,8 @@ def test_bench_dashboard_serves_runs_and_audio(monkeypatch, tmp_path) -> None:
     detail = client.get("/api/runs/dashboard-run")
     assert detail.status_code == 200
     assert detail.json()["turns"][0]["reply_text"] == "hi"
+    assert detail.json()["turns"][0]["injected_text"] == "I has three year experience."
+    assert detail.json()["turns"][0]["grammar_metrics"]["expected_error_recall"] == 1.0
     audio = client.get("/api/runs/dashboard-run/turns/0/audio")
     assert audio.status_code == 200
     assert audio.content == b"fake-audio"

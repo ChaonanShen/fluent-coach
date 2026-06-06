@@ -362,6 +362,7 @@
 
     function renderSummary(run) {
       const providers = Object.entries(run.providers || {}).map(([key, value]) => `${key}: ${value || "none"}`).join(" · ");
+      const grammar = grammarSummary(run.turns || []);
       el("summary").className = "summary-grid";
       el("summary").innerHTML = `
         ${summaryCell("Run", run.run_id)}
@@ -372,6 +373,9 @@
         ${summaryCell("Providers", providers || "none")}
         ${summaryCell("Median TTFT", formatStat(run.latency_summary, "reply_first_delta_ms", "p50"))}
         ${summaryCell("Median ITL", formatStat(run.latency_summary, "reply_itl_ms", "p50"))}
+        ${summaryCell("Median TTS", formatStat(run.latency_summary, "tts_ms", "p50"))}
+        ${summaryCell("Avg Grammar Recall", grammar.recall == null ? "" : grammar.recall.toFixed(4))}
+        ${summaryCell("Corrected Match", grammar.matchRate == null ? "" : grammar.matchRate.toFixed(4))}
       `;
     }
 
@@ -406,7 +410,7 @@
     }
 
     function renderLatencyChart(entries) {
-      const rows = entries.filter(([key]) => ["asr_ms", "reply_first_delta_ms", "reply_itl_ms", "dialogue_reply_ms", "grammar_ms", "pronunciation_ms"].includes(key));
+      const rows = entries.filter(([key]) => ["tts_ms", "asr_ms", "reply_first_delta_ms", "reply_itl_ms", "dialogue_reply_ms", "grammar_ms", "pronunciation_ms"].includes(key));
       if (rows.length === 0) return "";
       const max = Math.max(...rows.map(([, stat]) => stat.p95), 1);
       const width = 760;
@@ -436,7 +440,7 @@
             <tr>
               <th style="width:44px">#</th>
               <th style="width:210px">Audio</th>
-              <th>Expected / ASR</th>
+              <th>Input / ASR</th>
               <th>Reply</th>
               <th>Grammar</th>
               <th>Pronunciation</th>
@@ -449,14 +453,17 @@
                 <td>${turn.index}</td>
                 <td>${turn.audio_path ? `<audio controls src="/api/runs/${encodeURIComponent(run.run_id)}/turns/${index}/audio"></audio>` : ""}</td>
                 <td>
+                  ${line("Clean", turn.clean_text)}
+                  ${line("Injected", turn.injected_text)}
                   ${line("Expected", turn.expected_text)}
                   ${line("ASR", turn.asr_text)}
                   ${turn.wer == null ? "" : `<span class="pill">WER ${Number(turn.wer).toFixed(4)}</span>`}
                 </td>
                 <td>${escapeHtml(turn.reply_text || "")}</td>
-                <td>${formatGrammar(turn.grammar, turn.errors)}</td>
+                <td>${formatGrammar(turn)}</td>
                 <td>${formatPronunciation(turn.pronunciation)}</td>
                 <td>
+                  ${timingPill("TTS", turn.timings_ms.tts_ms)}
                   ${timingPill("ASR", turn.timings_ms.asr_ms)}
                   ${timingPill("TTFT", turn.timings_ms.reply_first_delta_ms)}
                   ${timingPill("ITL", turn.timings_ms.reply_itl_ms)}
@@ -474,15 +481,22 @@
       return `<div><span class="label">${escapeHtml(label)}</span>${escapeHtml(value)}</div>`;
     }
 
-    function formatGrammar(grammar, errors) {
+    function formatGrammar(turn) {
+      const grammar = turn.grammar;
+      const errors = turn.errors;
       if (errors && errors.length) {
         return errors.map((error) => `<div class="error">${escapeHtml(error.stage || "error")}: ${escapeHtml(error.code || error.user_message_zh || "")}</div>`).join("");
       }
-      if (!grammar) return "";
-      const issues = grammar.issues || [];
+      const expected = turn.expected_error_types || [];
+      const metrics = turn.grammar_metrics || {};
+      if (!grammar && expected.length === 0 && Object.keys(metrics).length === 0) return "";
+      const issues = grammar && grammar.issues ? grammar.issues : [];
       return `
-        <div>${escapeHtml(grammar.corrected_text || "")}</div>
+        ${expected.map((type) => `<span class="pill">Expected ${escapeHtml(type)}</span>`).join("")}
+        <div>${escapeHtml(grammar && grammar.corrected_text || "")}</div>
         ${issues.map((issue) => `<span class="pill">${escapeHtml(issue.error_type || "issue")}</span>`).join("")}
+        ${metrics.expected_error_recall == null ? "" : `<span class="pill">Recall ${Number(metrics.expected_error_recall).toFixed(4)}</span>`}
+        ${metrics.corrected_text_match == null ? "" : `<span class="pill">Corrected ${metrics.corrected_text_match ? "match" : "diff"}</span>`}
       `;
     }
 
@@ -503,6 +517,19 @@
     function formatStat(summary, key, field) {
       const stat = summary && summary[key];
       return stat ? ms(stat[field]) : "";
+    }
+
+    function grammarSummary(turns) {
+      const metricTurns = turns.filter((turn) => turn.grammar_metrics && Object.keys(turn.grammar_metrics).length);
+      if (metricTurns.length === 0) return { recall: null, matchRate: null };
+      const recalls = metricTurns
+        .map((turn) => Number(turn.grammar_metrics.expected_error_recall))
+        .filter((value) => Number.isFinite(value));
+      const matches = metricTurns.map((turn) => turn.grammar_metrics.corrected_text_match === true ? 1 : 0);
+      return {
+        recall: recalls.length ? recalls.reduce((sum, value) => sum + value, 0) / recalls.length : null,
+        matchRate: matches.length ? matches.reduce((sum, value) => sum + value, 0) / matches.length : null,
+      };
     }
 
     function ms(value) {
