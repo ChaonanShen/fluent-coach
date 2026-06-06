@@ -1,168 +1,185 @@
-# XEngineer 第三批(6.5-6.7)
+# AI 英语口语陪练
 
-## 题目：AI 英语口语陪练
+AI 英语口语陪练是一套面向英语口语场景训练的 Web 应用。用户可以选择面试、餐厅点餐、工作会议或自定义场景，与 AI 进行文字或语音对话；系统会在对话后给出语法/表达纠错、发音评测、会话总结，并把问题沉淀到错题本中用于复习。
 
-请开发一款英语口语练习工具，帮助用户在指定场景下进行真实对话训练。要求：支持场景选择（面试 / 点餐 / 会议等）、实时语音对话、发音评测、语法/表达纠错与课后总结等。需综合考虑对话交互的自然度，语音端到端流畅性和延迟性，纠错的精准度与时机，口语能力提升的可量化反馈等。
+旧的开发说明已移动到 [README.dev.md](README.dev.md)，里面保留了 PR 规范、测试数据集维护和更底层的开发命令。
 
-## PR 规范（必须严格遵守）
+## 功能介绍
 
-- 请基于 PR 添加新功能。每个 PR 只做一件事，只实现或修改单一功能。
-- 鼓励尽可能小、粒度尽可能细的 PR；大功能应拆分为多个独立 PR 分步提交。
-- 代码变更类 PR 的标题与描述需清晰完整，内容包含：
-  - 标题：一句话说明本 PR 新增或修改了什么。
-  - 功能描述：说明该功能的作用与使用方式。
-  - 实现思路：简要说明技术选型或核心实现逻辑。
-  - 测试方式：说明如何验证该功能正常运行。
-- 文档、资料整理等非代码变更 PR，只需提供标题和简要修改说明。
-- PR 合并后，主分支代码需保持可运行状态，评委在任意时间查看应能复现演示效果。
+### 对话面板
 
-## 测试数据集脚本（scripts/）
+对话面板是主要练习入口，负责完成一次真实的场景对话。
 
-测试用的语音/文本数据来自 4 个公开数据集（LibriSpeech、SpeechOcean762、L2-ARCTIC、JFLEG）。
-原始数据包有几个 GB，**不入库**；我们只把抽取后的小样本打包成 `fixture-subset.zip`（约 20MB）提交到 git，任何人 clone 后无需下载原始数据即可跑测试。
+- 场景选择：内置 `Job Interview`、`Restaurant Ordering`、`Work Meeting`，也支持 `Custom` 自定义英文练习场景。
+- 会话控制：点击 `Start` 后 AI 先发起开场白，点击 `End` 结束本次练习并生成总结。
+- 输入方式：支持文字发送，也支持浏览器麦克风录音；语音输入会先经过 ASR 转写，再进入对话链路。
+- AI 回复：后端通过 LLM 根据当前场景、角色、目标表达和最近对话历史生成回复，并通过 WebSocket 流式返回到页面。
+- 语音播放：默认使用浏览器 `speechSynthesis` 播放 AI 回复；产品正常使用不要求下载本地 TTS 模型。
+- 对话反馈：`Conversation Assessment` 区域展示语法/表达修正和发音评测结果。纠错和发音评测是旁路异步执行，不阻塞 AI 继续对话。
+- 阅读练习：`Reading Practice` 可独立录一句英文做发音评测，不依赖当前对话轮次。
+- 性能与总结：侧边区域展示最近一轮 ASR、LLM、语法、发音、TTS 等耗时，以及本次会话的综合表现分数。
 
-### `scripts/extract_fixtures.py` —— 常用：从仓库里的 zip 还原 fixtures
+### 错题本
 
-clone 项目后，把 `fixture-subset.zip` 解开到 `fixtures/` 即可：
+错题本按会话保存用户在练习中暴露的问题，用于复盘和跟读练习。
 
-```powershell
-py scripts/extract_fixtures.py
+- 会话列表：按一次对话生成一本错题本，显示总错题数，以及 `Grammar`、`Expression`、`Pronunciation` 三类数量。
+- 详情查看：进入某一本错题本后，可以按轮次查看当时的原句、修正版、中文解释和发音问题。
+- 类型过滤：支持按语法、表达、发音筛选。
+- 发音复习：发音错题会生成目标单词和练习句，用户可以播放标准读音，也可以再次录音跟读评测。
+- 删除管理：支持删除单条错题、删除某一本错题本，也支持批量删除错题本。
+- 进步趋势：错题详情中会展示本次会话分数，并和历史记录做简单对比。
+
+## 构建与运行
+
+### 环境要求
+
+- Python 3.11+
+- Node.js 18+ 和 npm
+- ffmpeg，用于把浏览器录音转为 ASR 和腾讯云语音评测更稳定的 16kHz 单声道 WAV
+- 一个 OpenAI-compatible LLM 接口，用于 AI 对话、语法/表达纠错、总结和自定义场景
+- 腾讯云 SOE 语音评测配置，用于发音评分
+- 本地 faster-whisper ASR 模型，用于把用户语音转文字
+
+Linux 服务器可以这样安装 ffmpeg：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ffmpeg
 ```
 
-它会还原（这两个目录被 .gitignore 忽略，由 zip 派生）：
+### 安装依赖
 
-- `fixtures/generated/`  —— 各数据集的 JSON manifest
-- `fixtures/audio/public/`  —— 抽样出来的音频
+在项目根目录执行：
 
-可选参数：`--bundle-zip <路径>`（默认 `fixture-subset.zip`）、`--dest <目录>`（默认项目根）。
-
-### `scripts/prepare_fixtures.py` —— 仅维护者：从原始数据集重新生成 zip
-
-只有需要更新样本时才用。先把原始数据包放到 `dataset/`（该目录被忽略）：
-
-```text
-dataset/
-  dev-clean.tar.gz          # LibriSpeech（可选再加 test-clean.tar.gz）
-  speechocean762.tar.gz     # SpeechOcean762（OpenSLR 101）
-  l2arctic_release_v5.0.zip # L2-ARCTIC
-  jfleg-master.zip          # JFLEG
+```bash
+python3 -m pip install -e ".[dev,asr]"
+cd frontend
+npm install
+cd ..
 ```
 
-然后运行（首次会解压原始包，L2-ARCTIC 较慢）：
-
-```powershell
-py scripts/prepare_fixtures.py --bundle-zip fixture-subset.zip
-```
-
-生成 `fixtures/generated/`、`fixtures/audio/public/` 和 `fixture-subset.zip`，并打印各数据集抽取数量。
-
-常用参数：
-
-- `--skip-extract` 已解压过、只想重新扫描时用，跳过解压。
-- `--convert-wav` 若装了 ffmpeg，把音频统一转成 16kHz 单声道 WAV（否则按原格式拷贝）。
-
-> 注意：L2-ARCTIC 外层 zip 内含各说话人的子 zip（`ABA.zip` 等），SpeechOcean762 的 `scores.json` 在 `resource/` 下需与 `WAVE/` 同级——若是全新原始包，解压后可能需要按这两点调整目录再加 `--skip-extract` 重扫。生成 zip 后改用 `extract_fixtures.py` 即可，无需再碰原始数据。
-
-更新样本的流程：放好原始数据 → `prepare_fixtures.py` 生成新 `fixture-subset.zip` → 提交该 zip。
-
-## 本地开发命令
-
-首次运行先安装依赖：
+如果只想使用 Makefile，也可以执行：
 
 ```bash
 make install-backend
+python3 -m pip install -e ".[asr]"
 make install-frontend
 ```
 
-常用命令：
+### 下载并放置 ASR 模型
 
-```bash
-make test
-make test-backend
-make test-frontend
-make dev-backend
-make dev-frontend
-make test-e2e
-```
-
-`make test` 会先检查 `fixtures/generated/` 与 `fixtures/audio/public/` 是否存在。
-若缺失且项目根目录有 `fixture-subset.zip`，会自动调用
-`scripts/extract_fixtures.py` 还原测试数据。
-
-后端开发服务默认监听 `http://127.0.0.1:8000`，健康检查接口：
+产品运行只需要本地 ASR 模型。推荐下载 faster-whisper 兼容模型，并放到 `models/asr/` 下，例如：
 
 ```text
-GET /api/health
+models/
+  asr/
+    faster-whisper-small.en/
+      config.json
+      model.bin
+      tokenizer.json
+      vocabulary.*
 ```
 
-前端开发服务由 Vite 启动，`/api` 和 `/ws` 会代理到本地 FastAPI 后端。
+常用选择：
 
-`make test-e2e` 使用 Playwright 做显式浏览器 smoke，不属于默认 `make test`。
-首次运行若本机没有 Playwright 浏览器，需要先执行：
+- `faster-whisper-tiny.en`：体积小，速度快，准确率较低。
+- `faster-whisper-small.en`：推荐默认选择，速度和准确率较均衡。
+- `faster-whisper-medium.en` / `faster-whisper-large`：准确率更高，但更吃 CPU/GPU。
+
+本地模型准备好后，在 `.env` 中把 `ASR_MODEL_SIZE` 指向这个目录的绝对路径。
+
+### 配置 `.env`
+
+复制示例配置：
 
 ```bash
-cd frontend && npx playwright install chromium
+cp .env.example .env
 ```
 
-生成默认离线 smoke report：
+然后至少配置下面这些项：
 
 ```bash
-python3 scripts/run_smoke_report.py
+# 本地 ASR
+ASR_PROVIDER=faster_whisper
+ASR_MODEL_SIZE=/absolute/path/to/xe2/models/asr/faster-whisper-small.en
+ASR_DEVICE=cpu
+ASR_COMPUTE_TYPE=int8
+
+# OpenAI-compatible LLM
+LLM_PROVIDER=openai_compatible
+LLM_BASE_URL=https://your-llm-endpoint/v1
+LLM_API_KEY=your_api_key
+LLM_MODEL=your_model_name
+LLM_TIMEOUT_SECONDS=30
+
+# 腾讯云 SOE 发音评测
+PRON_PROVIDER=tencent_soe
+TENCENT_APP_ID=your_tencent_app_id
+TENCENT_SECRET_ID=your_tencent_secret_id
+TENCENT_SECRET_KEY=your_tencent_secret_key
+TENCENT_SOE_WS_URL=wss://soe.cloud.tencent.com/soe/api
+TENCENT_SOE_SERVER_ENGINE_TYPE=16k_en
+TENCENT_SOE_EVAL_MODE=1
+TENCENT_SOE_SCORE_COEFF=3.0
+
+# 普通语音对话中开启每轮发音评测；真实 provider 默认也会开启，这里显式写出便于排查。
+PRON_ASSESS_AUDIO_TURNS=1
+
+# 产品默认使用浏览器 TTS，不需要本地 TTS 模型。
+TTS_PROVIDER=browser
+
+# 本地存储位置，可按需调整。
+APP_DB_PATH=.local/speaking_coach.sqlite
+APP_AUDIO_DIR=.local/audio
 ```
 
-该报告输出到 `reports/smoke-latest.json` 和 `reports/smoke-latest.md`，
-只使用 fixtures 与 fake/mock provider，不访问真实 LLM、ASR 模型或腾讯云服务。
-
-显式生成真实 provider smoke report（会读取 `.env`，失败信息会脱敏写入报告）：
+如果服务器有 CUDA，可把 ASR 改为：
 
 ```bash
-ASR_PROVIDER=faster_whisper \
-ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
-ASR_DEVICE=cuda \
-ASR_COMPUTE_TYPE=float16 \
-python3 scripts/run_smoke_report.py --mode real
+ASR_DEVICE=cuda
+ASR_COMPUTE_TYPE=float16
 ```
 
-真实报告输出到 `reports/smoke-real-latest.json` 和
-`reports/smoke-real-latest.md`，记录 LLM、ASR、腾讯 SOE 的状态与分段延迟。
-真实 ASR smoke 会额外抽测少量 L2-ARCTIC 口音样本并记录平均 WER；可用
-`SMOKE_L2_ARCTIC_LIMIT` 调整样本数。
-默认测试和默认 smoke report 仍不访问真实服务。
+注意：`TENCENT_APP_ID` 是腾讯云应用的 APPID，不是 UIN 或主账号 ID。
 
-后端多轮 WebSocket bench 和只读测试面板的详细说明见
-[`docs/bench-framework-guide.md`](docs/bench-framework-guide.md)。常用入口：
+### 启动服务
+
+终端 1 启动后端：
 
 ```bash
-python3 scripts/run_conversation_bench.py --scenario interview --turns 10
-python3 scripts/bench_dashboard.py
+make dev-backend
 ```
 
-如果要跑“虚拟用户自动生成语法错误 + 本地 TTS 合成语音 + 真实 ASR/LLM/grammar 链路”的
-全自动语法 bench，先配置真实 provider 后执行：
+后端默认监听：
+
+```text
+http://127.0.0.1:8000
+```
+
+终端 2 启动前端：
 
 ```bash
-APP_DB_PATH=/tmp/grammar-tts.sqlite \
-APP_AUDIO_DIR=/tmp/grammar-tts-audio \
-ASR_PROVIDER=faster_whisper \
-ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
-LLM_PROVIDER=openai_compatible \
-LLM_BASE_URL=... \
-LLM_API_KEY=... \
-LLM_MODEL=... \
-TTS_PROVIDER=kokoro \
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
-python3 scripts/run_conversation_bench.py \
-  --mode grammar_tts \
-  --virtual-user llm \
-  --scenario interview \
-  --turns 10 \
-  --output-dir /tmp/grammar-tts-report
+make dev-frontend
 ```
 
-### 从本地电脑访问服务器上的开发服务
+前端默认监听：
 
-如果服务跑在远程服务器上，`10.x.x.x` 这类地址通常是服务器内网地址，
-本地电脑不能直接访问。推荐用 SSH 端口转发：
+```text
+http://127.0.0.1:5173
+```
+
+浏览器打开：
+
+```text
+http://localhost:5173/
+```
+
+Vite 会把 `/api` 和 `/ws` 自动代理到本地 FastAPI 后端。
+
+### 在服务器上访问
+
+如果后端和前端运行在服务器上，推荐使用 SSH 端口转发：
 
 ```bash
 ssh -L 5173:127.0.0.1:5173 -L 8000:127.0.0.1:8000 <user>@<server-public-ip>
@@ -174,150 +191,194 @@ ssh -L 5173:127.0.0.1:5173 -L 8000:127.0.0.1:8000 <user>@<server-public-ip>
 http://localhost:5173/
 ```
 
-前端的 `/api` 和 `/ws` 会由 Vite 代理到服务器上的后端。若不用 SSH
-转发而是直接用公网 IP 访问，需要在云服务器安全组/防火墙开放 `5173`
-端口；通常不需要把 `8000` 暴露给公网。
+如果你已经做了服务器端口映射，也可以直接访问映射后的前端端口。浏览器麦克风通常要求 HTTPS 或 `localhost` 安全上下文；通过 SSH 转发到本地 `localhost` 最省事。
 
-浏览器 TTS 听感和浏览器内置语音引擎强相关。演示时推荐使用 Microsoft Edge
-或 Chrome；不要用 QQ 浏览器做 TTS 听感验收，实测其 `speechSynthesis`
-英文朗读明显更机械。
+### 常用检查命令
 
-## 发音评测 Provider
-
-默认发音评测使用 `PRON_PROVIDER=mock`，从 SpeechOcean762 fixture 回放确定性分数，
-因此 `make test` 不访问外部服务。
-
-本地后端启动时会自动读取项目根目录 `.env`。若 `.env` 中配置了真实腾讯云 SOE，可直接启动：
+检查后端健康状态：
 
 ```bash
-make dev-backend
+curl http://127.0.0.1:8000/api/health
 ```
 
-真实 provider 会使用：
-
-- `TENCENT_APP_ID`
-- `TENCENT_SECRET_ID`
-- `TENCENT_SECRET_KEY`
-- `TENCENT_SOE_WS_URL`
-- `TENCENT_SOE_SERVER_ENGINE_TYPE`
-- `TENCENT_SOE_EVAL_MODE`
-- `TENCENT_SOE_SCORE_COEFF`
-
-默认测试仍应保持 mock；真实腾讯链路可用
-`python3 scripts/test_tencent_soe.py` 做手动 smoke test。
-
-## ASR / TTS Provider
-
-默认 ASR 使用 `ASR_PROVIDER=fake`，用于稳定测试 WebSocket 协议与对话链路。
-真实本地 ASR 使用额外依赖：
-
-- `faster-whisper`：本地 Whisper ASR 推理库，用来把语音转文字。
-- `ffmpeg`：音频解码/转码工具，用来把浏览器录音的 `webm/opus` 等格式转为
-  ASR 和腾讯 SOE 更稳定的 `16kHz mono wav`。
-
-安装方式：
+检查本地 ASR：
 
 ```bash
-make install-backend
-python3 -m pip install -e ".[asr]"
-conda install -y ffmpeg
+ASR_PROVIDER=faster_whisper \
+ASR_MODEL_SIZE=/absolute/path/to/xe2/models/asr/faster-whisper-small.en \
+python3 scripts/test_asr_provider.py
 ```
 
-可先用 fixture 音频做本地 smoke test：
+检查腾讯云 SOE：
 
 ```bash
-ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=tiny python3 scripts/test_asr_provider.py
+python3 scripts/test_tencent_soe.py
 ```
 
-`faster-whisper` 首次使用模型名（如 `tiny`、`small`）时会尝试下载模型。
-如果服务器不能访问外网，推荐手动下载 faster-whisper 兼容模型目录，放在
-`models/asr/` 下，然后把 `ASR_MODEL_SIZE` 设置为本地模型目录路径，例如：
+运行项目测试：
 
 ```bash
-ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en make dev-backend
-ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en python3 scripts/test_asr_provider.py
+make test
 ```
 
-本机 GPU 可用时可显式启用 CUDA：
+## 项目技术架构
 
-```bash
-CUDA_VISIBLE_DEVICES=0 ASR_PROVIDER=faster_whisper ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en ASR_DEVICE=cuda ASR_COMPUTE_TYPE=float16 python3 scripts/test_asr_provider.py
-```
-
-真实 ASR 集成测试默认不会运行；需要显式执行 integration marker。
-
-## 实时主链路决策
-
-当前确认的主链路是：
+整体分为浏览器前端、FastAPI 后端、模型/云服务 provider、本地 SQLite 存储四层。
 
 ```text
-浏览器录音 -> VAD/end_turn -> 整句 ASR -> LLM 流式返回/展示 -> 朗读
-                         -> 语法纠错/发音评测/错题生成异步补充
+浏览器 React UI
+  -> REST /api/scenarios, /api/sessions, /api/mistake-books, /api/progress
+  -> WebSocket /ws/sessions/{session_id}/audio
+  -> 浏览器麦克风录音 / 浏览器 speechSynthesis 播放
+
+FastAPI 后端
+  -> session / turn / summary / mistake book API
+  -> audio 保存与 ffmpeg 转码
+  -> ASR provider: faster-whisper 本地识别
+  -> LLM provider: OpenAI-compatible 对话、纠错、总结
+  -> pronunciation provider: 腾讯云 SOE 发音评测
+  -> TTS provider: browser 默认，OpenAI-compatible 可选，本地 Kokoro 仅用于 bench
+
+本地数据
+  -> .local/speaking_coach.sqlite 保存会话、轮次、纠错、发音评测、错题、总结
+  -> .local/audio 保存用户录音和转码后的 wav
 ```
 
-| 模块 | 决策 | 说明 |
-|---|---|---|
-| ASR | 按轮整句识别 | 浏览器录音仍按 WebSocket chunk 上传，但后端等一轮结束后再用 faster-whisper 识别；不做边说边改写的真流式 ASR，避免重复推理和 GPU 延迟抖动。 |
-| LLM 回复 | 返回流式 | 这是唯一需要强实时感的主路径；请求一次发送当前 session 上下文和本轮用户文本，服务端逐段返回 `reply.delta`，`reply.done` 后落库并触发朗读。 |
-| TTS | 回复完成后朗读 | 当前 browser TTS 在 Edge/Chrome 下听感可接受；逐 token 朗读不做，避免声音碎片化。后续如需更快，可考虑句子级缓冲朗读。 |
-| 语法纠错/错题 | 旁路异步 | 不阻塞 AI 回复，分析完成后通过 UI 逐步展示。 |
-| 腾讯 SOE 发音评测 | 旁路异步整段评测 | 用于发音反馈，不进入主对话实时链路；当前按完整录音评测即可，不要求流式上传或实时中间结果。 |
+一轮语音对话的数据流：
 
-TTS 默认使用 `TTS_PROVIDER=browser`，前端通过浏览器 `speechSynthesis`
-播放 AI 回复，并优先选择更自然的英文 voice。也可以启用 OpenAI-compatible
-语音接口，后端会调用 `/audio/speech` 并把音频以 base64 返回给前端播放：
+```text
+用户点击 Record
+  -> 浏览器 MediaRecorder 采集音频
+  -> WebSocket 上传 audio.chunk / end_turn
+  -> 后端保存音频并用 ffmpeg 转 16kHz mono wav
+  -> faster-whisper 整句 ASR
+  -> 保存用户 turn
+  -> LLM 根据场景、角色和历史生成 AI 回复
+  -> WebSocket 流式返回 reply.delta / reply.done
+  -> 前端展示 AI 回复并播放 TTS
+  -> 后端异步执行语法/表达纠错和腾讯云发音评测
+  -> 保存错题和评测结果
+  -> 前端刷新 Conversation Assessment、Mistake Book、Summary、Timing
+```
+
+错题本的数据流：
+
+```text
+语法/表达纠错结果 + 发音低分词
+  -> mistake_service 归类为 grammar / expression / pronunciation
+  -> SQLite 按 session_id 和 turn_id 保存
+  -> /api/mistake-books 返回会话级错题本
+  -> 前端按会话、轮次和错误类型展示
+  -> 发音错题可再次录音，走 /api/pronunciation/practice/upload 单独评测
+```
+
+主要目录：
+
+```text
+frontend/                  React + Vite 前端
+backend/app/main.py         FastAPI API 与 WebSocket 主入口
+backend/app/services/       ASR、LLM、语法、发音、错题、总结、存储等服务
+backend/app/models/         Pydantic 数据模型
+backend/app/testkit/        自动化 bench 测试框架
+scripts/                    启动、smoke、bench 和 provider 检查脚本
+fixtures/                   离线测试样例
+docs/                       更详细的系统说明和 bench 文档
+models/asr/                 本地 ASR 模型目录
+models/tts/                 本地 TTS 模型目录，仅自动化 bench 需要
+```
+
+## 全自动测试框架
+
+项目内置了一个后端 bench 框架，用来自动跑多轮 WebSocket 对话并生成报告。它不是产品页面，也不是普通单元测试；它主要用于验证真实语音链路、延迟和纠错效果。
+
+核心入口：
+
+```text
+scripts/run_conversation_bench.py  跑一次 bench，写 JSON 和 Markdown 报告
+scripts/bench_dashboard.py         启动只读 dashboard 查看多次 bench
+backend/app/testkit/               bench 数据模型、WebSocket driver、报告、dashboard 后端
+```
+
+支持的主要模式：
+
+- `offline_fake`：默认离线模式，使用固定用户台词、FakeASR、FakeLLM 和 mock 发音评测，适合快速检查 WebSocket 协议和报告生成。
+- `real`：使用真实 provider 和指定音频文件/目录，适合检查真实 ASR、LLM、腾讯 SOE 链路。
+- `grammar_tts`：全自动语法 bench。LLM 生成“面试者/顾客/团队成员”的下一句干净回复，框架自动注入语法错误，再用本地 TTS 合成音频，送进真实 ASR/LLM/grammar 链路，最后统计系统是否识别并纠正了预期错误。
+
+离线跑一次：
 
 ```bash
-TTS_PROVIDER=openai_compatible
-TTS_BASE_URL=https://example.test/v1
-TTS_API_KEY=...
-TTS_MODEL=tts-1
-TTS_VOICE=alloy
-TTS_RESPONSE_FORMAT=mp3
+python3 scripts/run_conversation_bench.py --scenario interview --turns 10
 ```
 
-`TTS_BASE_URL` / `TTS_API_KEY` 为空时会自动回退到浏览器 TTS；默认测试仍走
-browser fallback，不访问外部服务。
+可选场景：
 
-服务端本地 TTS 支持 `TTS_PROVIDER=kokoro`，主要用于后端全自动 bench
-把带语法错误的文本合成为 wav 音频。模型目录建议放在 `models/tts/`：
+```text
+interview
+restaurant_ordering
+meeting
+```
+
+启动 dashboard：
 
 ```bash
-python3 -m pip install -e ".[tts]"
-# Linux 还需要 espeak-ng；conda 环境可优先用 conda-forge，系统环境可用 apt。
-conda install -y -c conda-forge espeak-ng
-
-TTS_PROVIDER=kokoro
-KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M
-KOKORO_MODEL_PATH=/home/scn/xe2/models/tts/Kokoro-82M/kokoro-v1_0.pth
-KOKORO_VOICE=af_heart
-KOKORO_LANG_CODE=a
+python3 scripts/bench_dashboard.py
 ```
 
-本地 TTS smoke test：
+浏览器打开：
+
+```text
+http://localhost:8100/
+```
+
+如果 8100 已经被占用，通常说明 dashboard 已经在跑；也可以换端口：
 
 ```bash
-TTS_PROVIDER=kokoro python3 scripts/test_kokoro_tts.py --output /tmp/kokoro-smoke.wav
+BENCH_DASHBOARD_PORT=8101 python3 scripts/bench_dashboard.py
 ```
 
-普通语音对话每轮发音评测是旁路异步任务，不会阻塞 AI 回复。可用
-`PRON_ASSESS_AUDIO_TURNS=1` 显式开启，`0` 显式关闭；未设置时 mock provider
-默认关闭，真实发音 provider 默认开启。
+dashboard 主要面板：
 
-## LLM Provider
+- `Runs`：左侧列表，每行是一轮 bench run。
+- `Summary`：本次 run 的场景、模式、provider、轮数和核心指标。
+- `Latency`：ASR、LLM 首 token、token 间隔、语法分析、发音评测、TTS 等耗时分位数。
+- `Turns`：逐轮对话明细。页面会按场景显示角色，例如面试场景是“面试官 / 面试者”，会议场景是“项目负责人 / 团队成员”。
 
-语法/表达纠错和场景对话回复都支持接 OpenAI-compatible 大模型接口。
-默认 `LLM_PROVIDER=fake`，不会访问网络；fixture 命中时仍优先使用确定性样例，
-便于测试复现。
-
-启用真实大模型时，把 OpenAI-compatible 配置写入 `.env` 后启动后端：
+`grammar_tts` 模式需要额外的本地 TTS 模型，这只用于自动化测试，不是产品运行必需项。团队内部完整命令示例：
 
 ```bash
-make dev-backend
+APP_DB_PATH=/tmp/grammar-tts.sqlite \
+APP_AUDIO_DIR=/tmp/grammar-tts-audio \
+ASR_PROVIDER=faster_whisper \
+ASR_MODEL_SIZE=/absolute/path/to/xe2/models/asr/faster-whisper-small.en \
+ASR_DEVICE=cpu \
+ASR_COMPUTE_TYPE=int8 \
+LLM_PROVIDER=openai_compatible \
+LLM_BASE_URL=https://your-llm-endpoint/v1 \
+LLM_API_KEY=your_api_key \
+LLM_MODEL=your_model_name \
+PRON_ASSESS_AUDIO_TURNS=0 \
+TTS_PROVIDER=kokoro \
+KOKORO_MODEL_DIR=/absolute/path/to/xe2/models/tts/Kokoro-82M \
+python3 scripts/run_conversation_bench.py \
+  --mode grammar_tts \
+  --scenario meeting \
+  --turns 10 \
+  --output-dir /tmp/grammar-tts-report
 ```
 
-要求接口兼容 `/chat/completions`。真实 LLM 只在 fixture 未命中的自由输入上调用；
-JSON 解析失败会降级为当前 fallback，不中断对话。语音 WebSocket 链路支持
-`reply.delta` / `reply.done` 流式回复；不支持流式的 provider 会回退到
-一次性 `reply.text`。这里的“流式”指服务端返回流式，输入仍是一次发送当前
-session 上下文和本轮用户文本。
+对应 dashboard：
+
+```bash
+BENCH_RUNS_DIR=/tmp/grammar-tts-report/runs \
+APP_AUDIO_DIR=/tmp/grammar-tts-audio \
+python3 scripts/bench_dashboard.py
+```
+
+更详细的测试框架字段解释见 [docs/bench-framework-guide.md](docs/bench-framework-guide.md)。
+
+## 更多文档
+
+- [README.dev.md](README.dev.md)：开发者 README，包含 PR 规范、fixtures 维护、测试命令和 provider 底层说明。
+- [docs/user-facing-system-guide.md](docs/user-facing-system-guide.md)：更细的用户视角系统说明和错题标签解释。
+- [docs/bench-framework-guide.md](docs/bench-framework-guide.md)：自动化 bench 框架结构、运行方式和 dashboard 字段说明。
