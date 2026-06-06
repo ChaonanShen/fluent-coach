@@ -952,9 +952,11 @@ test('disables turn and recording controls after ending a session', async () => 
   });
   fireEvent.click(screen.getByRole('button', { name: 'End' }));
 
-  expect(await screen.findByText('Practice using: I have worked on...')).toBeInTheDocument();
   const readingPracticePanel = screen.getByLabelText('Reading Practice');
+  await within(readingPracticePanel).findByRole('heading', { name: 'Summary' });
+  expect(screen.queryByText('Practice using: I have worked on...')).not.toBeInTheDocument();
   const summaryBlock = within(readingPracticePanel).getByRole('heading', { name: 'Summary' }).closest('section');
+  expect(summaryBlock.querySelector('.summary-metrics')).toBeInTheDocument();
   expect(within(summaryBlock).getByText('Grammar').nextElementSibling).toHaveTextContent('100.0');
   expect(within(summaryBlock).getByText('Pronunciation').nextElementSibling).toHaveTextContent('-');
   expect(within(summaryBlock).getByText('Fluency').nextElementSibling).toHaveTextContent('70.0');

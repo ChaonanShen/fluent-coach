@@ -1782,7 +1782,7 @@ function SummaryPanel({ summary, summaryState }) {
   return (
     <section className="reading-practice-link" aria-label="Summary">
       <h3>Summary</h3>
-      <dl>
+      <dl className="summary-metrics">
         <div>
           <dt>Grammar</dt>
           <dd>{formatScore(summary.grammar_score)}</dd>
@@ -1800,11 +1800,6 @@ function SummaryPanel({ summary, summaryState }) {
           <dd>{formatScore(summary.vocabulary_score)}</dd>
         </div>
       </dl>
-      <ul className="drill-list">
-        {summary.next_drills.map((drill) => (
-          <li key={drill}>{drill}</li>
-        ))}
-      </ul>
     </section>
   );
 }

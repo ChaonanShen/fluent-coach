@@ -562,6 +562,29 @@ h3 {
   margin: 0;
 }
 
+.summary-metrics {
+  gap: 6px;
+  margin: 0;
+}
+
+.summary-metrics div {
+  min-height: 26px;
+}
+
+.summary-metrics dt,
+.summary-metrics dd {
+  font-size: 0.82rem;
+  line-height: 1.2;
+}
+
+.summary-metrics dt {
+  font-weight: 650;
+}
+
+.summary-metrics dd {
+  font-weight: 700;
+}
+
 .mistake-list {
   display: grid;
   gap: 10px;
