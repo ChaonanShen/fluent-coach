@@ -599,30 +599,29 @@ export default function App() {
     const audio = chunks.length === 1 && chunks[0].arrayBuffer
       ? chunks[0]
       : new Blob(chunks, { type: mimeType || 'audio/webm' });
-    const referenceText = practiceReferenceText.trim();
-    if (!referenceText) {
-      throw new Error('Enter text to read first.');
-    }
     const assessment = await uploadPracticePronunciation({
-      referenceText,
       audio,
       mimeType: audio.type || mimeType || 'audio/webm',
     });
     setPracticePronunciation(assessment);
-    setAssessedPracticeReferenceText(referenceText);
+    setPracticeReferenceText(assessment.reference_text || '');
+    setAssessedPracticeReferenceText(assessment.reference_text || '');
     setReadingState('idle');
     setStatus(sessionEnded ? 'Ended' : session ? 'In session' : 'Ready');
     stopReadingStream();
   }
 
   async function uploadPracticePronunciation({ referenceText, audio, mimeType }) {
+    const body = {
+      audio_base64: await blobToBase64(audio),
+      mime_type: mimeType || 'audio/webm',
+    };
+    if (referenceText?.trim()) {
+      body.reference_text = referenceText.trim();
+    }
     return request('/api/pronunciation/practice/upload', {
       method: 'POST',
-      body: JSON.stringify({
-        reference_text: referenceText,
-        audio_base64: await blobToBase64(audio),
-        mime_type: mimeType || 'audio/webm',
-      }),
+      body: JSON.stringify(body),
     });
   }
 
@@ -1311,7 +1310,6 @@ export default function App() {
               practicePronunciation={practicePronunciation}
               practiceReferenceText={practiceReferenceText}
               readingState={readingState}
-              setPracticeReferenceText={setPracticeReferenceText}
               startReadingRecording={startReadingRecording}
               stopReadingRecording={stopReadingRecording}
             />
@@ -1435,7 +1433,6 @@ export default function App() {
             practicePronunciation={practicePronunciation}
             practiceReferenceText={practiceReferenceText}
             readingState={readingState}
-            setPracticeReferenceText={setPracticeReferenceText}
             startReadingRecording={startReadingRecording}
             stopReadingRecording={stopReadingRecording}
           />
@@ -1711,7 +1708,6 @@ function ReadingPracticePanel({
   practicePronunciation,
   practiceReferenceText,
   readingState,
-  setPracticeReferenceText,
   startReadingRecording,
   stopReadingRecording,
 }) {
@@ -1719,17 +1715,16 @@ function ReadingPracticePanel({
     <section className="reading-practice-content">
       <h2>Reading Practice</h2>
       <textarea
-        aria-label="Text to read"
+        aria-label="Read transcript"
         className="read-reference-input"
-        disabled={readingState === 'recording' || readingState === 'assessing'}
-        onChange={(event) => setPracticeReferenceText(event.target.value)}
-        placeholder="Enter a word, phrase, or sentence to read"
+        placeholder="Your spoken text will appear here after recording"
+        readOnly
         rows={3}
         value={practiceReferenceText}
       />
       <button
         className="secondary-action assess-action"
-        disabled={!practiceReferenceText.trim() || readingState === 'assessing'}
+        disabled={readingState === 'assessing'}
         onClick={readingState === 'recording' ? stopReadingRecording : startReadingRecording}
         type="button"
       >
