@@ -1142,7 +1142,6 @@ export default function App() {
               </button>
             </div>
           </form>
-          {partialText ? <p className="partial-line">Partial: {partialText}</p> : null}
         </section>
 
         <aside className="coach-panel">

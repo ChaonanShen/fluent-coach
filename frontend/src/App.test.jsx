@@ -553,6 +553,26 @@ test('does not force-scroll delayed replies when the user is reading older messa
   expect(history.scrollTop).toBe(100);
 });
 
+test('keeps ASR partial transcription out of the visible conversation', async () => {
+  const voice = installVoiceMocks();
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  await waitFor(() => {
+    expect(voice.sentMessages.some((payload) => eventType(payload) === 'start_turn')).toBe(true);
+  });
+  expect(screen.queryByText(/Partial:/)).not.toBeInTheDocument();
+  expect(screen.queryByText('I have worked on')).not.toBeInTheDocument();
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+
+  expect(await screen.findByText('I have worked on backend systems for three years.')).toBeInTheDocument();
+});
+
 test('plays cloud TTS audio when the backend returns audio', async () => {
   cloudTtsEnabled = true;
   render(<App />);
