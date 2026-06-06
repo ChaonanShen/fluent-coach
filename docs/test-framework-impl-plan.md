@@ -1,7 +1,7 @@
 # 全自动测试框架 · 详细实现计划(可执行)
 
 > 配套设计见 [test-framework-plan.md](./test-framework-plan.md)。本文件是**逐文件、逐函数、可照着写**的实现计划。
-> 范围:第一阶段「时延档 + RunRecord 落盘 + 独立只读面板」。`plan.md` 不动。
+> 范围:第一阶段「时延档 + RunRecord 落盘 + 独立只读面板」。[plan.md](plan.md) 不动。
 > 默认 `make test` 必须保持离线、确定性(marker 配置:`addopts = -m 'not integration and not manual'`,见 `pyproject.toml`)。
 
 ## 0. 已核实的代码事实(实现前提)

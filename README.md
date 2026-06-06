@@ -280,9 +280,9 @@ backend/app/main.py         FastAPI API 与 WebSocket 主入口
 backend/app/services/       ASR、LLM、语法、发音、错题、总结、存储等服务
 backend/app/models/         Pydantic 数据模型
 backend/app/testkit/        自动化 bench 测试框架
-scripts/                    启动、smoke、bench 和 provider 检查脚本
+scripts/                    启动、smoke、bench 和 provider 检查脚本，见 scripts/README.md
 fixtures/                   离线测试样例
-docs/                       更详细的系统说明和 bench 文档
+docs/                       更详细的系统说明、计划和 bench 文档，见 docs/README.md
 models/asr/                 本地 ASR 模型目录
 models/tts/                 本地 TTS 模型目录，仅自动化 bench 需要
 ```
@@ -380,5 +380,7 @@ python3 scripts/bench_dashboard.py
 ## 更多文档
 
 - [README.dev.md](README.dev.md)：开发者 README，包含 PR 规范、fixtures 维护、测试命令和 provider 底层说明。
+- [docs/README.md](docs/README.md)：文档索引，说明 docs 下各设计、计划和调研文档的用途。
+- [scripts/README.md](scripts/README.md)：脚本索引，说明 scripts 下各工具的用途和常用命令。
 - [docs/user-facing-system-guide.md](docs/user-facing-system-guide.md)：更细的用户视角系统说明和错题标签解释。
 - [docs/bench-framework-guide.md](docs/bench-framework-guide.md)：自动化 bench 框架结构、运行方式和 dashboard 字段说明。

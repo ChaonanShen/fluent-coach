@@ -1925,7 +1925,7 @@ WebSocket 事件：
 
 实现思路：
 
-- 在 `plan.md` 追加本节。
+- 在 `docs/plan.md` 追加本节。
 - 明确 `conversation_goals` 继续用于对话推进。
 - 明确 `Tasks` 不再作为 UI 分数展示。
 - 明确后续代码 PR 切分。
@@ -2016,7 +2016,7 @@ WebSocket 事件：
 
 #### PR 切分建议
 
-1. `PR-FOLLOWUP-A`：只改 `plan.md`。
+1. `PR-FOLLOWUP-A`：只改 `docs/plan.md`。
 2. `PR-FOLLOWUP-B`：只改 Custom 输入框和批量按钮视觉/行为测试。
 3. `PR-FOLLOWUP-C`：只改 summary 分数 helpers、Summary 面板和相关测试。
 4. `PR-FOLLOWUP-D`：只改 Mistake Book 列表/详情分数展示和相关测试。
@@ -2063,7 +2063,7 @@ WebSocket 事件：
 
 实现思路：
 
-- 在 `plan.md` 追加本节。
+- 在 `docs/plan.md` 追加本节。
 - 明确 `Review` 当前价值不足，前端先删除。
 - 明确 practice pronunciation 不影响 summary / mistake book。
 - 明确后续小步 PR 切分。
@@ -2224,7 +2224,7 @@ POST /api/pronunciation/practice/upload
 
 #### PR 切分建议
 
-1. `PR-READ-A`：只改 `plan.md`。
+1. `PR-READ-A`：只改 `docs/plan.md`。
 2. `PR-READ-B`：只加后端 practice pronunciation API 和后端测试。
 3. `PR-READ-C`：只改对话页 Pronunciation 练习区和前端测试。
 4. `PR-READ-D`：只删除 Mistake Book 的 Review UI 和前端测试。
@@ -2325,7 +2325,7 @@ Mistake Book pronunciation item `Read word` / `Read sentence`：
 
 实现思路：
 
-- 在 `plan.md` 追加本节。
+- 在 `docs/plan.md` 追加本节。
 - 明确正式对话评测与独立 Reading Practice 的边界。
 - 明确后续 PR 切分与验收标准。
 
@@ -2650,7 +2650,7 @@ Mistake Book pronunciation item `Read word` / `Read sentence`：
 
 #### PR 切分建议
 
-1. `PR-3COL-A`：只改 `plan.md`。
+1. `PR-3COL-A`：只改 `docs/plan.md`。
 2. `PR-3COL-B`：只改后端 WebSocket analysis 事件 payload 和后端测试。
 3. `PR-3COL-C`：只加前端按 turn 归档状态，不大改 UI。
 4. `PR-3COL-D`：只做三栏布局骨架。
@@ -3117,7 +3117,7 @@ Mistake Book pronunciation item `Read word` / `Read sentence`：
 
 #### PR 切分与执行顺序
 
-1. `PR-ASSESS-V3-DOC`：追加本计划到 `plan.md`。
+1. `PR-ASSESS-V3-DOC`：追加本计划到 `docs/plan.md`。
 2. `PR-ASSESS-V3-A`：Assessment 核心 section 滚动化 + correction 标签。
 3. `PR-ASSESS-V3-B`：PronunciationResult 顺序调整 + Conversation Assessment 不展示 pronunciation 原话。
 4. `PR-ASSESS-V3-C`：Timing / Summary 移到 Reading Practice 第三栏。

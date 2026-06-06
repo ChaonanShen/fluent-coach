@@ -151,6 +151,8 @@ python3 scripts/run_conversation_bench.py --scenario interview --turns 10
 python3 scripts/bench_dashboard.py
 ```
 
+脚本用途和常用参数汇总见 [`scripts/README.md`](scripts/README.md)。
+
 如果要跑“虚拟用户自动生成语法错误 + 本地 TTS 合成语音 + 真实 ASR/LLM/grammar 链路”的
 全自动语法 bench，先配置真实 provider 后执行：
 
