@@ -1666,3 +1666,244 @@ WebSocket 事件：
 - 多选/全选删除可一次删除多个错题本记录。
 - 桌面端 Mistake Book 页面长内容可以滚动到底部。
 - 默认 `make test` 仍通过。
+
+### 2026-06-06 对话 UI 与错题本量化结果改进计划
+
+> 说明：当前 Practice UI 中，选择 `Custom` 后自定义场景输入框会出现在 Scenario 下拉框下方，导致顶部工具栏高度突然变大；`Start/End` 独占右侧位置，使自定义输入框没有自然落点。语音输入时的 `Partial: xxx` 是 ASR 实时临时转写，但目前以调试文本形式显示，容易让用户困惑。错题本已经按对话组织，但列表和详情仍主要展示错题数量，没有把每个对话结束后的量化 summary 分数直接呈现出来。
+
+#### 目标
+
+- Practice 页面布局更稳定：
+  - `Scenario` 下拉框保持在左侧。
+  - `Custom` 场景 prompt 输入框在选择 `Custom` 时显示在右侧，也就是当前 `Start/End` 所在区域。
+  - `Start/End` 移到对话输入区底部，和 `Send`、`Record` 放在同一组操作里。
+  - 底部必须保持三个独立按钮：`Start/End`、`Send`、`Record`；`Send` 和 `Record` 不能合并成一个控件。
+- `Partial: xxx` 不再以 debug 文案露出：
+  - 录音中可以显示更自然的临时听写状态。
+  - 或者先完全隐藏 partial，只保留 `Recording / Processing` 状态。
+- 每个对话结束后保留一组量化结果：
+  - `grammar_score`
+  - `pronunciation_score`
+  - `fluency_score`
+  - `vocabulary_score`
+  - `task_completion_rate`
+- 错题本列表和详情页展示对应对话的量化结果。
+- 错题本当前重复的浅色副标题行不再显示 `scenario_name - created_at`，改为展示 summary 分数。
+- 后续可在错题本详情里展示历次对话成绩变化趋势。
+
+#### 当前实现基础
+
+- 已有 `SessionSummary` 模型：
+  - `grammar_score`
+  - `pronunciation_score`
+  - `fluency_score`
+  - `vocabulary_score`
+  - `task_completion_rate`
+  - `top_issues`
+  - `next_drills`
+- 已有接口：`GET /api/sessions/{session_id}/summary`。
+- 结束对话时前端已经调用 summary 接口，并在 Coach 侧边栏展示 Summary。
+- 已有 `/api/progress`，会按 session 计算分数趋势。
+- 缺口：
+  - summary 目前按需计算，没有独立持久化成 session summary record。
+  - `/api/mistake-books` 和 `/api/mistake-books/{session_id}` 没有返回 summary。
+  - Mistake Book UI 没有展示 summary 分数。
+  - `Partial:` 文案对最终用户不友好。
+
+#### PR-UI-A：Practice 顶部与底部操作布局调整
+
+功能描述：
+
+- 把 `Start/End` 从顶部 toolbar 移到对话输入区底部，与 `Send`、`Record` 放在同一组操作按钮里。
+- 底部 action 区明确保留三个独立按钮：`Start/End`、`Send`、`Record`。
+- 选择 `Custom` 后，自定义场景 prompt 输入框显示在顶部 toolbar 右侧，不再挤在 Scenario 下拉框下方。
+
+实现思路：
+
+- `conversation-toolbar` 改成两列：
+  - 左列：Scenario 下拉框。
+  - 右列：Custom prompt textarea，仅 `selectedScenarioId === "custom"` 时显示。
+- 普通非 custom 场景下，右列可为空或显示当前场景的简短只读摘要，不放操作按钮。
+- `turn-form` 改成：
+  - textarea 占满一行。
+  - 下方 action row 放三个独立 button：`Start/End`、`Send`、`Record`。
+  - `Send` 继续只提交文本输入；`Record` 继续只控制语音录制。
+- `Start` 仍沿用现有 `canStartSession`：
+  - 普通场景选择后可 start。
+  - custom 场景需要 prompt 至少 3 个字符。
+- `End` 仍只在 active session 下显示/可用。
+- 保持移动端单列布局，Custom prompt 自然排在下拉框下方，但不在桌面端撑高左侧 label。
+
+测试方式：
+
+- 默认场景下 `Start` 仍可启动会话。
+- 选择 `Custom` 后，未输入 prompt 时 `Start` disabled。
+- 输入 custom prompt 后 `Start` enabled，并发送 `custom_prompt`。
+- 发送文本 turn 的 `Send` 行为不变。
+- 结束 session 后 controls disabled 状态不回退。
+
+#### PR-UI-B：Partial 语音临时转写展示调整
+
+功能描述：
+
+- 移除面向用户的 `Partial: xxx` debug 文案。
+- 语音录制时用更自然的状态展示 ASR 临时结果。
+
+实现思路：
+
+- 第一版推荐最小改动：
+  - 不再渲染 `Partial: {partialText}`。
+  - 保留内部 `partialText` 状态，仍用于调试和未来 UI。
+  - 用户只看到按钮状态 `Record / Stop / Wait` 和顶栏 status。
+- 如果需要保留可见临时听写：
+  - 在 message list 底部加一个临时 user bubble。
+  - 文案只显示临时转写内容，不加 `Partial:`。
+  - `asr.final` 到达后替换为正式 user turn，并清空临时 bubble。
+- 这一步先选“隐藏 partial”，降低 UI 和测试变更范围；后续需要可再做 bubble 版。
+
+测试方式：
+
+- WebSocket 收到 `asr.partial` 时页面不出现 `Partial:`。
+- 收到 `asr.final` 后用户最终文本仍进入对话。
+- streaming/delayed reply 的滚动行为不变。
+
+#### PR-SCORE-A：Session Summary 持久化
+
+功能描述：
+
+- 每个对话结束后，把量化 summary 保存下来，作为该对话的稳定成绩记录。
+
+实现思路：
+
+- `SQLiteLogStore` 新增 `session_summaries` 表：
+  - `id`
+  - `session_id`
+  - `created_at`
+  - `payload`
+- 新增方法：
+  - `save_session_summary(summary: SessionSummary) -> None`
+  - `get_session_summary(session_id: str) -> SessionSummary | None`
+  - `list_session_summaries() -> list[SessionSummary]`
+- `GET /api/sessions/{session_id}/summary` 语义：
+  - 如果已经保存 summary，优先返回保存结果。
+  - 如果没有保存，则按当前逻辑计算，并保存后返回。
+- `end_session` 流程：
+  - session 标记 ended 后生成 summary。
+  - 保存 summary。
+- 保持兼容：旧 session 没有 summary 时仍可按需生成。
+
+测试方式：
+
+- 第一次请求 summary 会计算并保存。
+- 第二次请求同一 session summary 返回保存结果，不重复调用 grammar provider。
+- 旧 summary API 返回结构不变。
+- `make test` 中 fake provider 行为保持稳定。
+
+#### PR-SCORE-B：Mistake Book API 返回量化结果
+
+功能描述：
+
+- 错题本列表和详情 API 带上当前对话的 summary 分数。
+
+实现思路：
+
+- `MistakeBookRecord` 增加：
+  - `summary: SessionSummary | None`
+- `_mistake_book_record(session, mistakes)` 中：
+  - 如果 session 已 ended，优先读取保存的 summary。
+  - 如果 session active 或 summary 不存在，则可返回 `None`，避免列表频繁触发昂贵计算。
+  - 可选：对 ended 但没有保存 summary 的旧 session，调用 summary service 计算并保存。
+- `GET /api/mistake-books`：
+  - 每条 book record 返回 summary。
+- `GET /api/mistake-books/{session_id}`：
+  - detail.record 返回同样 summary。
+- 删除错题本仍只删除 mistake items，不删除 session summary。
+  - 原因：错题本记录如果没有 mistakes 默认不会显示；但历史成绩属于 session 结果，不应被删除错题操作误删。
+  - 如果后续需要“彻底删除对话记录”，另开 API。
+
+测试方式：
+
+- 结束带 mistakes 的 session 后，`/api/mistake-books` 返回 `summary.grammar_score` 等字段。
+- detail record 中也有 summary。
+- active session 没有 summary 时字段为 `null`。
+- 删除 mistake book 后 summary 不影响删除计数。
+
+#### PR-SCORE-C：Mistake Book UI 展示分数并去掉重复浅色副标题
+
+功能描述：
+
+- 错题本列表卡片和详情页顶部显示量化分数。
+- 去掉当前重复的浅色 `scenario_name - created_at` 行。
+
+实现思路：
+
+- 新增前端 helper：
+  - `summaryScoreItems(summary)`
+  - 输出 `Grammar`、`Pronunciation`、`Fluency`、`Vocabulary`、`Tasks`。
+  - 分数为空时显示 `-`。
+  - `task_completion_rate` 显示为百分比。
+- 列表卡片：
+  - 加粗标题保留：例如 `Job Interview - 2026-06-05 00:00 UTC`。
+  - 原浅色副标题行替换成 `.summary-score-row`。
+  - mistake counts 仍保留在右侧或下一行，避免丢失错题数量信息。
+- 详情页：
+  - h2 标题保留。
+  - 原浅色 `scenario_name - time` 替换成 summary score row。
+  - `Grammar/Expression/Pronunciation` 错题筛选按钮继续保留。
+- active session 或没有 summary 的记录：
+  - 显示 `Summary pending`，或每项为 `-`。
+  - 推荐 `Summary pending`，更容易理解。
+
+测试方式：
+
+- Mistake Book 列表显示 `Grammar 100`、`Fluency 70` 等 summary 分数。
+- 列表不再显示重复的 `Job Interview - 06/05...` 浅色行。
+- 详情页顶部显示 summary 分数。
+- 详情页类型筛选按钮仍能工作。
+- 删除单条错题后 summary 分数不因删除即时变化，除非重新生成 session summary。
+
+#### PR-SCORE-D：成绩趋势增强
+
+功能描述：
+
+- 在错题本详情页显示这个用户近期对话成绩变化。
+
+实现思路：
+
+- 先复用现有 `/api/progress`：
+  - 取所有 session 的 summary trend。
+  - 在 detail 页按当前 session 定位并显示与上一场的 delta。
+- 详情页展示：
+  - `Grammar +8`
+  - `Pronunciation -`
+  - `Fluency +5`
+  - `Vocabulary +3`
+- 也可以只显示最近 5 场小型列表，不引入图表库。
+- 暂不做复杂 chart，避免 UI 增重。
+
+测试方式：
+
+- 多个 ended session 时，当前详情显示相对上一场变化。
+- 第一场没有上一场时显示 `First scored conversation`。
+- progress API 旧测试保持通过。
+
+#### PR 切分建议
+
+1. `PR-UI-A`：布局调整，只改 Practice UI 和前端测试。
+2. `PR-UI-B`：Partial 隐藏/重做，只改语音展示和前端测试。
+3. `PR-SCORE-A`：summary 持久化，只改后端和后端测试。
+4. `PR-SCORE-B`：Mistake Book API 带 summary，只改后端 API schema/实现/测试。
+5. `PR-SCORE-C`：Mistake Book UI 展示 summary 分数，只改前端 UI/测试。
+6. `PR-SCORE-D`：趋势增强，作为可选后续。
+
+#### 验收标准
+
+- 选择 `Custom` 后，prompt 输入框出现在顶部右侧，不再在 Scenario 下拉框下方撑开。
+- `Start/End` 与 `Send/Record` 在底部 action 区。
+- 页面不再出现 `Partial: xxx`。
+- 对话结束后生成并保存 summary 分数。
+- 错题本列表中每个对话能看到 Grammar/Pronunciation/Fluency/Vocabulary/Tasks 量化结果。
+- 点进某个错题本，顶部能看到该对话对应量化结果。
+- 原来重复的浅色 `标题/场景-时间` 信息不再重复展示。
+- 错题筛选、单条删除、多选删除、滚动能力保持可用。
+- 默认 `make test` 通过。
