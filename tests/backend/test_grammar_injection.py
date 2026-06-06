@@ -42,6 +42,26 @@ def test_score_grammar_result_counts_error_type_recall_and_correction_match() ->
     assert metrics["asr_preserved_injected_error"] is True
 
 
+def test_score_grammar_result_normalizes_real_provider_error_type_names() -> None:
+    case = next_error_case("interview", 2)
+    grammar = {
+        "corrected_text": "One challenge I faced was communicating the trade-offs clearly.",
+        "issues": [
+            {"error_type": "tense_mismatch"},
+            {"error_type": "verb_form_error"},
+        ],
+    }
+
+    metrics = score_grammar_result(
+        case,
+        grammar,
+        "One challenge I face was communicate the trade-offs clearly.",
+    )
+
+    assert metrics["expected_error_recall"] == 1.0
+    assert metrics["matched_error_types"] == ["gerund", "verb_tense"]
+
+
 def test_inject_errors_derives_case_from_clean_text() -> None:
     case = inject_errors(
         "I have three years of experience and finished a platform project.",

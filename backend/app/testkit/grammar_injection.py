@@ -8,10 +8,10 @@ from backend.app.testkit.grammar_cases import GrammarErrorCase, grammar_case_seq
 
 ERROR_TYPE_ALIASES: dict[str, set[str]] = {
     "subject_verb_agreement": {"subject_verb_agreement", "agreement", "verb_agreement", "subject verb agreement"},
-    "plural_noun": {"plural_noun", "plural", "noun_number", "number", "singular_plural"},
-    "verb_tense": {"verb_tense", "tense", "past_tense", "verb tense"},
-    "article": {"article", "articles", "determiner", "missing_article"},
-    "gerund": {"gerund", "verb_form", "verb form"},
+    "plural_noun": {"plural_noun", "plural", "pluralization", "noun_number", "number", "singular_plural"},
+    "verb_tense": {"verb_tense", "verb_tense_error", "tense", "tense_mismatch", "past_tense", "verb tense"},
+    "article": {"article", "articles", "determiner", "missing_article", "article_missing"},
+    "gerund": {"gerund", "verb_form", "verb_form_error", "verb_form_after_'was'", "verb form"},
     "modal_verb": {"modal_verb", "modal", "modal verb"},
 }
 
