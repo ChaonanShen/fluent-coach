@@ -53,7 +53,7 @@ from backend.app.models import (
 )
 from backend.app.services.analysis import analysis_store
 from backend.app.services.asr import asr_provider
-from backend.app.services.audio import save_turn_audio
+from backend.app.services.audio import StoredAudio, save_turn_audio
 from backend.app.services.custom_scenarios import build_custom_scenario
 from backend.app.services.dialogue import dialogue_service
 from backend.app.services.grammar import grammar_service
@@ -249,12 +249,16 @@ def assess_uploaded_pronunciation(request: PronunciationUploadRequest) -> Pronun
 
 @app.post("/api/pronunciation/practice/upload", response_model=PronunciationAssessment)
 def assess_practice_pronunciation(request: PronunciationPracticeUploadRequest) -> PronunciationAssessment:
+    stored_audio = _store_uploaded_audio(
+        audio_base64=request.audio_base64,
+        mime_type=request.mime_type,
+        audio_session_id="pronunciation-practice",
+    )
+    reference_text = request.reference_text or _transcribe_practice_audio(stored_audio)
     try:
-        assessment = _assess_uploaded_audio(
-            reference_text=request.reference_text,
-            audio_base64=request.audio_base64,
-            mime_type=request.mime_type,
-            audio_session_id="pronunciation-practice",
+        assessment = _assess_uploaded_audio_path(
+            reference_text=reference_text,
+            audio_path=stored_audio.preferred_path,
         )
     except RuntimeError as exc:
         error = _provider_analysis_error(
@@ -878,6 +882,23 @@ def _assess_uploaded_audio(
     mime_type: str | None,
     audio_session_id: str,
 ) -> PronunciationAssessment | None:
+    stored_audio = _store_uploaded_audio(
+        audio_base64=audio_base64,
+        mime_type=mime_type,
+        audio_session_id=audio_session_id,
+    )
+    return _assess_uploaded_audio_path(
+        reference_text=reference_text,
+        audio_path=stored_audio.preferred_path,
+    )
+
+
+def _store_uploaded_audio(
+    *,
+    audio_base64: str,
+    mime_type: str | None,
+    audio_session_id: str,
+) -> StoredAudio:
     try:
         audio_bytes = base64.b64decode(audio_base64, validate=True)
     except (binascii.Error, ValueError) as exc:
@@ -885,14 +906,53 @@ def _assess_uploaded_audio(
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="Uploaded audio is empty")
 
-    stored_audio = save_turn_audio(
+    return save_turn_audio(
         session_id=audio_session_id,
         audio_bytes=audio_bytes,
         mime_type=mime_type,
     )
+
+
+def _transcribe_practice_audio(stored_audio: StoredAudio) -> str:
+    if stored_audio.conversion_error and _provider_name(asr_provider) != "fake":
+        error = _provider_analysis_error(
+            stage=AnalysisStage.ASR,
+            exc=RuntimeError(stored_audio.conversion_error),
+            provider_name=_provider_name(asr_provider),
+            fallback_applied=False,
+        )
+        raise _analysis_http_error(error)
+    try:
+        transcript = asr_provider.transcribe_file(stored_audio.preferred_path).strip()
+    except RuntimeError as exc:
+        error = _provider_analysis_error(
+            stage=AnalysisStage.ASR,
+            exc=exc,
+            provider_name=_provider_name(asr_provider),
+            fallback_applied=False,
+        )
+        raise _analysis_http_error(error) from exc
+    if not transcript:
+        error = AnalysisError(
+            stage=AnalysisStage.ASR,
+            code="asr_no_speech",
+            user_message_zh="没有识别到清晰语音，请重新录音后再试。",
+            severity=AnalysisErrorSeverity.WARNING,
+            fallback_applied=False,
+            provider=_provider_name(asr_provider),
+        )
+        raise _analysis_http_error(error)
+    return transcript
+
+
+def _assess_uploaded_audio_path(
+    *,
+    reference_text: str,
+    audio_path,
+) -> PronunciationAssessment | None:
     return pronunciation_provider.assess(
         reference_text=reference_text,
-        audio_file=str(stored_audio.preferred_path.resolve()),
+        audio_file=str(audio_path.resolve()),
     )
 
 

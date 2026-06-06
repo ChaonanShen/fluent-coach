@@ -142,6 +142,42 @@ def test_pronunciation_practice_upload_has_no_session_or_mistake_side_effects(
     assert client.get("/api/mistakes").json()["mistakes"] == []
 
 
+def test_pronunciation_practice_upload_transcribes_when_reference_is_missing(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setenv("APP_AUDIO_DIR", str(tmp_path))
+    client = TestClient(app)
+    item = load_generated_manifest("speechocean762")["items"][0]
+    seen_paths: list[Path] = []
+
+    class PracticeASR:
+        provider_name = "fake"
+
+        def transcribe_file(self, audio_path, expected_text=None):
+            del expected_text
+            seen_paths.append(Path(audio_path))
+            return item["transcript"]
+
+    monkeypatch.setattr("backend.app.main.asr_provider", PracticeASR())
+
+    response = client.post(
+        "/api/pronunciation/practice/upload",
+        json={
+            "audio_base64": base64.b64encode(b"practice-audio").decode("ascii"),
+            "mime_type": "audio/wav",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    audio_path = Path(body["audio_file"])
+    assert body["provider"] == "mock"
+    assert body["reference_text"] == item["transcript"]
+    assert seen_paths == [audio_path]
+    assert audio_path.read_bytes() == b"practice-audio"
+
+
 def test_pronunciation_practice_upload_rejects_invalid_base64() -> None:
     client = TestClient(app)
 

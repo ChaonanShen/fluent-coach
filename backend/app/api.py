@@ -93,7 +93,7 @@ class PronunciationUploadRequest(BaseModel):
 class PronunciationPracticeUploadRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    reference_text: str = Field(min_length=1)
+    reference_text: str | None = Field(default=None, min_length=1)
     audio_base64: str = Field(min_length=1)
     mime_type: str | None = Field(default=None, min_length=1)
 
