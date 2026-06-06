@@ -29,11 +29,112 @@ const openingTurn = {
 let pronunciationUploadFails = false;
 let cloudTtsEnabled = false;
 let sessionRequestBodies = [];
+let deletedMistakeIds = new Set();
+
+function mockGrammarMistake(overrides = {}) {
+  return {
+    id: 'mistake_1',
+    type: 'grammar',
+    session_id: 'session_1',
+    turn_id: 'turn_user_1',
+    source_stage: 'grammar',
+    source_id: 'correction_1',
+    subtype: 'tense',
+    severity: 'major',
+    tags: ['interview', 'tense'],
+    wrong: 'am working',
+    correct: 'have been working',
+    explanation_zh: '时态错误。',
+    practice_sentence: 'I have been working in this field for three years.',
+    word: null,
+    phoneme: null,
+    mastery: 0.1,
+    review_count: 0,
+    created_at: '2026-06-05T00:00:04Z',
+    last_seen_at: '2026-06-05T00:00:04Z',
+    next_review_at: null,
+    ...overrides,
+  };
+}
+
+function mockExpressionMistake(overrides = {}) {
+  return {
+    id: 'mistake_2',
+    type: 'expression',
+    session_id: 'session_1',
+    turn_id: 'turn_user_1',
+    source_stage: 'expression',
+    source_id: 'correction_1',
+    subtype: 'natural_expression',
+    severity: 'minor',
+    tags: ['interview', 'natural_expression'],
+    wrong: 'since three years',
+    correct: 'for the past three years',
+    explanation_zh: '表达可以更自然。',
+    practice_sentence: 'I have spent the past three years working in this field.',
+    word: null,
+    phoneme: null,
+    mastery: 0.2,
+    review_count: 0,
+    created_at: '2026-06-05T00:00:05Z',
+    last_seen_at: '2026-06-05T00:00:05Z',
+    next_review_at: null,
+    ...overrides,
+  };
+}
+
+function mockMistakes() {
+  return [mockGrammarMistake(), mockExpressionMistake()].filter((mistake) => !deletedMistakeIds.has(mistake.id));
+}
+
+function mockMistakeBookRecord() {
+  const currentMistakes = mockMistakes();
+  return {
+    session_id: 'session_1',
+    title: 'Job Interview - 2026-06-05 00:00 UTC',
+    scenario_id: 'interview',
+    scenario_name: 'Job Interview',
+    status: 'active',
+    created_at: '2026-06-05T00:00:00Z',
+    ended_at: null,
+    mistake_count: currentMistakes.length,
+    grammar_count: currentMistakes.filter((mistake) => mistake.type === 'grammar').length,
+    expression_count: currentMistakes.filter((mistake) => mistake.type === 'expression').length,
+    pronunciation_count: currentMistakes.filter((mistake) => mistake.type === 'pronunciation').length,
+    lowest_mastery: currentMistakes.length ? Math.min(...currentMistakes.map((mistake) => mistake.mastery)) : null,
+    due_count: 0,
+  };
+}
+
+function mockMistakeBookDetail() {
+  const currentMistakes = mockMistakes();
+  return {
+    record: mockMistakeBookRecord(),
+    turn_groups: currentMistakes.length
+      ? [
+          {
+            turn: {
+              id: 'turn_user_1',
+              session_id: 'session_1',
+              speaker: 'user',
+              text: 'I am working in this field since three years.',
+              created_at: '2026-06-05T00:00:01Z',
+              mode: 'text',
+              audio_path: null,
+              asr_confidence: null,
+            },
+            mistakes: currentMistakes,
+          },
+        ]
+      : [],
+  };
+}
 
 beforeEach(() => {
   pronunciationUploadFails = false;
   cloudTtsEnabled = false;
   sessionRequestBodies = [];
+  deletedMistakeIds = new Set();
   window.speechSynthesis = {
     cancel: vi.fn(),
     getVoices: vi.fn(() => [
@@ -56,109 +157,16 @@ beforeEach(() => {
     }
     if (url === '/api/mistakes') {
       return jsonResponse({
-        mistakes: [
-          {
-            id: 'mistake_1',
-            type: 'grammar',
-            session_id: 'session_1',
-            turn_id: 'turn_user_1',
-            source_stage: 'grammar',
-            source_id: 'correction_1',
-            subtype: 'tense',
-            severity: 'major',
-            tags: ['interview', 'tense'],
-            wrong: 'am working',
-            correct: 'have been working',
-            explanation_zh: '时态错误。',
-            practice_sentence: 'I have been working in this field for three years.',
-            word: null,
-            phoneme: null,
-            mastery: 0.1,
-            review_count: 0,
-            created_at: '2026-06-05T00:00:04Z',
-            last_seen_at: '2026-06-05T00:00:04Z',
-            next_review_at: null,
-          },
-        ],
+        mistakes: mockMistakes(),
       });
     }
     if (url === '/api/mistake-books') {
       return jsonResponse({
-        books: [
-          {
-            session_id: 'session_1',
-            title: 'Job Interview - 2026-06-05 00:00 UTC',
-            scenario_id: 'interview',
-            scenario_name: 'Job Interview',
-            status: 'active',
-            created_at: '2026-06-05T00:00:00Z',
-            ended_at: null,
-            mistake_count: 1,
-            grammar_count: 1,
-            expression_count: 0,
-            pronunciation_count: 0,
-            lowest_mastery: 0.1,
-            due_count: 0,
-          },
-        ],
+        books: mockMistakes().length ? [mockMistakeBookRecord()] : [],
       });
     }
     if (url === '/api/mistake-books/session_1') {
-      return jsonResponse({
-        record: {
-          session_id: 'session_1',
-          title: 'Job Interview - 2026-06-05 00:00 UTC',
-          scenario_id: 'interview',
-          scenario_name: 'Job Interview',
-          status: 'active',
-          created_at: '2026-06-05T00:00:00Z',
-          ended_at: null,
-          mistake_count: 1,
-          grammar_count: 1,
-          expression_count: 0,
-          pronunciation_count: 0,
-          lowest_mastery: 0.1,
-          due_count: 0,
-        },
-        turn_groups: [
-          {
-            turn: {
-              id: 'turn_user_1',
-              session_id: 'session_1',
-              speaker: 'user',
-              text: 'I am working in this field since three years.',
-              created_at: '2026-06-05T00:00:01Z',
-              mode: 'text',
-              audio_path: null,
-              asr_confidence: null,
-            },
-            mistakes: [
-              {
-                id: 'mistake_1',
-                type: 'grammar',
-                session_id: 'session_1',
-                turn_id: 'turn_user_1',
-                source_stage: 'grammar',
-                source_id: 'correction_1',
-                subtype: 'tense',
-                severity: 'major',
-                tags: ['interview', 'tense'],
-                wrong: 'am working',
-                correct: 'have been working',
-                explanation_zh: '时态错误。',
-                practice_sentence: 'I have been working in this field for three years.',
-                word: null,
-                phoneme: null,
-                mastery: 0.1,
-                review_count: 0,
-                created_at: '2026-06-05T00:00:04Z',
-                last_seen_at: '2026-06-05T00:00:04Z',
-                next_review_at: null,
-              },
-            ],
-          },
-        ],
-      });
+      return jsonResponse(mockMistakeBookDetail());
     }
     if (url === '/api/tts/synthesize') {
       if (cloudTtsEnabled) {
@@ -181,28 +189,12 @@ beforeEach(() => {
       });
     }
     if (url === '/api/mistakes/mistake_1/review') {
-      return jsonResponse({
-        id: 'mistake_1',
-        type: 'grammar',
-        session_id: 'session_1',
-        turn_id: 'turn_user_1',
-        source_stage: 'grammar',
-        source_id: 'correction_1',
-        subtype: 'tense',
-        severity: 'major',
-        tags: ['interview', 'tense'],
-        wrong: 'am working',
-        correct: 'have been working',
-        explanation_zh: '时态错误。',
-        practice_sentence: 'I have been working in this field for three years.',
-        word: null,
-        phoneme: null,
-        mastery: 0.25,
-        review_count: 1,
-        created_at: '2026-06-05T00:00:04Z',
-        last_seen_at: '2026-06-05T00:00:04Z',
-        next_review_at: null,
-      });
+      return jsonResponse(mockGrammarMistake({ mastery: 0.25, review_count: 1 }));
+    }
+    if (url.startsWith('/api/mistakes/') && options.method === 'DELETE') {
+      const mistakeId = url.split('/').at(-1);
+      deletedMistakeIds.add(mistakeId);
+      return jsonResponse({ deleted_count: 1 });
     }
     if (url === '/api/sessions') {
       const requestBody = JSON.parse(options.body);
@@ -377,7 +369,7 @@ test('loads scenarios and starts a session', async () => {
   expect(screen.queryByText('XEngineer')).not.toBeInTheDocument();
   expect(screen.queryByText('Candidate')).not.toBeInTheDocument();
   expect(screen.queryByText('Introduce professional background clearly')).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Mistake Book (1)' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Mistake Book (2)' })).toBeInTheDocument();
   expect(screen.queryByText('am working')).not.toBeInTheDocument();
   expect(screen.queryByText('Progress')).not.toBeInTheDocument();
   expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
@@ -491,18 +483,60 @@ test('plays cloud TTS audio when the backend returns audio', async () => {
 test('reviews a saved mistake', async () => {
   render(<App />);
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (1)' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
   expect(await screen.findByRole('heading', { name: 'Mistake Book' })).toBeInTheDocument();
   fireEvent.click(await screen.findByRole('button', { name: /Job Interview/ }));
   expect(await screen.findByText('am working')).toBeInTheDocument();
   expect(screen.getByText('I am working in this field since three years.')).toBeInTheDocument();
   expect(screen.getByText('时态错误。')).toBeInTheDocument();
-  const review = await screen.findByRole('button', { name: 'Review 0' });
-  fireEvent.click(review);
+  const reviewButtons = await screen.findAllByRole('button', { name: 'Review 0' });
+  fireEvent.click(reviewButtons[0]);
 
   expect(await screen.findByRole('button', { name: 'Review 1' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Back to Practice' }));
   expect(await screen.findByRole('heading', { name: 'Speaking Coach' })).toBeInTheDocument();
+});
+
+test('filters a mistake book detail by mistake type', async () => {
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
+  fireEvent.click(await screen.findByRole('button', { name: /Job Interview/ }));
+
+  expect(await screen.findByText('am working')).toBeInTheDocument();
+  expect(screen.getByText('since three years')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Grammar 1' }));
+
+  expect(screen.getByText('am working')).toBeInTheDocument();
+  expect(screen.queryByText('since three years')).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Grammar 1' }));
+
+  expect(await screen.findByText('since three years')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Expression 1' }));
+
+  expect(screen.queryByText('am working')).not.toBeInTheDocument();
+  expect(screen.getByText('since three years')).toBeInTheDocument();
+});
+
+test('deletes one mistake from a conversation detail and refreshes counts', async () => {
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
+  fireEvent.click(await screen.findByRole('button', { name: /Job Interview/ }));
+  expect(await screen.findByText('am working')).toBeInTheDocument();
+
+  fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
+
+  await waitFor(() => expect(screen.queryByText('am working')).not.toBeInTheDocument());
+  expect(await screen.findByRole('button', { name: 'Grammar 0' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Expression 1' })).toBeInTheDocument();
+  expect(screen.getByText('since three years')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Back to Practice' }));
+  expect(await screen.findByRole('button', { name: 'Mistake Book (1)' })).toBeInTheDocument();
 });
 
 test('records read aloud audio and uploads it for assessment', async () => {

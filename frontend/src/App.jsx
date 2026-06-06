@@ -39,6 +39,7 @@ export default function App() {
   const [selectedMistakeBookId, setSelectedMistakeBookId] = useState(null);
   const [mistakeBookDetail, setMistakeBookDetail] = useState(null);
   const [mistakeBookState, setMistakeBookState] = useState('idle');
+  const [activeMistakeTypeFilter, setActiveMistakeTypeFilter] = useState(null);
   const [pronunciation, setPronunciation] = useState(null);
   const [partialText, setPartialText] = useState('');
   const [voiceState, setVoiceState] = useState('idle');
@@ -198,6 +199,7 @@ export default function App() {
   async function openMistakeBook(sessionId) {
     setError('');
     setSelectedMistakeBookId(sessionId);
+    setActiveMistakeTypeFilter(null);
     setMistakeBookState('loading');
     try {
       const detail = await request(`/api/mistake-books/${sessionId}`);
@@ -213,6 +215,7 @@ export default function App() {
     setSelectedMistakeBookId(null);
     setMistakeBookDetail(null);
     setMistakeBookState('idle');
+    setActiveMistakeTypeFilter(null);
   }
 
   function updateDetailMistake(reviewed) {
@@ -391,6 +394,22 @@ export default function App() {
       updateDetailMistake(reviewed);
     } catch (err) {
       handleRequestError(err);
+    }
+  }
+
+  async function deleteMistake(mistakeId) {
+    setError('');
+    try {
+      await request(`/api/mistakes/${mistakeId}`, {
+        method: 'DELETE',
+      });
+      await refreshMistakes();
+      if (selectedMistakeBookId) {
+        const detail = await request(`/api/mistake-books/${selectedMistakeBookId}`);
+        setMistakeBookDetail(detail);
+      }
+    } catch (err) {
+      handleRequestError(err, 'Delete failed.');
     }
   }
 
@@ -772,6 +791,10 @@ export default function App() {
     return streamingReplyRef.current.id;
   }
 
+  const visibleMistakeTurnGroups = mistakeBookDetail
+    ? filteredTurnGroups(mistakeBookDetail.turn_groups, activeMistakeTypeFilter)
+    : [];
+
   if (mainView === 'mistakes') {
     return (
       <main className="app-shell">
@@ -809,14 +832,24 @@ export default function App() {
                       {mistakeBookDetail.record.scenario_name} - {formatDateTime(mistakeBookDetail.record.created_at)}
                     </p>
                     <div className="mistake-book-counts" aria-label="Mistake counts">
-                      <span>Grammar {mistakeBookDetail.record.grammar_count}</span>
-                      <span>Expression {mistakeBookDetail.record.expression_count}</span>
-                      <span>Pronunciation {mistakeBookDetail.record.pronunciation_count}</span>
+                      {mistakeTypeFilters(mistakeBookDetail.record).map((item) => (
+                        <button
+                          aria-pressed={activeMistakeTypeFilter === item.type}
+                          className={activeMistakeTypeFilter === item.type ? 'active' : ''}
+                          key={item.type}
+                          onClick={() => {
+                            setActiveMistakeTypeFilter((current) => (current === item.type ? null : item.type));
+                          }}
+                          type="button"
+                        >
+                          {item.label} {item.count}
+                        </button>
+                      ))}
                     </div>
                   </div>
-                  {mistakeBookDetail.turn_groups.length ? (
+                  {visibleMistakeTurnGroups.length ? (
                     <div className="mistake-turn-list">
-                      {mistakeBookDetail.turn_groups.map((group, index) => (
+                      {visibleMistakeTurnGroups.map((group, index) => (
                         <section className="mistake-turn-group" key={group.turn?.id || `other-${index}`}>
                           <p className="mistake-turn-text">{group.turn?.text || 'Other practice'}</p>
                           <div className="mistake-list">
@@ -830,9 +863,14 @@ export default function App() {
                                     <p className="mistake-explanation">{mistake.explanation_zh}</p>
                                   ) : null}
                                 </div>
-                                <button className="review-button" onClick={() => reviewMistake(mistake.id)} type="button">
-                                  Review {mistake.review_count}
-                                </button>
+                                <div className="mistake-actions">
+                                  <button className="review-button" onClick={() => reviewMistake(mistake.id)} type="button">
+                                    Review {mistake.review_count}
+                                  </button>
+                                  <button className="delete-button" onClick={() => deleteMistake(mistake.id)} type="button">
+                                    Delete
+                                  </button>
+                                </div>
                               </article>
                             ))}
                           </div>
@@ -840,7 +878,11 @@ export default function App() {
                       ))}
                     </div>
                   ) : (
-                    <p>No saved mistakes for this conversation.</p>
+                    <p>
+                      {activeMistakeTypeFilter
+                        ? `No ${activeMistakeTypeFilter} mistakes for this conversation.`
+                        : 'No saved mistakes for this conversation.'}
+                    </p>
                   )}
                 </>
               ) : null}
@@ -1145,6 +1187,26 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+function mistakeTypeFilters(record) {
+  return [
+    { type: 'grammar', label: 'Grammar', count: record.grammar_count },
+    { type: 'expression', label: 'Expression', count: record.expression_count },
+    { type: 'pronunciation', label: 'Pronunciation', count: record.pronunciation_count },
+  ];
+}
+
+function filteredTurnGroups(turnGroups, activeType) {
+  if (!activeType) {
+    return turnGroups;
+  }
+  return turnGroups
+    .map((group) => ({
+      ...group,
+      mistakes: group.mistakes.filter((mistake) => mistake.type === activeType),
+    }))
+    .filter((group) => group.mistakes.length > 0);
 }
 
 async function blobToBase64(blob) {
