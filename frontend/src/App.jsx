@@ -43,6 +43,9 @@ export default function App() {
   const [mistakeBookState, setMistakeBookState] = useState('idle');
   const [activeMistakeTypeFilter, setActiveMistakeTypeFilter] = useState(null);
   const [pronunciation, setPronunciation] = useState(null);
+  const [turnCorrections, setTurnCorrections] = useState({});
+  const [turnPronunciations, setTurnPronunciations] = useState({});
+  const [turnAssessmentErrors, setTurnAssessmentErrors] = useState({});
   const [practicePronunciation, setPracticePronunciation] = useState(null);
   const [practiceReferenceText, setPracticeReferenceText] = useState('THEN HE WENT TO THEME PARK');
   const [assessedPracticeReferenceText, setAssessedPracticeReferenceText] = useState('');
@@ -68,6 +71,7 @@ export default function App() {
   const voiceCanceledRef = useRef(false);
   const voiceErrorRef = useRef(false);
   const messageListShouldFollowRef = useRef(true);
+  const pendingVoiceUserTurnIdRef = useRef(null);
   const readingRecorderRef = useRef(null);
   const readingStreamRef = useRef(null);
   const readingChunksRef = useRef([]);
@@ -192,6 +196,9 @@ export default function App() {
   function resetSessionDerivedState() {
     setLatestCorrection(null);
     setPronunciation(null);
+    setTurnCorrections({});
+    setTurnPronunciations({});
+    setTurnAssessmentErrors({});
     setPartialText('');
     setSummary(null);
     setSummaryState('idle');
@@ -204,6 +211,16 @@ export default function App() {
       return;
     }
     setAnalysisErrors((current) => [detail, ...current].slice(0, 5));
+  }
+
+  function pushTurnAssessmentError(turnId, detail) {
+    if (!turnId || !detail || typeof detail !== 'object') {
+      return;
+    }
+    setTurnAssessmentErrors((current) => ({
+      ...current,
+      [turnId]: [detail, ...(current[turnId] || [])].slice(0, 3),
+    }));
   }
 
   function resetCurrentTurnFeedback() {
@@ -390,6 +407,13 @@ export default function App() {
         body: JSON.stringify({ text }),
       });
       setSession(turnBody.session);
+      const userTurnId = turnBody.user_turn?.id || latestUserTurnId(turnBody.session);
+      if (userTurnId && turnBody.grammar_result) {
+        setTurnCorrections((current) => ({
+          ...current,
+          [userTurnId]: turnBody.grammar_result,
+        }));
+      }
       setLatestCorrection(turnBody.grammar_result);
       speak(turnBody.ai_turn?.text || turnBody.session.turns.at(-1)?.text, { replyReadyAt: nowMs() }).catch(() => {});
       await refreshMistakes();
@@ -753,6 +777,7 @@ export default function App() {
     setStatus('Requesting mic');
     voiceCanceledRef.current = false;
     voiceErrorRef.current = false;
+    pendingVoiceUserTurnIdRef.current = null;
     streamingReplyRef.current = null;
     closeVoiceSocket();
     try {
@@ -803,9 +828,11 @@ export default function App() {
         setPartialText(message.text);
       }
       if (message.type === 'asr.final') {
+        const userTurnId = message.user_turn_id || `local-user-${Date.now()}`;
+        pendingVoiceUserTurnIdRef.current = userTurnId;
         setPartialText(message.text);
         setSession((current) => appendTurn(current, {
-          id: message.user_turn_id || `local-user-${Date.now()}`,
+          id: userTurnId,
           session_id: session.id,
           speaker: 'user',
           text: message.text,
@@ -817,6 +844,7 @@ export default function App() {
       }
       if (message.type === 'reply.text') {
         const replyReadyAt = nowMs();
+        reconcileVoiceUserTurnId(message.user_turn_id);
         setSession((current) => appendTurn(current, {
           id: message.turn_id,
           session_id: session.id,
@@ -849,6 +877,7 @@ export default function App() {
         const replyReadyAt = nowMs();
         const streamId = ensureStreamingReplyId();
         const finalText = message.text || streamingReplyRef.current?.text || '';
+        reconcileVoiceUserTurnId(message.user_turn_id);
         setSession((current) => replaceTurnIdAndText(current, streamId, {
           id: message.turn_id || streamId,
           session_id: session.id,
@@ -865,9 +894,22 @@ export default function App() {
         setStatus('In session');
       }
       if (message.type === 'analysis.result') {
+        const turnId = message.turn_id || pendingVoiceUserTurnIdRef.current;
         if (message.stage === 'pronunciation') {
+          if (turnId) {
+            setTurnPronunciations((current) => ({
+              ...current,
+              [turnId]: message.result,
+            }));
+          }
           setPronunciation(message.result);
         } else {
+          if (turnId) {
+            setTurnCorrections((current) => ({
+              ...current,
+              [turnId]: message.result,
+            }));
+          }
           setLatestCorrection(message.result);
         }
         refreshMistakes().catch(() => {});
@@ -884,6 +926,7 @@ export default function App() {
           fallback_applied: false,
         };
         voiceErrorRef.current = true;
+        pushTurnAssessmentError(message.turn_id || pendingVoiceUserTurnIdRef.current, detail);
         pushAnalysisError(detail);
         setError(detail.user_message_zh || message.message || 'Analysis error');
         if (detail.stage === 'asr' || message.type === 'error') {
@@ -1000,6 +1043,21 @@ export default function App() {
       };
     }
     return streamingReplyRef.current.id;
+  }
+
+  function reconcileVoiceUserTurnId(serverTurnId) {
+    const localTurnId = pendingVoiceUserTurnIdRef.current;
+    if (!serverTurnId || !localTurnId || serverTurnId === localTurnId) {
+      if (serverTurnId) {
+        pendingVoiceUserTurnIdRef.current = serverTurnId;
+      }
+      return;
+    }
+    setSession((current) => replaceTurnId(current, localTurnId, serverTurnId));
+    setTurnCorrections((current) => rekeyById(current, localTurnId, serverTurnId));
+    setTurnPronunciations((current) => rekeyById(current, localTurnId, serverTurnId));
+    setTurnAssessmentErrors((current) => rekeyById(current, localTurnId, serverTurnId));
+    pendingVoiceUserTurnIdRef.current = serverTurnId;
   }
 
   const visibleMistakeTurnGroups = mistakeBookDetail
@@ -1466,6 +1524,33 @@ function replaceTurnIdAndText(session, oldId, turn) {
     ...session,
     turns: session.turns.map((existing) => (existing.id === oldId ? turn : existing)),
   };
+}
+
+function replaceTurnId(session, oldId, newId) {
+  if (!session || !oldId || !newId || oldId === newId) {
+    return session;
+  }
+  if (session.turns.some((existing) => existing.id === newId)) {
+    return session;
+  }
+  return {
+    ...session,
+    turns: session.turns.map((existing) => (existing.id === oldId ? { ...existing, id: newId } : existing)),
+  };
+}
+
+function rekeyById(items, oldId, newId) {
+  if (!oldId || !newId || oldId === newId || !Object.prototype.hasOwnProperty.call(items, oldId)) {
+    return items;
+  }
+  const next = { ...items };
+  next[newId] = next[oldId];
+  delete next[oldId];
+  return next;
+}
+
+function latestUserTurnId(session) {
+  return session?.turns?.filter((turn) => turn.speaker === 'user').at(-1)?.id || null;
 }
 
 function formatDateTime(value) {
