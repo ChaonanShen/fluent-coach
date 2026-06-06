@@ -30,6 +30,8 @@ let pronunciationUploadFails = false;
 let cloudTtsEnabled = false;
 let sessionRequestBodies = [];
 let deletedMistakeIds = new Set();
+let deletedBookSessionIds = new Set();
+let extraMistakeBookEnabled = false;
 
 function mockGrammarMistake(overrides = {}) {
   return {
@@ -83,19 +85,66 @@ function mockExpressionMistake(overrides = {}) {
   };
 }
 
-function mockMistakes() {
-  return [mockGrammarMistake(), mockExpressionMistake()].filter((mistake) => !deletedMistakeIds.has(mistake.id));
+function mockPronunciationMistake(overrides = {}) {
+  return {
+    id: 'mistake_3',
+    type: 'pronunciation',
+    session_id: 'session_2',
+    turn_id: 'turn_user_2',
+    source_stage: 'pronunciation',
+    source_id: 'assessment_2',
+    subtype: 'low_accuracy',
+    severity: 'minor',
+    tags: ['low_accuracy'],
+    wrong: 'systems',
+    correct: 'systems',
+    explanation_zh: '这个词发音准确度偏低。',
+    practice_sentence: 'I have worked on backend systems for three years.',
+    word: 'systems',
+    phoneme: null,
+    mastery: 0.3,
+    review_count: 0,
+    created_at: '2026-06-05T00:01:04Z',
+    last_seen_at: '2026-06-05T00:01:04Z',
+    next_review_at: null,
+    ...overrides,
+  };
 }
 
-function mockMistakeBookRecord() {
-  const currentMistakes = mockMistakes();
+function mockMistakes() {
+  const mistakes = deletedBookSessionIds.has('session_1') ? [] : [mockGrammarMistake(), mockExpressionMistake()];
+  if (extraMistakeBookEnabled && !deletedBookSessionIds.has('session_2')) {
+    mistakes.push(mockPronunciationMistake());
+  }
+  return mistakes.filter((mistake) => !deletedMistakeIds.has(mistake.id));
+}
+
+function mockMistakesForSession(sessionId) {
+  return mockMistakes().filter((mistake) => mistake.session_id === sessionId);
+}
+
+function mockMistakeBookRecord(sessionId = 'session_1') {
+  const currentMistakes = mockMistakesForSession(sessionId);
+  const meta = sessionId === 'session_2'
+    ? {
+        title: 'Presentation Practice - 2026-06-05 00:01 UTC',
+        scenario_id: 'presentation',
+        scenario_name: 'Presentation Practice',
+        created_at: '2026-06-05T00:01:00Z',
+      }
+    : {
+        title: 'Job Interview - 2026-06-05 00:00 UTC',
+        scenario_id: 'interview',
+        scenario_name: 'Job Interview',
+        created_at: '2026-06-05T00:00:00Z',
+      };
   return {
-    session_id: 'session_1',
-    title: 'Job Interview - 2026-06-05 00:00 UTC',
-    scenario_id: 'interview',
-    scenario_name: 'Job Interview',
+    session_id: sessionId,
+    title: meta.title,
+    scenario_id: meta.scenario_id,
+    scenario_name: meta.scenario_name,
     status: 'active',
-    created_at: '2026-06-05T00:00:00Z',
+    created_at: meta.created_at,
     ended_at: null,
     mistake_count: currentMistakes.length,
     grammar_count: currentMistakes.filter((mistake) => mistake.type === 'grammar').length,
@@ -106,23 +155,42 @@ function mockMistakeBookRecord() {
   };
 }
 
-function mockMistakeBookDetail() {
-  const currentMistakes = mockMistakes();
+function mockMistakeBookRecords() {
+  const sessionIds = extraMistakeBookEnabled ? ['session_1', 'session_2'] : ['session_1'];
+  return sessionIds
+    .filter((sessionId) => mockMistakesForSession(sessionId).length)
+    .map((sessionId) => mockMistakeBookRecord(sessionId));
+}
+
+function mockMistakeBookDetail(sessionId = 'session_1') {
+  const currentMistakes = mockMistakesForSession(sessionId);
+  const turn = sessionId === 'session_2'
+    ? {
+        id: 'turn_user_2',
+        session_id: 'session_2',
+        speaker: 'user',
+        text: 'I have worked on backend systems for three years.',
+        created_at: '2026-06-05T00:01:01Z',
+        mode: 'voice',
+        audio_path: null,
+        asr_confidence: 0.91,
+      }
+    : {
+        id: 'turn_user_1',
+        session_id: 'session_1',
+        speaker: 'user',
+        text: 'I am working in this field since three years.',
+        created_at: '2026-06-05T00:00:01Z',
+        mode: 'text',
+        audio_path: null,
+        asr_confidence: null,
+      };
   return {
-    record: mockMistakeBookRecord(),
+    record: mockMistakeBookRecord(sessionId),
     turn_groups: currentMistakes.length
       ? [
           {
-            turn: {
-              id: 'turn_user_1',
-              session_id: 'session_1',
-              speaker: 'user',
-              text: 'I am working in this field since three years.',
-              created_at: '2026-06-05T00:00:01Z',
-              mode: 'text',
-              audio_path: null,
-              asr_confidence: null,
-            },
+            turn,
             mistakes: currentMistakes,
           },
         ]
@@ -135,6 +203,8 @@ beforeEach(() => {
   cloudTtsEnabled = false;
   sessionRequestBodies = [];
   deletedMistakeIds = new Set();
+  deletedBookSessionIds = new Set();
+  extraMistakeBookEnabled = false;
   window.speechSynthesis = {
     cancel: vi.fn(),
     getVoices: vi.fn(() => [
@@ -162,11 +232,29 @@ beforeEach(() => {
     }
     if (url === '/api/mistake-books') {
       return jsonResponse({
-        books: mockMistakes().length ? [mockMistakeBookRecord()] : [],
+        books: mockMistakeBookRecords(),
       });
     }
+    if (url === '/api/mistake-books/delete' && options.method === 'POST') {
+      const sessionIds = JSON.parse(options.body).session_ids;
+      const deletedCount = sessionIds.reduce(
+        (total, sessionId) => total + mockMistakesForSession(sessionId).length,
+        0,
+      );
+      sessionIds.forEach((sessionId) => deletedBookSessionIds.add(sessionId));
+      return jsonResponse({ deleted_count: deletedCount });
+    }
+    if (url.startsWith('/api/mistake-books/') && options.method === 'DELETE') {
+      const sessionId = url.split('/').at(-1);
+      const deletedCount = mockMistakesForSession(sessionId).length;
+      deletedBookSessionIds.add(sessionId);
+      return jsonResponse({ deleted_count: deletedCount });
+    }
     if (url === '/api/mistake-books/session_1') {
-      return jsonResponse(mockMistakeBookDetail());
+      return jsonResponse(mockMistakeBookDetail('session_1'));
+    }
+    if (url === '/api/mistake-books/session_2') {
+      return jsonResponse(mockMistakeBookDetail('session_2'));
     }
     if (url === '/api/tts/synthesize') {
       if (cloudTtsEnabled) {
@@ -485,7 +573,7 @@ test('reviews a saved mistake', async () => {
 
   fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
   expect(await screen.findByRole('heading', { name: 'Mistake Book' })).toBeInTheDocument();
-  fireEvent.click(await screen.findByRole('button', { name: /Job Interview/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /Open Job Interview/ }));
   expect(await screen.findByText('am working')).toBeInTheDocument();
   expect(screen.getByText('I am working in this field since three years.')).toBeInTheDocument();
   expect(screen.getByText('时态错误。')).toBeInTheDocument();
@@ -501,7 +589,7 @@ test('filters a mistake book detail by mistake type', async () => {
   render(<App />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
-  fireEvent.click(await screen.findByRole('button', { name: /Job Interview/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /Open Job Interview/ }));
 
   expect(await screen.findByText('am working')).toBeInTheDocument();
   expect(screen.getByText('since three years')).toBeInTheDocument();
@@ -525,7 +613,7 @@ test('deletes one mistake from a conversation detail and refreshes counts', asyn
   render(<App />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
-  fireEvent.click(await screen.findByRole('button', { name: /Job Interview/ }));
+  fireEvent.click(await screen.findByRole('button', { name: /Open Job Interview/ }));
   expect(await screen.findByText('am working')).toBeInTheDocument();
 
   fireEvent.click(screen.getAllByRole('button', { name: 'Delete' })[0]);
@@ -537,6 +625,59 @@ test('deletes one mistake from a conversation detail and refreshes counts', asyn
 
   fireEvent.click(screen.getByRole('button', { name: 'Back to Practice' }));
   expect(await screen.findByRole('button', { name: 'Mistake Book (1)' })).toBeInTheDocument();
+});
+
+test('deletes the current mistake book from detail', async () => {
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
+  fireEvent.click(await screen.findByRole('button', { name: /Open Job Interview/ }));
+  expect(await screen.findByText('am working')).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Delete Book' }));
+
+  expect(await screen.findByText('No conversation mistake books yet.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Back to Practice' }));
+  expect(await screen.findByRole('button', { name: 'Mistake Book (0)' })).toBeInTheDocument();
+});
+
+test('selects one mistake book without opening it and deletes the selection', async () => {
+  extraMistakeBookEnabled = true;
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (3)' }));
+  expect(await screen.findByRole('button', { name: /Open Job Interview/ })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: /Open Presentation Practice/ })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByLabelText('Select Job Interview - 2026-06-05 00:00 UTC'));
+
+  expect(screen.getByText('1 selected')).toBeInTheDocument();
+  expect(screen.queryByText('am working')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+
+  await waitFor(() => {
+    expect(screen.queryByRole('button', { name: /Open Job Interview/ })).not.toBeInTheDocument();
+  });
+  expect(screen.getByRole('button', { name: /Open Presentation Practice/ })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Back to Practice' }));
+  expect(await screen.findByRole('button', { name: 'Mistake Book (1)' })).toBeInTheDocument();
+});
+
+test('selects all mistake books and bulk deletes them', async () => {
+  extraMistakeBookEnabled = true;
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (3)' }));
+  expect(await screen.findByRole('button', { name: /Open Job Interview/ })).toBeInTheDocument();
+
+  fireEvent.click(screen.getByLabelText('Select all mistake books'));
+
+  expect(screen.getByText('2 selected')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
+
+  expect(await screen.findByText('No conversation mistake books yet.')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Back to Practice' }));
+  expect(await screen.findByRole('button', { name: 'Mistake Book (0)' })).toBeInTheDocument();
 });
 
 test('records read aloud audio and uploads it for assessment', async () => {

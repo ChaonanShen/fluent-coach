@@ -481,18 +481,71 @@ h3 {
   gap: 12px;
 }
 
+.mistake-book-toolbar,
+.mistake-book-detail-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.mistake-book-select-all,
+.mistake-book-select {
+  align-items: center;
+  color: #49606a;
+  display: inline-flex;
+  font-size: 0.86rem;
+  font-weight: 700;
+  gap: 8px;
+}
+
+.mistake-book-select input,
+.mistake-book-select-all input {
+  accent-color: #1f5d4b;
+  height: 18px;
+  width: 18px;
+}
+
+.mistake-book-bulk-actions {
+  align-items: center;
+  color: #63726d;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.86rem;
+  font-weight: 700;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .mistake-book-record {
   align-items: center;
   background: #ffffff;
   border: 1px solid #e3e8e4;
   border-radius: 8px;
   color: #243139;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 12px;
+}
+
+.mistake-book-record-main {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  color: #243139;
   cursor: pointer;
   display: grid;
   gap: 12px;
   grid-template-columns: minmax(0, 1fr) auto;
-  padding: 12px;
+  padding: 0;
   text-align: left;
+  width: 100%;
+}
+
+.mistake-book-delete {
+  align-self: center;
 }
 
 .mistake-book-record strong,
@@ -717,7 +770,17 @@ h3 {
   }
 
   .mistake-book-record {
+    align-items: start;
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .mistake-book-record-main {
     grid-template-columns: 1fr;
+  }
+
+  .mistake-book-delete {
+    grid-column: 2;
+    justify-self: start;
   }
 
   .mistake-book-counts {

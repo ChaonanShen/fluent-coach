@@ -36,6 +36,7 @@ export default function App() {
   const [latestCorrection, setLatestCorrection] = useState(null);
   const [mistakes, setMistakes] = useState([]);
   const [mistakeBooks, setMistakeBooks] = useState([]);
+  const [selectedMistakeBookIds, setSelectedMistakeBookIds] = useState(new Set());
   const [selectedMistakeBookId, setSelectedMistakeBookId] = useState(null);
   const [mistakeBookDetail, setMistakeBookDetail] = useState(null);
   const [mistakeBookState, setMistakeBookState] = useState('idle');
@@ -170,6 +171,10 @@ export default function App() {
     ]);
     setMistakes(mistakeBody.mistakes);
     setMistakeBooks(mistakeBookBody.books);
+    setSelectedMistakeBookIds((current) => {
+      const availableIds = new Set(mistakeBookBody.books.map((book) => book.session_id));
+      return new Set([...current].filter((sessionId) => availableIds.has(sessionId)));
+    });
   }
 
   function resetSessionDerivedState() {
@@ -216,6 +221,26 @@ export default function App() {
     setMistakeBookDetail(null);
     setMistakeBookState('idle');
     setActiveMistakeTypeFilter(null);
+  }
+
+  function toggleMistakeBookSelection(sessionId) {
+    setSelectedMistakeBookIds((current) => {
+      const next = new Set(current);
+      if (next.has(sessionId)) {
+        next.delete(sessionId);
+      } else {
+        next.add(sessionId);
+      }
+      return next;
+    });
+  }
+
+  function selectAllMistakeBooks() {
+    setSelectedMistakeBookIds(new Set(mistakeBooks.map((book) => book.session_id)));
+  }
+
+  function clearSelectedMistakeBooks() {
+    setSelectedMistakeBookIds(new Set());
   }
 
   function updateDetailMistake(reviewed) {
@@ -408,6 +433,50 @@ export default function App() {
         const detail = await request(`/api/mistake-books/${selectedMistakeBookId}`);
         setMistakeBookDetail(detail);
       }
+    } catch (err) {
+      handleRequestError(err, 'Delete failed.');
+    }
+  }
+
+  async function deleteMistakeBook(sessionId) {
+    if (!sessionId) {
+      return;
+    }
+    setError('');
+    try {
+      await request(`/api/mistake-books/${sessionId}`, {
+        method: 'DELETE',
+      });
+      setSelectedMistakeBookIds((current) => {
+        const next = new Set(current);
+        next.delete(sessionId);
+        return next;
+      });
+      if (selectedMistakeBookId === sessionId) {
+        closeMistakeBookDetail();
+      }
+      await refreshMistakes();
+    } catch (err) {
+      handleRequestError(err, 'Delete failed.');
+    }
+  }
+
+  async function deleteSelectedMistakeBooks() {
+    const sessionIds = [...selectedMistakeBookIds];
+    if (!sessionIds.length) {
+      return;
+    }
+    setError('');
+    try {
+      await request('/api/mistake-books/delete', {
+        method: 'POST',
+        body: JSON.stringify({ session_ids: sessionIds }),
+      });
+      if (selectedMistakeBookId && sessionIds.includes(selectedMistakeBookId)) {
+        closeMistakeBookDetail();
+      }
+      setSelectedMistakeBookIds(new Set());
+      await refreshMistakes();
     } catch (err) {
       handleRequestError(err, 'Delete failed.');
     }
@@ -819,9 +888,14 @@ export default function App() {
         <section className="mistake-book" aria-label="Mistake Book">
           {selectedMistakeBookId ? (
             <div className="mistake-book-detail">
-              <button className="secondary-action" onClick={closeMistakeBookDetail} type="button">
-                All Books
-              </button>
+              <div className="mistake-book-detail-actions">
+                <button className="secondary-action" onClick={closeMistakeBookDetail} type="button">
+                  All Books
+                </button>
+                <button className="delete-button" onClick={() => deleteMistakeBook(selectedMistakeBookId)} type="button">
+                  Delete Book
+                </button>
+              </div>
               {mistakeBookState === 'loading' ? <p>Loading mistake book...</p> : null}
               {mistakeBookState === 'error' ? <p>Could not load this mistake book.</p> : null}
               {mistakeBookDetail ? (
@@ -888,29 +962,85 @@ export default function App() {
               ) : null}
             </div>
           ) : mistakeBooks.length ? (
-            <div className="mistake-book-list">
-              {mistakeBooks.map((book) => (
-                <button
-                  className="mistake-book-record"
-                  key={book.session_id}
-                  onClick={() => openMistakeBook(book.session_id)}
-                  type="button"
-                >
-                  <div>
-                    <strong>{book.title}</strong>
-                    <p>
-                      {book.scenario_name} - {formatDateTime(book.created_at)}
-                    </p>
-                  </div>
-                  <div className="mistake-book-counts" aria-label={`${book.title} counts`}>
-                    <span>{book.mistake_count} total</span>
-                    <span>Grammar {book.grammar_count}</span>
-                    <span>Expression {book.expression_count}</span>
-                    <span>Pronunciation {book.pronunciation_count}</span>
-                  </div>
-                </button>
-              ))}
-            </div>
+            <>
+              <div className="mistake-book-toolbar">
+                <label className="mistake-book-select-all">
+                  <input
+                    aria-label="Select all mistake books"
+                    checked={selectedMistakeBookIds.size === mistakeBooks.length}
+                    onChange={(event) => {
+                      if (event.target.checked) {
+                        selectAllMistakeBooks();
+                      } else {
+                        clearSelectedMistakeBooks();
+                      }
+                    }}
+                    type="checkbox"
+                  />
+                  <span>Select all</span>
+                </label>
+                <div className="mistake-book-bulk-actions">
+                  <span>{selectedMistakeBookIds.size} selected</span>
+                  <button
+                    className="secondary-action"
+                    disabled={!selectedMistakeBookIds.size}
+                    onClick={clearSelectedMistakeBooks}
+                    type="button"
+                  >
+                    Clear
+                  </button>
+                  <button
+                    className="delete-button"
+                    disabled={!selectedMistakeBookIds.size}
+                    onClick={deleteSelectedMistakeBooks}
+                    type="button"
+                  >
+                    Delete selected
+                  </button>
+                </div>
+              </div>
+              <div className="mistake-book-list">
+                {mistakeBooks.map((book) => (
+                  <article className="mistake-book-record" key={book.session_id}>
+                    <label className="mistake-book-select">
+                      <input
+                        aria-label={`Select ${book.title}`}
+                        checked={selectedMistakeBookIds.has(book.session_id)}
+                        onChange={() => toggleMistakeBookSelection(book.session_id)}
+                        type="checkbox"
+                      />
+                    </label>
+                    <button
+                      aria-label={`Open ${book.title}`}
+                      className="mistake-book-record-main"
+                      onClick={() => openMistakeBook(book.session_id)}
+                      type="button"
+                    >
+                      <div>
+                        <strong>{book.title}</strong>
+                        <p>
+                          {book.scenario_name} - {formatDateTime(book.created_at)}
+                        </p>
+                      </div>
+                      <div className="mistake-book-counts" aria-label={`${book.title} counts`}>
+                        <span>{book.mistake_count} total</span>
+                        <span>Grammar {book.grammar_count}</span>
+                        <span>Expression {book.expression_count}</span>
+                        <span>Pronunciation {book.pronunciation_count}</span>
+                      </div>
+                    </button>
+                    <button
+                      aria-label={`Delete ${book.title}`}
+                      className="delete-button mistake-book-delete"
+                      onClick={() => deleteMistakeBook(book.session_id)}
+                      type="button"
+                    >
+                      Delete
+                    </button>
+                  </article>
+                ))}
+              </div>
+            </>
           ) : (
             <p>No conversation mistake books yet.</p>
           )}
@@ -1108,7 +1238,7 @@ export default function App() {
           <section className="coach-block">
             <h3>Mistake Book</h3>
             <button className="secondary-action mistake-book-action" onClick={() => setMainView('mistakes')} type="button">
-              Mistake Book{mistakes.length ? ` (${mistakes.length})` : ''}
+              Mistake Book ({mistakes.length})
             </button>
           </section>
 
