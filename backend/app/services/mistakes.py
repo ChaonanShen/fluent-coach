@@ -156,10 +156,30 @@ class MistakeService:
         return mistake
 
 
+_PRONUNCIATION_SENTENCE_EXAMPLES = {
+    "systems": "The team reviewed the systems before launch.",
+    "theme": "The theme of the presentation was clear and focused.",
+}
+
+
 def _pronunciation_practice_sentence(word: str) -> str:
     clean_word = re.sub(r"[^A-Za-z'-]+", " ", word).strip()
-    target = clean_word or word.strip() or "this word"
-    return f"Please say {target} clearly in this short sentence."
+    target = clean_word or word.strip() or "word"
+    normalized = target.lower()
+
+    if normalized in _PRONUNCIATION_SENTENCE_EXAMPLES:
+        return _PRONUNCIATION_SENTENCE_EXAMPLES[normalized]
+    if " " in normalized:
+        return f"The speaker used {target} in a short answer."
+    if normalized.endswith("ing"):
+        return f"I am {target} with the team this afternoon."
+    if normalized.endswith("ed"):
+        return f"They {target} the plan before the meeting."
+    if normalized.endswith("ly"):
+        return f"She spoke {target} during the presentation."
+    if normalized.endswith("s") and not normalized.endswith(("ss", "is", "us")):
+        return f"The team reviewed the {target} before launch."
+    return f"The speaker used {target} in a short answer."
 
 
 mistake_service = MistakeService()
