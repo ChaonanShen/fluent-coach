@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 from datetime import datetime, timezone
@@ -83,6 +84,7 @@ def main() -> int:
         transcript_source=args.transcript_source,
         mode=mode,
         audio_paths=audio_paths,
+        tts_provider=_dev_tts_provider_for(mode=mode, allow_fake_providers=args.allow_fake_providers),
         virtual_user_source=args.virtual_user,
         allow_fake_providers=args.allow_fake_providers,
     )
@@ -159,6 +161,32 @@ def _string_or_none(value: object) -> str | None:
     if value is None:
         return None
     return str(value)
+
+
+def _dev_tts_provider_for(*, mode: str, allow_fake_providers: bool):
+    if mode != "grammar_tts" or not allow_fake_providers:
+        return None
+    provider = os.environ.get("TTS_PROVIDER", "browser").strip().lower() or "browser"
+    if provider not in {"browser", "cloud_disabled", "fake", "none", "disabled"}:
+        return None
+    return _DevAudioTTSProvider()
+
+
+class _DevAudioTTSProvider:
+    provider_name = "fake_audio"
+    voice = "dev-smoke"
+
+    def synthesize(self, text: str):
+        from backend.app.services.tts import TTSResult
+
+        return TTSResult(
+            provider=self.provider_name,
+            text=text,
+            audio_url=None,
+            audio_base64=base64.b64encode(b"fake-wav-audio").decode("ascii"),
+            mime_type="audio/wav",
+            fallback_applied=False,
+        )
 
 
 def _print_latency_summary(summary: object) -> None:

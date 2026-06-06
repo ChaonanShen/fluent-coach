@@ -1,5 +1,7 @@
 import base64
 
+import pytest
+
 from backend.app.models import CorrectionTiming, GrammarCorrection, GrammarIssue, GrammarSeverity
 from backend.app.services.analysis import analysis_store
 from backend.app.services.asr import FakeASR
@@ -23,6 +25,10 @@ class FakeAudioTTS:
             mime_type="audio/wav",
             fallback_applied=False,
         )
+
+
+class RealishASR(FakeASR):
+    provider_name = "faster_whisper"
 
 
 class GrammarForInjectedErrors:
@@ -86,6 +92,22 @@ def test_ws_bench_driver_records_grammar_tts_turns(monkeypatch, tmp_path) -> Non
         assert turn.grammar is not None
         assert turn.grammar_metrics["expected_error_recall"] == 1.0
         assert turn.grammar_metrics["asr_preserved_injected_error"] is True
+
+
+def test_ws_bench_driver_rejects_fake_llm_for_grammar_tts(monkeypatch) -> None:
+    monkeypatch.setattr("backend.app.main.asr_provider", RealishASR())
+    monkeypatch.setattr(
+        "backend.app.main.dialogue_service",
+        DialogueService(FakeLLMClient(responses=["This should not be used."])),
+    )
+
+    with pytest.raises(ValueError, match="real LLM provider"):
+        run_ws_conversation(
+            scenario_id="interview",
+            turns=1,
+            mode="grammar_tts",
+            tts_provider=FakeAudioTTS(),
+        )
 
 
 def _issue(error_type: str, original: str, corrected: str) -> GrammarIssue:

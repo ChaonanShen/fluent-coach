@@ -365,6 +365,9 @@ def _validate_grammar_tts_providers(
         return
     if getattr(main_module.asr_provider, "provider_name", None) == "fake":
         raise ValueError("grammar_tts requires a real ASR provider unless allow_fake_providers=True")
+    llm_client = main_module.dialogue_service.llm_client
+    if llm_client is None or isinstance(llm_client, FakeLLMClient):
+        raise ValueError("grammar_tts requires a real LLM provider unless allow_fake_providers=True")
     if getattr(tts_provider, "provider_name", None) in {"browser", "cloud_disabled", None}:
         raise ValueError("grammar_tts requires an audio-producing TTS provider")
 
