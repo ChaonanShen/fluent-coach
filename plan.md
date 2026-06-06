@@ -2908,3 +2908,237 @@ Mistake Book pronunciation item `Read word` / `Read sentence`：
 - 输入 reference text 后，`Record Reading` 可点击并能显示 `Practice result`。
 - Reading Practice 不影响 summary / mistake book / Conversation Assessment。
 - 默认 `make test` 通过。
+
+### 2026-06-06 Follow-up v3: Assessment 信息密度、发音练习与错题本布局
+
+#### 用户反馈与目标
+
+- `Conversation Assessment` 中 `Grammar / Expression Correction` 和 `Pronunciation` 会累积历史内容，页面变长；需要各自成为固定高度滚动区，默认看到最近内容，滚动查看历史。
+- `Correction` 里需要明确标注 `Original` 和 `Corrected`，不能只靠颜色区分。
+- `Conversation Assessment` 的 `Pronunciation` 不再展示原话；因为 pronunciation word sequence 已能看到用户读出的句子。展示顺序改为：
+  - word sequence / low-score words
+  - Overall / Accuracy / Fluency
+- `Reading Practice` 的 pronunciation result 同样改为：
+  - word sequence / low-score words
+  - Overall / Accuracy / Fluency
+- `Timing` 和 `Summary` 从第二栏 `Conversation Assessment` 移动到第三栏 `Reading Practice` 下方，让第二栏只保留核心语法/表达纠错和语音纠错。
+- `Mistake Book` 的 pronunciation item 不应继续使用原句作为 sentence 练习，因为原句可能有语法/表达错误；需要改为新的短练习句。
+- `Mistake Book` 的 pronunciation word / sentence target 各增加一个标准发音按钮；每个 target 都有：
+  - 标准发音按钮（图标按钮，播放 TTS）
+  - record 按钮（用户录音并评测）
+- `Mistake Book` 单条 mistake 的 `Delete` 按钮从底部移动到右上角，减少空行，让条目更紧凑。
+
+#### 总体设计
+
+- 第二栏 `Conversation Assessment` 只展示最核心的正式对话反馈：
+  - `Grammar / Expression Correction`
+  - `Pronunciation`
+- 第三栏 `Reading Practice` 承载练习与会话收尾信息：
+  - 独立 reading practice
+  - Mistake Book 入口
+  - Timing
+  - Summary
+- `PronunciationResult` 作为共用组件改展示顺序，使 Conversation Assessment、Reading Practice、Mistake Book 的结果一致。
+- Mistake Book 中的 pronunciation sentence practice 由后端生成新句子，而不是直接复用 `assessment.reference_text`。
+
+#### PR-ASSESS-V3-A：Assessment 两个核心 section 固定高度滚动，并标注 correction
+
+功能描述：
+
+- `Grammar / Expression Correction` 和 `Pronunciation` 各自变成固定高度滚动区。
+- 默认显示最近反馈，历史反馈通过滚动查看。
+- `Grammar / Expression Correction` 中明确标注：
+  - `Original`
+  - `Corrected`
+
+实现思路：
+
+- 移除或放宽当前 `userTurnsWithCorrections(...).slice(-5).reverse()` / `userTurnsWithPronunciation(...).slice(-5).reverse()` 的硬截断。
+- 保持最新内容优先或滚动到底部二选一；推荐：
+  - 列表按时间正序渲染。
+  - 容器固定高度并 `overflow-y: auto`。
+  - 通过 `useLayoutEffect` 在新增 item 后滚到底部，默认显示最新消息。
+- 为两个列表添加独立 class：
+  - `.assessment-scroll-list`
+  - `.assessment-scroll-list.compact`
+- Correction item 结构调整：
+  - `Original` 标签 + 原话。
+  - `Corrected` 标签 + 修正版。
+  - issue explanation。
+- 只改 UI 展示，不改变 grammar / pronunciation 数据流。
+
+测试方式：
+
+- 多轮 correction 后，`Grammar / Expression Correction` section 内保留历史 item。
+- section 存在滚动容器 class。
+- correction item 同时展示 `Original` 和 `Corrected` 标签。
+- pronunciation section 使用滚动容器。
+- 前端测试通过。
+
+#### PR-ASSESS-V3-B：Pronunciation result 顺序调整并移除 Conversation Assessment 原话
+
+功能描述：
+
+- `PronunciationResult` 先展示完整 word sequence，并高亮低分词。
+- 再展示 Overall / Accuracy / Fluency 三个分数。
+- `Conversation Assessment` 的 Pronunciation item 不再额外展示原话。
+- `Reading Practice` 评测结果同步使用同一顺序。
+
+实现思路：
+
+- 调整 `PronunciationResult` JSX 顺序：
+  - optional reference label 仅用于 Reading Practice / Mistake Book result。
+  - `Low-score words` label + `assessment.words` sequence。
+  - score row。
+- Conversation Assessment 的 pronunciation item 删除 `<p className="assessment-turn-text">{turn.text}</p>`。
+- 如果 `assessment.words` 为空，保留分数展示并显示轻量空状态。
+- 保持 `aria-label` 不变，避免破坏测试和可访问性。
+
+测试方式：
+
+- Conversation Assessment Pronunciation section 不展示 turn 原话。
+- Pronunciation result 中 `Low-score words` 出现在 score row 之前。
+- Reading Practice result 也符合该顺序。
+- 低分词仍有 `.low-word` class。
+- 前端测试通过。
+
+#### PR-ASSESS-V3-C：Timing 和 Summary 移动到第三栏 Reading Practice
+
+功能描述：
+
+- `Conversation Assessment` 中不再展示 `Timing` 和 `Summary`。
+- `Timing` 和 `Summary` 移动到第三栏 `Reading Practice` 面板下方。
+- 第二栏只保留：
+  - `Grammar / Expression Correction`
+  - `Pronunciation`
+  - provider / analysis issue 轻量提示（如有）
+
+实现思路：
+
+- 从 `ConversationAssessmentPanel` 移除：
+  - `latestTiming`
+  - `summary`
+  - `summaryState`
+  - Timing section
+  - Summary section
+- 在 `ReadingPracticePanel` 增加 props：
+  - `latestTiming`
+  - `summary`
+  - `summaryState`
+- `ReadingPracticePanel` 底部新增浅色分隔 sections：
+  - `Timing`
+  - `Summary`
+- 保留现有 `timingRows` / `formatScore` / summary drills 逻辑。
+
+测试方式：
+
+- `Conversation Assessment` 内不再有 `Timing` / `Summary` heading。
+- `Reading Practice` 内可看到 `Timing` heading 和 timing rows。
+- session end 后，`Summary` 出现在 `Reading Practice` 内。
+- 前端测试通过。
+
+#### PR-ASSESS-V3-D：Pronunciation mistake 使用新练习句
+
+功能描述：
+
+- Mistake Book 中 pronunciation item 的 sentence practice 不再使用原句。
+- 每个 pronunciation mistake 根据目标单词生成一个新的短句。
+
+实现思路：
+
+- 修改 `backend/app/services/mistakes.py` 中 `add_from_pronunciation`：
+  - 当前 `practice_sentence=assessment.reference_text`。
+  - 改为 `practice_sentence=_practice_sentence_for_pronunciation_word(word.word)`。
+- 新增简单 deterministic helper，避免依赖 LLM：
+  - 输入 `systems` -> `Practice saying systems clearly in one short sentence.`
+  - 或更自然的短句模板：`The systems are running smoothly today.`
+  - 需要兼容任意词，保持短、正确、可读。
+- 保留 `wrong` / `correct` / `word` 字段。
+- 已存在历史数据不会自动迁移；新生成 mistakes 使用新句子。
+
+测试方式：
+
+- 后端 pronunciation mistake 测试断言：
+  - `practice_sentence != assessment.reference_text`
+  - `practice_sentence` 包含目标 word。
+- Mistake Book API 返回的新 pronunciation mistake sentence 不是原句。
+- 后端测试通过。
+
+#### PR-ASSESS-V3-E：Mistake Book pronunciation target 增加标准发音按钮
+
+功能描述：
+
+- Pronunciation mistake 的 word target 和 sentence target 各增加一个标准发音按钮。
+- 每个 target 都有两个操作：
+  - 标准发音：图标按钮，播放标准读音。
+  - Record：录用户发音并评测。
+
+实现思路：
+
+- 前端复用现有 `speakText(text)` 或已有 TTS 播放逻辑。
+- 使用 lucide 图标（如果项目已有依赖）；如果没有现成 icon 库，使用语义明确的文本/符号按钮并加 `aria-label`，避免新增依赖。
+- target UI 结构：
+  - target label + target text。
+  - actions：
+    - `aria-label="Play word pronunciation"` / `aria-label="Play sentence pronunciation"`
+    - `Read word` / `Read sentence` record button。
+- 标准发音按钮不改变 mistakeReadingState。
+
+测试方式：
+
+- Pronunciation mistake 的 word target 有标准发音按钮和 record 按钮。
+- Pronunciation mistake 的 sentence target 有标准发音按钮和 record 按钮。
+- 点击标准发音按钮会调用 TTS / speechSynthesis。
+- record 按钮仍能完成 `/api/pronunciation/practice/upload`。
+- 前端测试通过。
+
+#### PR-ASSESS-V3-F：Mistake item Delete 移到右上角
+
+功能描述：
+
+- 单条 mistake 的 `Delete` 按钮从底部操作区移动到卡片右上角。
+- 条目布局更紧凑，减少空行。
+
+实现思路：
+
+- `mistake-item` 改为相对定位或 grid header 布局。
+- `Delete` 按钮放入 item 顶部 header：
+  - 左侧 subtype / wrong / correct。
+  - 右侧 Delete。
+- pronunciation target 的 record / play actions 留在 target 区域内。
+- 不改变 delete API 和状态刷新逻辑。
+
+测试方式：
+
+- `Delete` 按钮仍能删除单条 mistake。
+- CSS class 或 DOM 位置表明按钮在 item header。
+- Mistake Book 现有删除测试继续通过。
+- 前端测试通过。
+
+#### PR 切分与执行顺序
+
+1. `PR-ASSESS-V3-DOC`：追加本计划到 `plan.md`。
+2. `PR-ASSESS-V3-A`：Assessment 核心 section 滚动化 + correction 标签。
+3. `PR-ASSESS-V3-B`：PronunciationResult 顺序调整 + Conversation Assessment 不展示 pronunciation 原话。
+4. `PR-ASSESS-V3-C`：Timing / Summary 移到 Reading Practice 第三栏。
+5. `PR-ASSESS-V3-D`：Pronunciation mistake 新练习句。
+6. `PR-ASSESS-V3-E`：Pronunciation mistake 标准发音按钮。
+7. `PR-ASSESS-V3-F`：Mistake item Delete 右上角布局。
+
+#### 验收标准
+
+- Conversation Assessment 第二栏只展示核心纠错：
+  - Grammar / Expression Correction
+  - Pronunciation
+- Grammar/Expression 与 Pronunciation 都是固定高度滚动区，默认可看到最近反馈。
+- Correction item 明确展示 `Original` 和 `Corrected`。
+- Conversation Assessment Pronunciation 不再额外展示原话。
+- Pronunciation result 展示顺序为：
+  - word sequence / low-score words
+  - Overall / Accuracy / Fluency
+- Reading Practice result 使用同一展示顺序。
+- Timing 和 Summary 出现在第三栏 Reading Practice 下方。
+- Pronunciation mistake 的 sentence practice 不是原句，而是新的正确短句。
+- Pronunciation mistake 的 word / sentence target 都有标准发音按钮和 record 按钮。
+- Mistake item Delete 位于右上角。
+- 默认 `make test` 通过。
