@@ -575,13 +575,21 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     )
                     reply_text_parts: list[str] = []
                     first_delta = True
+                    delta_count = 0
+                    stream_started = time.perf_counter()
+                    first_delta_at: float | None = None
+                    last_delta_at: float | None = None
                     try:
                         for chunk in stream_reply.chunks:
                             if not chunk:
                                 continue
+                            delta_at = time.perf_counter()
                             if first_delta:
                                 timings["reply_first_delta_ms"] = _elapsed_ms(dialogue_started)
                                 first_delta = False
+                                first_delta_at = delta_at
+                            last_delta_at = delta_at
+                            delta_count += 1
                             reply_text_parts.append(chunk)
                             await websocket.send_json(
                                 {
@@ -601,6 +609,14 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                         reply_text_parts = [fallback.text]
                         stream_reply.current_goal = fallback.current_goal
                         stream_reply.next_intent = fallback.next_intent
+
+                    timings["reply_delta_count"] = delta_count
+                    timings["reply_total_stream_ms"] = _elapsed_ms(stream_started)
+                    if delta_count > 1 and first_delta_at is not None and last_delta_at is not None:
+                        timings["reply_itl_ms"] = round(
+                            ((last_delta_at - first_delta_at) * 1000.0) / (delta_count - 1),
+                            3,
+                        )
 
                     reply_text = "".join(reply_text_parts).strip()
                     if not reply_text:
