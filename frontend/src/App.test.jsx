@@ -523,6 +523,7 @@ test('loads scenarios and starts a session', async () => {
   expect(screen.queryByText('Candidate')).not.toBeInTheDocument();
   expect(screen.queryByText('Introduce professional background clearly')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Reading Practice')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Coach' })).not.toBeInTheDocument();
   expect(screen.queryByDisplayValue('THEN HE WENT TO THEME PARK')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Record Reading' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Mistake Book (2)' })).toBeInTheDocument();
@@ -669,6 +670,7 @@ test('shows saved mistake details without review actions', async () => {
 
   fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
   expect(await screen.findByRole('heading', { name: 'Mistake Book' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Reading Practice')).toBeInTheDocument();
   fireEvent.click(await screen.findByRole('button', { name: /Open Job Interview/ }));
   expect(await screen.findByText('am working')).toBeInTheDocument();
   expect(screen.getByText('I am working in this field since three years.')).toBeInTheDocument();

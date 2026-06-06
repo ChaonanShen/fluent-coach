@@ -520,10 +520,20 @@ h3 {
 .mistake-book {
   flex: 1;
   margin: 0 auto;
-  max-width: 860px;
   min-height: 0;
   overflow-y: auto;
   padding-bottom: 24px;
+  width: 100%;
+}
+
+.mistake-book-workspace {
+  display: grid;
+  flex: 1;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+  margin: 0 auto;
+  max-width: 1240px;
+  min-height: 0;
   width: 100%;
 }
 
@@ -853,6 +863,10 @@ h3 {
   .workspace {
     grid-template-columns: 1fr;
     min-height: auto;
+  }
+
+  .mistake-book-workspace {
+    grid-template-columns: 1fr;
   }
 
   .conversation-panel {

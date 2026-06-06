@@ -1085,9 +1085,10 @@ export default function App() {
 
         {error ? <p className="inline-error">{error}</p> : null}
 
-        <section className="mistake-book" aria-label="Mistake Book">
-          {selectedMistakeBookId ? (
-            <div className="mistake-book-detail">
+        <section className="mistake-book-workspace" aria-label="Mistake Book workspace">
+          <section className="mistake-book" aria-label="Mistake Book">
+            {selectedMistakeBookId ? (
+              <div className="mistake-book-detail">
               <div className="mistake-book-detail-actions">
                 <button className="secondary-action" onClick={closeMistakeBookDetail} type="button">
                   All Books
@@ -1181,9 +1182,9 @@ export default function App() {
                   )}
                 </>
               ) : null}
-            </div>
-          ) : mistakeBooks.length ? (
-            <>
+              </div>
+            ) : mistakeBooks.length ? (
+              <>
               <div className="mistake-book-toolbar">
                 <label className="mistake-book-select-all">
                   <input
@@ -1259,10 +1260,22 @@ export default function App() {
                   </article>
                 ))}
               </div>
-            </>
-          ) : (
-            <p>No conversation mistake books yet.</p>
-          )}
+              </>
+            ) : (
+              <p>No conversation mistake books yet.</p>
+            )}
+          </section>
+          <aside className="coach-panel reading-practice-panel" aria-label="Reading Practice">
+            <ReadingPracticePanel
+              assessedPracticeReferenceText={assessedPracticeReferenceText}
+              practicePronunciation={practicePronunciation}
+              practiceReferenceText={practiceReferenceText}
+              readingState={readingState}
+              setPracticeReferenceText={setPracticeReferenceText}
+              startReadingRecording={startReadingRecording}
+              stopReadingRecording={stopReadingRecording}
+            />
+          </aside>
         </section>
       </main>
     );
@@ -1363,7 +1376,14 @@ export default function App() {
         </section>
 
         <ConversationAssessmentPanel
+          analysisErrors={analysisErrors}
+          latestCorrection={latestCorrection}
+          latestTiming={latestTiming}
+          mistakes={mistakes}
+          openMistakeBook={() => setMainView('mistakes')}
           session={session}
+          summary={summary}
+          summaryState={summaryState}
           turnAssessmentErrors={turnAssessmentErrors}
           turnCorrections={turnCorrections}
           turnPronunciations={turnPronunciations}
@@ -1379,96 +1399,6 @@ export default function App() {
             startReadingRecording={startReadingRecording}
             stopReadingRecording={stopReadingRecording}
           />
-          {latestCorrection?.issues?.length ? (
-            <section className="coach-block">
-              <h3>Correction</h3>
-              <p className="corrected">{latestCorrection.corrected_text}</p>
-              <p>{latestCorrection.issues[0].explanation_zh}</p>
-            </section>
-          ) : (
-            <section className="coach-block">
-              <h3>Correction</h3>
-              <p>No issue on the latest turn.</p>
-            </section>
-          )}
-
-          {analysisErrors.length ? (
-            <section className="coach-block">
-              <h3>Issues</h3>
-              <div className="analysis-error-list">
-                {analysisErrors.map((item, index) => (
-                  <article className="analysis-error" key={`${item.code}-${index}`}>
-                    <span>{item.stage}</span>
-                    <p>{item.user_message_zh || item.code}</p>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {summaryState === 'loading' ? (
-            <section className="coach-block">
-              <h3>Summary</h3>
-              <p>Generating summary...</p>
-            </section>
-          ) : null}
-
-          {summaryState === 'error' ? (
-            <section className="coach-block">
-              <h3>Summary</h3>
-              <p>Summary is unavailable for this session.</p>
-            </section>
-          ) : null}
-
-          {summary ? (
-            <section className="coach-block">
-              <h3>Summary</h3>
-              <dl>
-                <div>
-                  <dt>Grammar</dt>
-                  <dd>{formatScore(summary.grammar_score)}</dd>
-                </div>
-                <div>
-                  <dt>Pronunciation</dt>
-                  <dd>{formatScore(summary.pronunciation_score)}</dd>
-                </div>
-                <div>
-                  <dt>Fluency</dt>
-                  <dd>{formatScore(summary.fluency_score)}</dd>
-                </div>
-                <div>
-                  <dt>Vocabulary</dt>
-                  <dd>{formatScore(summary.vocabulary_score)}</dd>
-                </div>
-              </dl>
-              <ul className="drill-list">
-                {summary.next_drills.map((drill) => (
-                  <li key={drill}>{drill}</li>
-                ))}
-              </ul>
-            </section>
-          ) : null}
-
-          <section className="coach-block">
-            <h3>Mistake Book</h3>
-            <button className="secondary-action mistake-book-action" onClick={() => setMainView('mistakes')} type="button">
-              Mistake Book ({mistakes.length})
-            </button>
-          </section>
-
-          {latestTiming ? (
-            <div className="timing-footnote">
-              <p>Timing:</p>
-              <ul>
-                {timingRows(latestTiming.timings).map(([label, value]) => (
-                  <li key={label}>
-                    <span>{label}</span>
-                    <span>{formatMs(value)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
         </aside>
       </section>
     </main>
@@ -1577,7 +1507,14 @@ function SummaryScores({ summary, variant = 'detail' }) {
 }
 
 function ConversationAssessmentPanel({
+  analysisErrors,
+  latestCorrection,
+  latestTiming,
+  mistakes,
+  openMistakeBook,
   session,
+  summary,
+  summaryState,
   turnCorrections,
   turnPronunciations,
   turnAssessmentErrors,
@@ -1632,6 +1569,85 @@ function ConversationAssessmentPanel({
       ) : (
         <p>No conversation assessment yet.</p>
       )}
+      {latestCorrection?.issues?.length && !items.length ? (
+        <section className="coach-block">
+          <h3>Correction</h3>
+          <p className="corrected">{latestCorrection.corrected_text}</p>
+          <p>{latestCorrection.issues[0].explanation_zh}</p>
+        </section>
+      ) : null}
+      {analysisErrors.length ? (
+        <section className="coach-block">
+          <h3>Issues</h3>
+          <div className="analysis-error-list">
+            {analysisErrors.map((item, index) => (
+              <article className="analysis-error" key={`${item.code}-${index}`}>
+                <span>{item.stage}</span>
+                <p>{item.user_message_zh || item.code}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      {summaryState === 'loading' ? (
+        <section className="coach-block">
+          <h3>Summary</h3>
+          <p>Generating summary...</p>
+        </section>
+      ) : null}
+      {summaryState === 'error' ? (
+        <section className="coach-block">
+          <h3>Summary</h3>
+          <p>Summary is unavailable for this session.</p>
+        </section>
+      ) : null}
+      {summary ? (
+        <section className="coach-block">
+          <h3>Summary</h3>
+          <dl>
+            <div>
+              <dt>Grammar</dt>
+              <dd>{formatScore(summary.grammar_score)}</dd>
+            </div>
+            <div>
+              <dt>Pronunciation</dt>
+              <dd>{formatScore(summary.pronunciation_score)}</dd>
+            </div>
+            <div>
+              <dt>Fluency</dt>
+              <dd>{formatScore(summary.fluency_score)}</dd>
+            </div>
+            <div>
+              <dt>Vocabulary</dt>
+              <dd>{formatScore(summary.vocabulary_score)}</dd>
+            </div>
+          </dl>
+          <ul className="drill-list">
+            {summary.next_drills.map((drill) => (
+              <li key={drill}>{drill}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+      <section className="coach-block">
+        <h3>Mistake Book</h3>
+        <button className="secondary-action mistake-book-action" onClick={openMistakeBook} type="button">
+          Mistake Book ({mistakes.length})
+        </button>
+      </section>
+      {latestTiming ? (
+        <div className="timing-footnote">
+          <p>Timing:</p>
+          <ul>
+            {timingRows(latestTiming.timings).map(([label, value]) => (
+              <li key={label}>
+                <span>{label}</span>
+                <span>{formatMs(value)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
     </aside>
   );
 }
