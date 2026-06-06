@@ -942,20 +942,24 @@ h3 {
 }
 
 .mistake-practice-result {
+  background: #ffffff;
+  border: 1px solid #e0e7e2;
+  border-radius: 6px;
   margin-top: 8px;
+  padding: 8px 34px 8px 8px;
   position: relative;
 }
 
 .mistake-practice-result .pronunciation-result {
-  padding-right: 28px;
+  margin-top: 0;
 }
 
 .clear-practice-result-action {
-  background: #fff;
+  background: #f8faf8;
   height: 24px;
   position: absolute;
-  right: 4px;
-  top: 4px;
+  right: 6px;
+  top: 6px;
   width: 24px;
   z-index: 1;
 }
