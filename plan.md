@@ -1907,3 +1907,127 @@ WebSocket 事件：
 - 原来重复的浅色 `标题/场景-时间` 信息不再重复展示。
 - 错题筛选、单条删除、多选删除、滚动能力保持可用。
 - 默认 `make test` 通过。
+
+### 2026-06-06 Follow-up: Mistake Book 分数精简与 Custom UI 微调
+
+#### 背景
+
+- `conversation_goals` 对对话推进有价值，继续作为 AI 当前推进方向使用。
+- `Tasks` 百分比目前只是按用户发言轮数粗略估算目标推进率，不是语义级任务完成判断，容易造成误解。
+- 错题本主列表同时展示多项 summary 分数会显得拥挤，主列表应更适合快速扫视。
+- Mistake Book 批量选择区的 `Clear` 有实际用途：清空当前选择但不删除数据，应保留并修正视觉尺寸。
+
+#### PR-FOLLOWUP-A：文档计划追加
+
+功能描述：
+
+- 记录本轮 UI 和评分展示调整计划。
+
+实现思路：
+
+- 在 `plan.md` 追加本节。
+- 明确 `conversation_goals` 继续用于对话推进。
+- 明确 `Tasks` 不再作为 UI 分数展示。
+- 明确后续代码 PR 切分。
+
+测试方式：
+
+- 文档变更，无需运行自动化测试。
+
+#### PR-FOLLOWUP-B：Custom 场景输入与批量按钮尺寸
+
+功能描述：
+
+- Custom 场景右侧只保留输入框，不显示 `Custom scenario` 文案。
+- Mistake Book 批量操作里的 `Clear` 和 `Delete selected` 高度、padding、对齐方式保持一致。
+
+实现思路：
+
+- Custom 场景区域继续放在 conversation toolbar 右侧。
+- 将可见 label 文案替换为 screen-reader only 文案，保留无障碍名称。
+- placeholder 改为英文提示：
+  - `Describe the English conversation scenario you want to practice...`
+- 增加批量操作按钮的共享样式，统一 `min-height`、padding 和 inline-flex 对齐。
+- 保留 `Clear` 行为：只清空 `selectedMistakeBookIds`。
+
+测试方式：
+
+- 选择 `Custom` 后不再看到 `Custom scenario` 文案。
+- Custom 输入框仍可通过 aria label 找到。
+- `Clear` 和 `Delete selected` 都存在，且 `Clear` 点击后选择数归零。
+- 前端测试通过。
+
+#### PR-FOLLOWUP-C：移除 Tasks 分数展示并计算 Overall
+
+功能描述：
+
+- 前端 summary 不再展示 `Tasks` 百分比。
+- 新增综合分 `Overall`，用于主列表快速扫视。
+
+实现思路：
+
+- 保留后端 `task_completion_rate` 字段，避免破坏 API 和历史数据。
+- 前端 summary score items 只包含：
+  - `Grammar`
+  - `Pronunciation`
+  - `Fluency`
+  - `Vocabulary`
+- 新增 `overallScore(summary)` helper：
+  - Grammar：35%
+  - Pronunciation：25%
+  - Fluency：20%
+  - Vocabulary：20%
+  - 缺失项不按 0 分处理，按可用项权重重新归一化。
+- Summary 面板删除 `Tasks` 行。
+- 趋势 delta 删除 `Tasks`。
+
+测试方式：
+
+- Summary 面板不再显示 `Tasks`。
+- Score chips 和趋势中不再出现 `Tasks`。
+- 缺 pronunciation 时 Overall 仍能按其他项计算。
+- 前端测试通过。
+
+#### PR-FOLLOWUP-D：Mistake Book 主列表只显示 Overall，详情显示明细
+
+功能描述：
+
+- Mistake Book 主列表每条只显示 `Overall`。
+- 点进具体对话后再显示完整 summary 明细和分数变化。
+
+实现思路：
+
+- 新增 `OverallScore` 展示组件或复用 helper。
+- 列表卡片：
+  - 保留加粗标题。
+  - 浅色信息区域显示 `Overall 82.5` 或 `Summary pending`。
+  - 错题类型数量继续保留。
+- 详情页：
+  - 展示 `Overall`、`Grammar`、`Pronunciation`、`Fluency`、`Vocabulary`。
+  - 趋势展示只保留上述分数变化。
+- 不显示旧的重复浅色标题/时间。
+
+测试方式：
+
+- Mistake Book 主列表只出现 `Overall`，不出现四项明细。
+- Mistake Book 详情页出现 `Overall` 和四项明细。
+- Detail 趋势不再展示 `Tasks`。
+- 错题筛选、删除、批量选择功能保持可用。
+
+#### PR 切分建议
+
+1. `PR-FOLLOWUP-A`：只改 `plan.md`。
+2. `PR-FOLLOWUP-B`：只改 Custom 输入框和批量按钮视觉/行为测试。
+3. `PR-FOLLOWUP-C`：只改 summary 分数 helpers、Summary 面板和相关测试。
+4. `PR-FOLLOWUP-D`：只改 Mistake Book 列表/详情分数展示和相关测试。
+
+#### 验收标准
+
+- `conversation_goals` 仍参与对话推进。
+- UI 不再展示 `Tasks` 百分比分数。
+- Summary 面板中 pronunciation 等分数保持一位小数。
+- Mistake Book 主列表只显示一个 Overall 分数。
+- Mistake Book 详情页展示 Overall 与 Grammar/Pronunciation/Fluency/Vocabulary 明细。
+- Custom 场景只显示输入框和英文 placeholder，不显示 `Custom scenario` 文案。
+- `Clear` 与 `Delete selected` 尺寸一致，且 `Clear` 只清空选择。
+- 默认测试通过。
