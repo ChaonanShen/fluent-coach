@@ -11,10 +11,16 @@ def test_kokoro_tts_provider_returns_wav_base64(monkeypatch, tmp_path) -> None:
     model_dir = tmp_path / "Kokoro-82M"
     model_dir.mkdir()
     (model_dir / "kokoro-v1_0.pth").write_bytes(b"model")
+    (model_dir / "config.json").write_text("{}", encoding="utf-8")
     voices_dir = model_dir / "voices"
     voices_dir.mkdir()
     (voices_dir / "af_heart.pt").write_bytes(b"voice")
     captured: dict[str, object] = {}
+
+    class FakeKModel:
+        def __init__(self, *, config=None, model=None):
+            captured["model_config"] = config
+            captured["model_path"] = model
 
     class FakeKPipeline:
         def __init__(self, *, lang_code=None, model=None, repo_id=None, device=None):
@@ -26,9 +32,14 @@ def test_kokoro_tts_provider_returns_wav_base64(monkeypatch, tmp_path) -> None:
         def __call__(self, text, *, voice):
             captured["text"] = text
             captured["voice"] = voice
-            yield "gs", "ps", [0.0, 0.1, -0.1]
+
+            class FakeResult:
+                audio = [0.0, 0.1, -0.1]
+
+            yield FakeResult()
 
     fake_kokoro = types.ModuleType("kokoro")
+    fake_kokoro.KModel = FakeKModel
     fake_kokoro.KPipeline = FakeKPipeline
     fake_soundfile = types.ModuleType("soundfile")
 
@@ -50,9 +61,11 @@ def test_kokoro_tts_provider_returns_wav_base64(monkeypatch, tmp_path) -> None:
     assert result.fallback_applied is False
     assert base64.b64decode(result.audio_base64 or "") == b"WAV:24000"
     assert captured["lang_code"] == "a"
-    assert captured["model"] == str(model_dir / "kokoro-v1_0.pth")
+    assert isinstance(captured["model"], FakeKModel)
+    assert captured["model_config"] == str(model_dir / "config.json")
+    assert captured["model_path"] == str(model_dir / "kokoro-v1_0.pth")
     assert captured["text"] == "I has three year experience."
-    assert captured["voice"] == "af_heart"
+    assert captured["voice"] == str(voices_dir / "af_heart.pt")
 
 
 def test_kokoro_tts_provider_reports_missing_model_dir(monkeypatch, tmp_path) -> None:

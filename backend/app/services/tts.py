@@ -133,7 +133,9 @@ class KokoroTTSProvider:
 
         chunks = []
         for item in pipeline(text, voice=self._voice_value()):
-            audio = item[-1] if isinstance(item, tuple) else item
+            audio = getattr(item, "audio", None)
+            if audio is None:
+                audio = item[-1] if isinstance(item, tuple) else item
             chunks.append(_audio_to_numpy(audio, np))
         if not chunks:
             raise RuntimeError("Kokoro TTS returned no audio chunks.")
@@ -148,30 +150,35 @@ class KokoroTTSProvider:
         if not self.model_dir.exists():
             raise RuntimeError(f"Kokoro model directory not found: {self.model_dir}")
         try:
-            from kokoro import KPipeline
+            from kokoro import KModel, KPipeline
         except ImportError as exc:
             raise RuntimeError(
                 "Kokoro TTS requires the kokoro package. Install with: python3 -m pip install -e '.[tts]'"
             ) from exc
-        kwargs = self._pipeline_kwargs(KPipeline)
+        kwargs = self._pipeline_kwargs(KPipeline, KModel)
         self._pipeline_instance = KPipeline(**kwargs)
         return self._pipeline_instance
 
-    def _pipeline_kwargs(self, pipeline_cls: object) -> dict[str, object]:
+    def _pipeline_kwargs(self, pipeline_cls: object, model_cls: object | None = None) -> dict[str, object]:
         signature = inspect.signature(pipeline_cls)
         kwargs: dict[str, object] = {"lang_code": self.lang_code}
         parameters = signature.parameters
         if "model" in parameters and self.model_path.exists():
-            kwargs["model"] = str(self.model_path)
+            config_path = self.model_dir / "config.json"
+            if model_cls is not None and config_path.exists():
+                kwargs["model"] = model_cls(
+                    config=str(config_path),
+                    model=str(self.model_path),
+                )
+            else:
+                kwargs["model"] = str(self.model_path)
         if "device" in parameters and self.device is not None:
             kwargs["device"] = self.device
-        if "repo_id" in parameters and self.model_dir.exists():
-            kwargs["repo_id"] = str(self.model_dir)
         return kwargs
 
     def _voice_value(self) -> str:
         voice_path = self.model_dir / "voices" / f"{self.voice}.pt"
-        if os.environ.get("KOKORO_VOICE_AS_PATH", "").strip().lower() in {"1", "true", "yes", "on"}:
+        if voice_path.exists() or os.environ.get("KOKORO_VOICE_AS_PATH", "").strip().lower() in {"1", "true", "yes", "on"}:
             return str(voice_path)
         return self.voice
 
