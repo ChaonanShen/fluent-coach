@@ -35,6 +35,7 @@ def test_mistake_books_list_sessions_with_mistakes() -> None:
     assert books[0]["expression_count"] == 1
     assert books[0]["pronunciation_count"] == 0
     assert books[0]["lowest_mastery"] == 0.1
+    assert books[0]["summary"] is None
     assert {book["session_id"] for book in include_empty_response.json()["books"]} == {
         empty["session"]["id"],
         session_id,
@@ -61,6 +62,28 @@ def test_mistake_book_detail_groups_mistakes_by_turn() -> None:
     assert body["turn_groups"][0]["turn"]["id"] == user_turn["id"]
     assert body["turn_groups"][0]["turn"]["text"] == user_turn["text"]
     assert {mistake["turn_id"] for mistake in body["turn_groups"][0]["mistakes"]} == {user_turn["id"]}
+
+
+def test_mistake_book_records_include_summary_for_ended_sessions() -> None:
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+    client.post(
+        f"/api/sessions/{session_id}/turns/text",
+        json={"text": "I am working in this field since three years."},
+    )
+
+    client.post(f"/api/sessions/{session_id}/end")
+    list_response = client.get("/api/mistake-books")
+    detail_response = client.get(f"/api/mistake-books/{session_id}")
+
+    assert list_response.status_code == 200
+    record = list_response.json()["books"][0]
+    detail_record = detail_response.json()["record"]
+    assert record["summary"]["session_id"] == session_id
+    assert record["summary"]["grammar_score"] == 70
+    assert record["summary"]["fluency_score"] == 70
+    assert detail_record["summary"]["id"] == record["summary"]["id"]
 
 
 def test_mistake_book_detail_rejects_unknown_session() -> None:

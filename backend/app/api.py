@@ -11,6 +11,7 @@ from backend.app.models import (
     PronunciationAssessment,
     Scenario,
     Session,
+    SessionSummary,
     Turn,
 )
 
@@ -111,6 +112,7 @@ class MistakeBookRecord(BaseModel):
     pronunciation_count: int
     lowest_mastery: float | None
     due_count: int
+    summary: SessionSummary | None
 
 
 class MistakeBookListResponse(BaseModel):

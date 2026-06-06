@@ -861,6 +861,11 @@ def _ensure_known_session(session_id: str | None) -> None:
 def _mistake_book_record(session: Session, mistakes: list[MistakeItem]) -> MistakeBookRecord:
     scenario = resolve_session_scenario(session)
     scenario_name = session.scenario_name_snapshot or (scenario.name if scenario else session.scenario_id)
+    summary = (
+        summary_service.get_or_create(session=session, scenario=scenario)
+        if session.ended_at is not None and scenario is not None
+        else None
+    )
     now = datetime.now(timezone.utc)
     due_count = sum(
         1
@@ -881,6 +886,7 @@ def _mistake_book_record(session: Session, mistakes: list[MistakeItem]) -> Mista
         pronunciation_count=sum(1 for mistake in mistakes if mistake.type == MistakeType.PRONUNCIATION),
         lowest_mastery=min((mistake.mastery for mistake in mistakes), default=None),
         due_count=due_count,
+        summary=summary,
     )
 
 
