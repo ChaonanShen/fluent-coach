@@ -17,6 +17,12 @@ class TurnRecord(BaseModel):
     errors: list[dict[str, object]] = Field(default_factory=list)
     timings_ms: dict[str, float] = Field(default_factory=dict)
     wer: float | None = Field(default=None, ge=0.0)
+    clean_text: str | None = None
+    injected_text: str | None = None
+    expected_corrected_text: str | None = None
+    expected_error_types: list[str] = Field(default_factory=list)
+    grammar_metrics: dict[str, object] = Field(default_factory=dict)
+    tts: dict[str, object] = Field(default_factory=dict)
 
 
 class LatencyStat(BaseModel):

@@ -1,7 +1,7 @@
 import pytest
 
 from backend.app.testkit.models import TurnRecord
-from backend.app.testkit.report import aggregate_latency, build_run_record, percentile
+from backend.app.testkit.report import aggregate_latency, build_run_record, grammar_metric_summary, percentile
 
 
 def test_percentile_uses_linear_interpolation() -> None:
@@ -43,7 +43,26 @@ def test_build_run_record_fills_latency_summary() -> None:
     assert run.latency_summary["grammar_ms"].count == 1
 
 
-def _turn(index: int, timings: dict[str, float]) -> TurnRecord:
+def test_grammar_metric_summary_aggregates_optional_metrics() -> None:
+    turns = [
+        _turn(0, {}, grammar_metrics={"expected_error_recall": 1.0, "corrected_text_match": True}, wer=0.0),
+        _turn(1, {}, grammar_metrics={"expected_error_recall": 0.5, "corrected_text_match": False}, wer=0.2),
+    ]
+
+    summary = grammar_metric_summary(turns)
+
+    assert summary["average_expected_error_recall"] == 0.75
+    assert summary["corrected_text_match_rate"] == 0.5
+    assert summary["average_wer"] == 0.1
+
+
+def _turn(
+    index: int,
+    timings: dict[str, float],
+    *,
+    grammar_metrics: dict[str, object] | None = None,
+    wer: float = 0.0,
+) -> TurnRecord:
     return TurnRecord(
         index=index,
         user_text="hello",
@@ -52,5 +71,6 @@ def _turn(index: int, timings: dict[str, float]) -> TurnRecord:
         audio_path=None,
         reply_text="hi",
         timings_ms=timings,
-        wer=0.0,
+        wer=wer,
+        grammar_metrics=grammar_metrics or {},
     )

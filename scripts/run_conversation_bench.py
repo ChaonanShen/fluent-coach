@@ -19,12 +19,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scenario", default="interview", help="Scenario id, default: interview")
     parser.add_argument("--turns", type=int, default=10, help="Number of turns, default: 10")
     parser.add_argument(
+        "--mode",
+        choices=["offline_fake", "real", "real_audio", "grammar_tts"],
+        default="offline_fake",
+        help="Bench mode, default: offline_fake",
+    )
+    parser.add_argument(
         "--transcript-source",
         choices=["scripted"],
         default="scripted",
         help="Offline transcript source, default: scripted",
     )
     parser.add_argument("--real", action="store_true", help="Use configured real providers.")
+    parser.add_argument(
+        "--virtual-user",
+        choices=["template", "llm"],
+        default="template",
+        help="Virtual user source for grammar_tts, default: template.",
+    )
+    parser.add_argument(
+        "--allow-fake-providers",
+        action="store_true",
+        help="Allow fake ASR/TTS providers in grammar_tts for development tests.",
+    )
     parser.add_argument("--audio-file", action="append", default=[], help="Real-mode audio file; repeatable.")
     parser.add_argument("--audio-dir", help="Real-mode directory of audio files.")
     parser.add_argument("--output-dir", default="reports", help="Output directory, default: reports")
@@ -36,19 +53,22 @@ def main() -> int:
     output_dir = _resolve_output_dir(args.output_dir)
     os.environ["BENCH_RUNS_DIR"] = str(output_dir / "runs")
     audio_paths = _resolve_audio_paths(args)
+    mode = _selected_mode(args)
 
-    if args.real:
+    if mode == "real":
         if not audio_paths:
             raise SystemExit("--real requires --audio-file or --audio-dir with at least one audio file")
         from backend.app.core.env import load_dotenv
 
         load_dotenv(force=True)
-        mode = "real"
+    elif mode == "grammar_tts":
+        from backend.app.core.env import load_dotenv
+
+        load_dotenv(force=True)
     else:
         os.environ["ASR_PROVIDER"] = "fake"
         os.environ["LLM_PROVIDER"] = "fake"
         os.environ["PRON_PROVIDER"] = "mock"
-        mode = "offline_fake"
 
     from backend.app.core.env import provider_status
     from backend.app.testkit.report import build_run_record, render_markdown
@@ -63,6 +83,8 @@ def main() -> int:
         transcript_source=args.transcript_source,
         mode=mode,
         audio_paths=audio_paths,
+        virtual_user_source=args.virtual_user,
+        allow_fake_providers=args.allow_fake_providers,
     )
     status = provider_status()
     providers = {
@@ -101,6 +123,14 @@ def _resolve_output_dir(value: str) -> Path:
     if not path.is_absolute():
         path = PROJECT_ROOT / path
     return path
+
+
+def _selected_mode(args: argparse.Namespace) -> str:
+    if args.real:
+        return "real"
+    if args.mode == "real_audio":
+        return "real"
+    return args.mode
 
 
 def _resolve_audio_paths(args: argparse.Namespace) -> list[Path]:

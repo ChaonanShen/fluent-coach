@@ -1,6 +1,6 @@
 from backend.app.services.llm import FakeLLMClient
 from backend.app.testkit.grammar_cases import grammar_case_sequence, grammar_cases_for_scenario
-from backend.app.testkit.grammar_injection import next_error_case, score_grammar_result
+from backend.app.testkit.grammar_injection import inject_errors, next_error_case, score_grammar_result
 from backend.app.testkit.virtual_user import LLMVirtualUser, TemplateVirtualUser
 
 
@@ -40,6 +40,24 @@ def test_score_grammar_result_counts_error_type_recall_and_correction_match() ->
     assert metrics["matched_error_types"] == ["plural_noun", "subject_verb_agreement"]
     assert metrics["corrected_text_match"] is True
     assert metrics["asr_preserved_injected_error"] is True
+
+
+def test_inject_errors_derives_case_from_clean_text() -> None:
+    case = inject_errors(
+        "I have three years of experience and finished a platform project.",
+        scenario_id="interview",
+        index=0,
+    )
+
+    assert case.clean_text == "I have three years of experience and finished a platform project."
+    assert case.injected_text == "I has three year of experience and finish platform project."
+    assert case.expected_corrected_text == case.clean_text
+    assert case.expected_error_types == [
+        "subject_verb_agreement",
+        "plural_noun",
+        "verb_tense",
+        "article",
+    ]
 
 
 def test_score_grammar_result_handles_missing_grammar() -> None:

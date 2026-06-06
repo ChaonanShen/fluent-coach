@@ -22,6 +22,50 @@ def next_error_case(scenario_id: str, index: int) -> GrammarErrorCase:
     return grammar_case_sequence(scenario_id, index + 1)[index]
 
 
+def inject_errors(clean_text: str, *, scenario_id: str, index: int) -> GrammarErrorCase:
+    injected = clean_text
+    expected_error_types: list[str] = []
+    error_spans: list[str] = []
+
+    injected, changed = _replace_once(injected, r"\bhave\b", "has")
+    if changed:
+        expected_error_types.append("subject_verb_agreement")
+        error_spans.append("has")
+
+    injected, changed = _replace_once(injected, r"\byears\b", "year")
+    if changed:
+        expected_error_types.append("plural_noun")
+        error_spans.append("year")
+
+    for pattern, replacement in [
+        (r"\bwent\b", "go"),
+        (r"\bfinished\b", "finish"),
+        (r"\bshared\b", "share"),
+        (r"\bexplained\b", "explain"),
+    ]:
+        injected, changed = _replace_once(injected, pattern, replacement)
+        if changed:
+            expected_error_types.append("verb_tense")
+            error_spans.append(replacement)
+            break
+
+    injected, changed = _remove_first_article(injected)
+    if changed:
+        expected_error_types.append("article")
+        error_spans.append(changed)
+
+    if not expected_error_types or injected == clean_text:
+        return next_error_case(scenario_id, index)
+    return GrammarErrorCase(
+        scenario_id=scenario_id,
+        clean_text=clean_text,
+        injected_text=injected,
+        expected_corrected_text=clean_text,
+        expected_error_types=_dedupe(expected_error_types),
+        error_spans=_dedupe(error_spans),
+    )
+
+
 def score_grammar_result(
     case: GrammarErrorCase,
     grammar: dict[str, Any] | None,
@@ -90,3 +134,23 @@ def _normalize(value: str) -> str:
 
 def _contains_phrase(text: str, phrase: str) -> bool:
     return re.search(rf"(^|\s){re.escape(phrase)}($|\s)", text) is not None
+
+
+def _replace_once(text: str, pattern: str, replacement: str) -> tuple[str, bool]:
+    updated, count = re.subn(pattern, replacement, text, count=1, flags=re.IGNORECASE)
+    return updated, count > 0
+
+
+def _remove_first_article(text: str) -> tuple[str, str | None]:
+    match = re.search(r"\ba\s+([a-zA-Z]{3,})\b", text)
+    if match is None:
+        return text, None
+    return text[: match.start()] + match.group(1) + text[match.end() :], match.group(1)
+
+
+def _dedupe(values: list[str]) -> list[str]:
+    deduped: list[str] = []
+    for value in values:
+        if value not in deduped:
+            deduped.append(value)
+    return deduped

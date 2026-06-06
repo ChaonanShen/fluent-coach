@@ -97,6 +97,13 @@ def render_markdown(run: RunRecord) -> str:
     else:
         lines.append("No latency samples were recorded.")
 
+    grammar_summary = grammar_metric_summary(run.turns)
+    if grammar_summary:
+        lines.extend(["", "## Grammar Metrics", ""])
+        lines.append(f"- Average expected error recall: {grammar_summary['average_expected_error_recall']:.4f}")
+        lines.append(f"- Corrected text match rate: {grammar_summary['corrected_text_match_rate']:.4f}")
+        lines.append(f"- Average WER against injected text: {grammar_summary['average_wer']:.4f}")
+
     lines.extend(["", "## Turns", ""])
     if run.turns:
         lines.append("| # | WER | ASR text | Reply |")
@@ -110,6 +117,27 @@ def render_markdown(run: RunRecord) -> str:
         lines.append("No turns were recorded.")
     lines.append("")
     return "\n".join(lines)
+
+
+def grammar_metric_summary(turns: list[TurnRecord]) -> dict[str, float]:
+    metric_turns = [turn for turn in turns if turn.grammar_metrics]
+    if not metric_turns:
+        return {}
+    recalls = [
+        float(turn.grammar_metrics.get("expected_error_recall", 0.0))
+        for turn in metric_turns
+        if not isinstance(turn.grammar_metrics.get("expected_error_recall"), bool)
+    ]
+    corrected_matches = [
+        1.0 if turn.grammar_metrics.get("corrected_text_match") is True else 0.0
+        for turn in metric_turns
+    ]
+    wers = [turn.wer for turn in metric_turns if turn.wer is not None]
+    return {
+        "average_expected_error_recall": round(mean(recalls), 4) if recalls else 0.0,
+        "corrected_text_match_rate": round(mean(corrected_matches), 4) if corrected_matches else 0.0,
+        "average_wer": round(mean(wers), 4) if wers else 0.0,
+    }
 
 
 def _md_cell(value: str) -> str:
