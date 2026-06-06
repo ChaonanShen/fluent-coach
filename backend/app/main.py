@@ -5,6 +5,7 @@ import json
 import os
 import re
 import time
+from datetime import datetime, timezone
 
 from backend.app.core.env import load_dotenv, provider_status
 
@@ -16,6 +17,10 @@ from starlette.websockets import WebSocket, WebSocketDisconnect
 from backend.app.api import (
     CreateSessionRequest,
     GrammarCheckRequest,
+    MistakeBookDetail,
+    MistakeBookListResponse,
+    MistakeBookRecord,
+    MistakeTurnGroup,
     MistakeListResponse,
     ProgressResponse,
     PronunciationAssessRequest,
@@ -40,6 +45,7 @@ from backend.app.models import (
     PronunciationAssessment,
     Session,
     SessionSummary,
+    Turn,
     TurnSpeaker,
 )
 from backend.app.services.analysis import analysis_store
@@ -272,6 +278,29 @@ def list_mistakes(
             mistake_type=mistake_type,
             subtype=subtype,
         )
+    )
+
+
+@app.get("/api/mistake-books", response_model=MistakeBookListResponse)
+def list_mistake_books(include_empty: bool = False) -> MistakeBookListResponse:
+    books: list[MistakeBookRecord] = []
+    for session in session_store.list():
+        mistakes = mistake_service.list(session_id=session.id)
+        if not mistakes and not include_empty:
+            continue
+        books.append(_mistake_book_record(session, mistakes))
+    return MistakeBookListResponse(books=books)
+
+
+@app.get("/api/mistake-books/{session_id}", response_model=MistakeBookDetail)
+def get_mistake_book(session_id: str) -> MistakeBookDetail:
+    session = session_store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Unknown session")
+    mistakes = mistake_service.list(session_id=session.id)
+    return MistakeBookDetail(
+        record=_mistake_book_record(session, mistakes),
+        turn_groups=_mistake_turn_groups(session, mistakes),
     )
 
 
@@ -794,6 +823,65 @@ def _ensure_known_session(session_id: str | None) -> None:
         return
     if session_store.get(session_id) is None:
         raise HTTPException(status_code=404, detail="Unknown session")
+
+
+def _mistake_book_record(session: Session, mistakes: list[MistakeItem]) -> MistakeBookRecord:
+    scenario = resolve_session_scenario(session)
+    scenario_name = session.scenario_name_snapshot or (scenario.name if scenario else session.scenario_id)
+    now = datetime.now(timezone.utc)
+    due_count = sum(
+        1
+        for mistake in mistakes
+        if mistake.next_review_at is not None and mistake.next_review_at <= now
+    )
+    return MistakeBookRecord(
+        session_id=session.id,
+        title=session.title or _fallback_session_title(scenario_name, session.created_at),
+        scenario_id=session.scenario_id,
+        scenario_name=scenario_name,
+        status=session.status.value,
+        created_at=session.created_at,
+        ended_at=session.ended_at,
+        mistake_count=len(mistakes),
+        grammar_count=sum(1 for mistake in mistakes if mistake.type == MistakeType.GRAMMAR),
+        expression_count=sum(1 for mistake in mistakes if mistake.type == MistakeType.EXPRESSION),
+        pronunciation_count=sum(1 for mistake in mistakes if mistake.type == MistakeType.PRONUNCIATION),
+        lowest_mastery=min((mistake.mastery for mistake in mistakes), default=None),
+        due_count=due_count,
+    )
+
+
+def _mistake_turn_groups(session: Session, mistakes: list[MistakeItem]) -> list[MistakeTurnGroup]:
+    mistakes_by_turn: dict[str | None, list[MistakeItem]] = {}
+    for mistake in mistakes:
+        mistakes_by_turn.setdefault(mistake.turn_id, []).append(mistake)
+
+    groups: list[MistakeTurnGroup] = []
+    seen_turn_ids: set[str] = set()
+    for turn in _session_turns(session):
+        turn_mistakes = mistakes_by_turn.get(turn.id, [])
+        if not turn_mistakes:
+            continue
+        seen_turn_ids.add(turn.id)
+        groups.append(MistakeTurnGroup(turn=turn, mistakes=turn_mistakes))
+
+    other_mistakes = [
+        mistake
+        for turn_id, turn_mistakes in mistakes_by_turn.items()
+        if turn_id is None or turn_id not in seen_turn_ids
+        for mistake in turn_mistakes
+    ]
+    if other_mistakes:
+        groups.append(MistakeTurnGroup(turn=None, mistakes=other_mistakes))
+    return groups
+
+
+def _session_turns(session: Session) -> list[Turn]:
+    return session.turns or log_store.list_turns(session.id)
+
+
+def _fallback_session_title(scenario_name: str, created_at: datetime) -> str:
+    return f"{scenario_name} - {created_at.strftime('%Y-%m-%d %H:%M UTC')}"
 
 
 def _record_pronunciation_for_session(

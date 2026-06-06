@@ -42,6 +42,13 @@ class SessionStore:
             self._sessions[session.id] = session
         return session
 
+    def list(self) -> list[Session]:
+        sessions: dict[str, Session] = {}
+        if self._storage is not None:
+            sessions.update({session.id: session for session in self._storage.list_sessions()})
+        sessions.update(self._sessions)
+        return sorted(sessions.values(), key=lambda session: session.created_at, reverse=True)
+
     def end(self, session_id: str) -> Session | None:
         session = self.get(session_id)
         if session is None:

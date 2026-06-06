@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.app.models import (
@@ -89,6 +91,44 @@ class MistakeListResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mistakes: list[MistakeItem]
+
+
+class MistakeBookRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    session_id: str
+    title: str
+    scenario_id: str
+    scenario_name: str
+    status: str
+    created_at: datetime
+    ended_at: datetime | None
+    mistake_count: int
+    grammar_count: int
+    expression_count: int
+    pronunciation_count: int
+    lowest_mastery: float | None
+    due_count: int
+
+
+class MistakeBookListResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    books: list[MistakeBookRecord]
+
+
+class MistakeTurnGroup(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    turn: Turn | None
+    mistakes: list[MistakeItem]
+
+
+class MistakeBookDetail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record: MistakeBookRecord
+    turn_groups: list[MistakeTurnGroup]
 
 
 class SessionAnalysisResponse(BaseModel):
