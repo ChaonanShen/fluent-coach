@@ -1362,6 +1362,13 @@ export default function App() {
           </form>
         </section>
 
+        <ConversationAssessmentPanel
+          session={session}
+          turnAssessmentErrors={turnAssessmentErrors}
+          turnCorrections={turnCorrections}
+          turnPronunciations={turnPronunciations}
+        />
+
         <aside className="coach-panel">
           <h2>Coach</h2>
           <section className="coach-block">
@@ -1585,14 +1592,74 @@ function SummaryScores({ summary, variant = 'detail' }) {
   );
 }
 
-function PronunciationResult({ assessment, referenceText = '' }) {
+function ConversationAssessmentPanel({
+  session,
+  turnCorrections,
+  turnPronunciations,
+  turnAssessmentErrors,
+}) {
+  const items = userTurnsWithAssessments(session, turnCorrections, turnPronunciations, turnAssessmentErrors);
+  return (
+    <aside className="coach-panel assessment-panel" aria-label="Conversation Assessment">
+      <h2>Conversation Assessment</h2>
+      {items.length ? (
+        <div className="assessment-list">
+          {items.map(({ turn, correction, pronunciation: turnPronunciation, errors }) => (
+            <article className="assessment-item" key={turn.id}>
+              <p className="assessment-turn-text">{turn.text}</p>
+              <div className="assessment-section">
+                <h3>Grammar / Expression</h3>
+                {correction ? (
+                  correction.issues?.length ? (
+                    <>
+                      <p className="corrected">{correction.corrected_text}</p>
+                      <p>{correction.issues[0].explanation_zh}</p>
+                    </>
+                  ) : (
+                    <p>No grammar or expression issue.</p>
+                  )
+                ) : (
+                  <p>Assessment pending.</p>
+                )}
+              </div>
+              {isVoiceTurn(turn) ? (
+                <div className="assessment-section">
+                  <h3>Pronunciation</h3>
+                  {turnPronunciation ? (
+                    <PronunciationResult assessment={turnPronunciation} ariaLabel="Pronunciation scores" />
+                  ) : (
+                    <p>Pronunciation pending.</p>
+                  )}
+                </div>
+              ) : null}
+              {errors.length ? (
+                <div className="analysis-error-list">
+                  {errors.map((item, index) => (
+                    <article className="analysis-error" key={`${turn.id}-${item.code}-${index}`}>
+                      <span>{item.stage}</span>
+                      <p>{item.user_message_zh || item.code}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : (
+        <p>No conversation assessment yet.</p>
+      )}
+    </aside>
+  );
+}
+
+function PronunciationResult({ assessment, referenceText = '', ariaLabel = 'Pronunciation scores' }) {
   if (!assessment) {
     return null;
   }
   return (
     <div className="pronunciation-result">
       {referenceText ? <p className="practice-reference">Read: {referenceText}</p> : null}
-      <div className="score-row" aria-label="Pronunciation scores">
+      <div className="score-row" aria-label={ariaLabel}>
         <span>Overall {Math.round(assessment.overall)}</span>
         <span>Accuracy {Math.round(assessment.accuracy)}</span>
         <span>Fluency {Math.round(assessment.fluency)}</span>
@@ -1607,6 +1674,24 @@ function PronunciationResult({ assessment, referenceText = '' }) {
       </div>
     </div>
   );
+}
+
+function userTurnsWithAssessments(session, turnCorrections, turnPronunciations, turnAssessmentErrors) {
+  return (session?.turns || [])
+    .filter((turn) => turn.speaker === 'user')
+    .map((turn) => ({
+      turn,
+      correction: turnCorrections[turn.id] || null,
+      pronunciation: turnPronunciations[turn.id] || null,
+      errors: turnAssessmentErrors[turn.id] || [],
+    }))
+    .filter(({ correction, pronunciation, errors }) => correction || pronunciation || errors.length)
+    .slice(-5)
+    .reverse();
+}
+
+function isVoiceTurn(turn) {
+  return turn?.mode === 'audio' || turn?.mode === 'voice';
 }
 
 function mistakePracticeReference(mistake) {

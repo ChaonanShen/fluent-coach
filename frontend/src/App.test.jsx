@@ -571,7 +571,10 @@ test('sends a text turn and shows correction feedback', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
   expect(await screen.findByText('Great. Which project is most relevant to this role?')).toBeInTheDocument();
-  expect(screen.getByText('I have been working in this field for three years.')).toBeInTheDocument();
+  const assessmentPanel = screen.getByLabelText('Conversation Assessment');
+  expect(within(assessmentPanel).getByText('I have been working in this field for three years.')).toBeInTheDocument();
+  expect(within(assessmentPanel).getByText('谈论从过去持续到现在的经历，应使用现在完成进行时。')).toBeInTheDocument();
+  expect(within(assessmentPanel).queryByText('Pronunciation pending.')).not.toBeInTheDocument();
   expect(global.fetch).not.toHaveBeenCalledWith('/api/grammar/check', expect.any(Object));
   await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalled());
   const utterance = window.speechSynthesis.speak.mock.calls.at(-1)[0];
@@ -637,7 +640,10 @@ test('keeps ASR partial transcription out of the visible conversation', async ()
 
   fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
 
-  expect(await screen.findByText('I have worked on backend systems for three years.')).toBeInTheDocument();
+  await waitFor(() => {
+    expect(within(screen.getByLabelText('Conversation history')).getByText('I have worked on backend systems for three years.'))
+      .toBeInTheDocument();
+  });
 });
 
 test('plays cloud TTS audio when the backend returns audio', async () => {
@@ -923,7 +929,8 @@ test('records microphone audio over the session websocket', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
 
   expect(await screen.findByText('Thanks for sharing that project. What impact did it have?')).toBeInTheDocument();
-  expect(screen.getByText('I have worked on backend systems for three years.')).toBeInTheDocument();
+  expect(within(screen.getByLabelText('Conversation history')).getByText('I have worked on backend systems for three years.'))
+    .toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Timing' })).not.toBeInTheDocument();
   expect(screen.getByText('Timing:')).toBeInTheDocument();
   expect(screen.getByText('ASR')).toBeInTheDocument();
@@ -978,8 +985,9 @@ test('renders pronunciation analysis from a voice turn', async () => {
   await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
   fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
 
-  expect(await screen.findByLabelText('Pronunciation scores')).toHaveTextContent('Overall 72');
-  expect(screen.getByText('SYSTEMS')).toHaveClass('low-word');
+  const assessmentPanel = await screen.findByLabelText('Conversation Assessment');
+  await waitFor(() => expect(within(assessmentPanel).getByLabelText('Pronunciation scores')).toHaveTextContent('Overall 72'));
+  expect(within(assessmentPanel).getByText('SYSTEMS')).toHaveClass('low-word');
 });
 
 test('shows microphone permission errors clearly', async () => {
@@ -1167,6 +1175,7 @@ function installVoiceMocks(options = {}) {
                   type: 'reply.text',
                   text: 'Thanks for sharing that project. What impact did it have?',
                   turn_id: 'turn_ai_voice_1',
+                  user_turn_id: 'turn_user_voice_1',
                 }),
               });
               this.onmessage?.({
@@ -1196,6 +1205,7 @@ function installVoiceMocks(options = {}) {
                 type: 'reply.done',
                 text: 'That sounds useful. What did you own?',
                 turn_id: 'turn_ai_stream_1',
+                user_turn_id: 'turn_user_voice_1',
               }),
             });
             this.onmessage?.({
@@ -1217,6 +1227,7 @@ function installVoiceMocks(options = {}) {
               type: 'reply.text',
               text: 'Thanks for sharing that project. What impact did it have?',
               turn_id: 'turn_ai_voice_1',
+              user_turn_id: 'turn_user_voice_1',
             }),
           });
           this.onmessage?.({
@@ -1256,6 +1267,7 @@ function installVoiceMocks(options = {}) {
         data: JSON.stringify({
           type: 'analysis.result',
           stage: 'grammar',
+          turn_id: 'turn_user_voice_1',
           result: {
             id: 'correction_voice_1',
             scenario_id: 'interview',
@@ -1284,6 +1296,7 @@ function installVoiceMocks(options = {}) {
           data: JSON.stringify({
             type: 'analysis.result',
             stage: 'pronunciation',
+            turn_id: 'turn_user_voice_1',
             result: {
               id: 'assessment_voice_1',
               provider: 'mock-real',

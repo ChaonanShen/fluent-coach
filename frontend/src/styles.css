@@ -102,9 +102,9 @@ h3 {
   display: grid;
   flex: 1;
   gap: 16px;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 330px);
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 340px) minmax(260px, 320px);
   margin: 0 auto;
-  max-width: 1220px;
+  max-width: 1440px;
   min-height: 0;
   width: 100%;
 }
@@ -125,7 +125,8 @@ h3 {
   min-height: 0;
 }
 
-.coach-panel {
+.coach-panel,
+.assessment-panel {
   min-height: 0;
   overflow-y: auto;
 }
@@ -449,6 +450,41 @@ h3 {
   color: #6f2d16;
   margin-bottom: 0;
   overflow-wrap: anywhere;
+}
+
+.assessment-list {
+  display: grid;
+  gap: 12px;
+}
+
+.assessment-item {
+  border-top: 1px solid #edf1ee;
+  display: grid;
+  gap: 10px;
+  padding-top: 14px;
+}
+
+.assessment-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.assessment-turn-text {
+  color: #243139;
+  font-weight: 750;
+  line-height: 1.4;
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.assessment-section {
+  display: grid;
+  gap: 6px;
+}
+
+.assessment-section h3,
+.assessment-section p {
+  margin-bottom: 0;
 }
 
 .coach-panel dl {
