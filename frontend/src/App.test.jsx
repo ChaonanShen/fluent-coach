@@ -123,6 +123,35 @@ function mockMistakesForSession(sessionId) {
   return mockMistakes().filter((mistake) => mistake.session_id === sessionId);
 }
 
+function mockSummary(sessionId = 'session_1') {
+  if (sessionId === 'session_2') {
+    return {
+      id: 'summary_2',
+      session_id: 'session_2',
+      grammar_score: 96,
+      pronunciation_score: 72,
+      fluency_score: 75,
+      vocabulary_score: 82,
+      task_completion_rate: 1,
+      top_issues: ['pronunciation: systems'],
+      next_drills: ['Practice pronouncing systems in one short sentence.'],
+      created_at: '2026-06-05T00:01:10Z',
+    };
+  }
+  return {
+    id: 'summary_1',
+    session_id: 'session_1',
+    grammar_score: 100,
+    pronunciation_score: null,
+    fluency_score: 70,
+    vocabulary_score: 76,
+    task_completion_rate: 0.5,
+    top_issues: [],
+    next_drills: ['Practice using: I have worked on...'],
+    created_at: '2026-06-05T00:00:10Z',
+  };
+}
+
 function mockMistakeBookRecord(sessionId = 'session_1') {
   const currentMistakes = mockMistakesForSession(sessionId);
   const meta = sessionId === 'session_2'
@@ -152,6 +181,7 @@ function mockMistakeBookRecord(sessionId = 'session_1') {
     pronunciation_count: currentMistakes.filter((mistake) => mistake.type === 'pronunciation').length,
     lowest_mastery: currentMistakes.length ? Math.min(...currentMistakes.map((mistake) => mistake.mastery)) : null,
     due_count: 0,
+    summary: mockSummary(sessionId),
   };
 }
 
@@ -389,18 +419,7 @@ beforeEach(() => {
       });
     }
     if (url === '/api/sessions/session_1/summary') {
-      return jsonResponse({
-        id: 'summary_1',
-        session_id: 'session_1',
-        grammar_score: 100,
-        pronunciation_score: null,
-        fluency_score: 70,
-        vocabulary_score: 76,
-        task_completion_rate: 0.5,
-        top_issues: [],
-        next_drills: ['Practice using: I have worked on...'],
-        created_at: '2026-06-05T00:00:10Z',
-      });
+      return jsonResponse(mockSummary('session_1'));
     }
     if (url === '/api/pronunciation/assess/upload') {
       if (pronunciationUploadFails) {
@@ -603,6 +622,27 @@ test('reviews a saved mistake', async () => {
   expect(await screen.findByRole('button', { name: 'Review 1' })).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Back to Practice' }));
   expect(await screen.findByRole('heading', { name: 'Speaking Coach' })).toBeInTheDocument();
+});
+
+test('shows summary scores on mistake book records and details', async () => {
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
+
+  const listScores = await screen.findByLabelText('Summary scores');
+  expect(listScores).toHaveTextContent('Grammar 100');
+  expect(listScores).toHaveTextContent('Pronunciation -');
+  expect(listScores).toHaveTextContent('Fluency 70');
+  expect(listScores).toHaveTextContent('Vocabulary 76');
+  expect(listScores).toHaveTextContent('Tasks 50%');
+  expect(screen.queryByText(/Job Interview - 06\/05/)).not.toBeInTheDocument();
+
+  fireEvent.click(await screen.findByRole('button', { name: /Open Job Interview/ }));
+
+  const detailScores = await screen.findByLabelText('Summary scores');
+  expect(detailScores).toHaveTextContent('Grammar 100');
+  expect(detailScores).toHaveTextContent('Tasks 50%');
+  expect(screen.queryByText(/Job Interview - 06\/05/)).not.toBeInTheDocument();
 });
 
 test('filters a mistake book detail by mistake type', async () => {

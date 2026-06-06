@@ -902,9 +902,7 @@ export default function App() {
                 <>
                   <div className="mistake-book-heading">
                     <h2>{mistakeBookDetail.record.title}</h2>
-                    <p>
-                      {mistakeBookDetail.record.scenario_name} - {formatDateTime(mistakeBookDetail.record.created_at)}
-                    </p>
+                    <SummaryScores summary={mistakeBookDetail.record.summary} />
                     <div className="mistake-book-counts" aria-label="Mistake counts">
                       {mistakeTypeFilters(mistakeBookDetail.record).map((item) => (
                         <button
@@ -1018,9 +1016,7 @@ export default function App() {
                     >
                       <div>
                         <strong>{book.title}</strong>
-                        <p>
-                          {book.scenario_name} - {formatDateTime(book.created_at)}
-                        </p>
+                        <SummaryScores summary={book.summary} />
                       </div>
                       <div className="mistake-book-counts" aria-label={`${book.title} counts`}>
                         <span>{book.mistake_count} total</span>
@@ -1323,6 +1319,39 @@ function formatDateTime(value) {
     hour: '2-digit',
     minute: '2-digit',
   }).format(date);
+}
+
+function SummaryScores({ summary }) {
+  if (!summary) {
+    return <p className="summary-pending">Summary pending</p>;
+  }
+  return (
+    <div className="summary-score-row" aria-label="Summary scores">
+      {summaryScoreItems(summary).map((item) => (
+        <span key={item.label}>
+          {item.label} {item.value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function summaryScoreItems(summary) {
+  return [
+    { label: 'Grammar', value: formatScore(summary.grammar_score) },
+    { label: 'Pronunciation', value: formatScore(summary.pronunciation_score) },
+    { label: 'Fluency', value: formatScore(summary.fluency_score) },
+    { label: 'Vocabulary', value: formatScore(summary.vocabulary_score) },
+    { label: 'Tasks', value: formatPercent(summary.task_completion_rate) },
+  ];
+}
+
+function formatScore(value) {
+  return typeof value === 'number' ? String(Math.round(value)) : '-';
+}
+
+function formatPercent(value) {
+  return typeof value === 'number' ? `${Math.round(value * 100)}%` : '-';
 }
 
 function mistakeTypeFilters(record) {

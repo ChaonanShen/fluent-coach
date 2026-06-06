@@ -571,6 +571,31 @@ h3 {
   margin: 0;
 }
 
+.summary-score-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.summary-score-row span,
+.summary-pending {
+  background: #edf4f7;
+  border: 1px solid #cfdde3;
+  border-radius: 999px;
+  color: #365161;
+  font-size: 0.74rem;
+  font-weight: 750;
+  line-height: 1.2;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.summary-pending {
+  display: inline-flex;
+  margin: 6px 0 0;
+}
+
 .mistake-book-counts {
   display: flex;
   flex-wrap: wrap;
