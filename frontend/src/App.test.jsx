@@ -228,6 +228,52 @@ function mockMistakeBookDetail(sessionId = 'session_1') {
   };
 }
 
+function mockProgress() {
+  const trend = [
+    {
+      session_id: 'session_previous',
+      scenario_id: 'interview',
+      created_at: '2026-06-04T00:00:00Z',
+      grammar_score: 92,
+      pronunciation_score: 68,
+      fluency_score: 65,
+      vocabulary_score: 70,
+      task_completion_rate: 0.25,
+    },
+    {
+      session_id: 'session_1',
+      scenario_id: 'interview',
+      created_at: '2026-06-05T00:00:00Z',
+      grammar_score: 100,
+      pronunciation_score: null,
+      fluency_score: 70,
+      vocabulary_score: 76,
+      task_completion_rate: 0.5,
+    },
+  ];
+  if (extraMistakeBookEnabled) {
+    trend.push({
+      session_id: 'session_2',
+      scenario_id: 'presentation',
+      created_at: '2026-06-05T00:01:00Z',
+      grammar_score: 96,
+      pronunciation_score: 72,
+      fluency_score: 75,
+      vocabulary_score: 82,
+      task_completion_rate: 1,
+    });
+  }
+  return {
+    session_count: trend.length,
+    average_grammar_score: 96,
+    average_pronunciation_score: 70,
+    average_fluency_score: 70,
+    average_vocabulary_score: 76,
+    average_task_completion_rate: 0.58,
+    trend,
+  };
+}
+
 beforeEach(() => {
   pronunciationUploadFails = false;
   cloudTtsEnabled = false;
@@ -285,6 +331,9 @@ beforeEach(() => {
     }
     if (url === '/api/mistake-books/session_2') {
       return jsonResponse(mockMistakeBookDetail('session_2'));
+    }
+    if (url === '/api/progress') {
+      return jsonResponse(mockProgress());
     }
     if (url === '/api/tts/synthesize') {
       if (cloudTtsEnabled) {
@@ -642,6 +691,12 @@ test('shows summary scores on mistake book records and details', async () => {
   const detailScores = await screen.findByLabelText('Summary scores');
   expect(detailScores).toHaveTextContent('Grammar 100');
   expect(detailScores).toHaveTextContent('Tasks 50%');
+  const scoreChanges = await screen.findByLabelText('Score changes');
+  expect(scoreChanges).toHaveTextContent('Grammar +8');
+  expect(scoreChanges).toHaveTextContent('Pronunciation -');
+  expect(scoreChanges).toHaveTextContent('Fluency +5');
+  expect(scoreChanges).toHaveTextContent('Vocabulary +6');
+  expect(scoreChanges).toHaveTextContent('Tasks +25pp');
   expect(screen.queryByText(/Job Interview - 06\/05/)).not.toBeInTheDocument();
 });
 

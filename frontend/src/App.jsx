@@ -39,6 +39,7 @@ export default function App() {
   const [selectedMistakeBookIds, setSelectedMistakeBookIds] = useState(new Set());
   const [selectedMistakeBookId, setSelectedMistakeBookId] = useState(null);
   const [mistakeBookDetail, setMistakeBookDetail] = useState(null);
+  const [mistakeBookProgress, setMistakeBookProgress] = useState(null);
   const [mistakeBookState, setMistakeBookState] = useState('idle');
   const [activeMistakeTypeFilter, setActiveMistakeTypeFilter] = useState(null);
   const [pronunciation, setPronunciation] = useState(null);
@@ -207,8 +208,12 @@ export default function App() {
     setActiveMistakeTypeFilter(null);
     setMistakeBookState('loading');
     try {
-      const detail = await request(`/api/mistake-books/${sessionId}`);
+      const [detail, progress] = await Promise.all([
+        request(`/api/mistake-books/${sessionId}`),
+        request('/api/progress'),
+      ]);
       setMistakeBookDetail(detail);
+      setMistakeBookProgress(progress);
       setMistakeBookState('ready');
     } catch (err) {
       handleRequestError(err, 'Mistake book failed to load.');
@@ -219,6 +224,7 @@ export default function App() {
   function closeMistakeBookDetail() {
     setSelectedMistakeBookId(null);
     setMistakeBookDetail(null);
+    setMistakeBookProgress(null);
     setMistakeBookState('idle');
     setActiveMistakeTypeFilter(null);
   }
@@ -903,6 +909,7 @@ export default function App() {
                   <div className="mistake-book-heading">
                     <h2>{mistakeBookDetail.record.title}</h2>
                     <SummaryScores summary={mistakeBookDetail.record.summary} />
+                    <SummaryTrend progress={mistakeBookProgress} sessionId={mistakeBookDetail.record.session_id} />
                     <div className="mistake-book-counts" aria-label="Mistake counts">
                       {mistakeTypeFilters(mistakeBookDetail.record).map((item) => (
                         <button
@@ -1336,6 +1343,29 @@ function SummaryScores({ summary }) {
   );
 }
 
+function SummaryTrend({ progress, sessionId }) {
+  const trend = progress?.trend || [];
+  const currentIndex = trend.findIndex((point) => point.session_id === sessionId);
+  if (currentIndex === -1 || trend.length === 0) {
+    return null;
+  }
+  if (currentIndex === 0) {
+    return <p className="summary-trend-note">First scored conversation</p>;
+  }
+  const current = trend[currentIndex];
+  const previous = trend[currentIndex - 1];
+  return (
+    <div className="summary-trend-row" aria-label="Score changes">
+      <span>Change</span>
+      {summaryDeltaItems(current, previous).map((item) => (
+        <span key={item.label}>
+          {item.label} {item.value}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function summaryScoreItems(summary) {
   return [
     { label: 'Grammar', value: formatScore(summary.grammar_score) },
@@ -1346,12 +1376,34 @@ function summaryScoreItems(summary) {
   ];
 }
 
+function summaryDeltaItems(current, previous) {
+  return [
+    { label: 'Grammar', value: formatDelta(current.grammar_score, previous.grammar_score) },
+    { label: 'Pronunciation', value: formatDelta(current.pronunciation_score, previous.pronunciation_score) },
+    { label: 'Fluency', value: formatDelta(current.fluency_score, previous.fluency_score) },
+    { label: 'Vocabulary', value: formatDelta(current.vocabulary_score, previous.vocabulary_score) },
+    { label: 'Tasks', value: formatDelta(current.task_completion_rate, previous.task_completion_rate, true) },
+  ];
+}
+
 function formatScore(value) {
   return typeof value === 'number' ? String(Math.round(value)) : '-';
 }
 
 function formatPercent(value) {
   return typeof value === 'number' ? `${Math.round(value * 100)}%` : '-';
+}
+
+function formatDelta(current, previous, percent = false) {
+  if (typeof current !== 'number' || typeof previous !== 'number') {
+    return '-';
+  }
+  const delta = percent ? Math.round((current - previous) * 100) : Math.round(current - previous);
+  if (delta === 0) {
+    return percent ? '0pp' : '0';
+  }
+  const prefix = delta > 0 ? '+' : '';
+  return `${prefix}${delta}${percent ? 'pp' : ''}`;
 }
 
 function mistakeTypeFilters(record) {
