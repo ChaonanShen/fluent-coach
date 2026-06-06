@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 
 import App from './App.jsx';
@@ -685,20 +685,21 @@ test('shows summary scores on mistake book records and details', async () => {
   expect(listScores).toHaveTextContent('Pronunciation -');
   expect(listScores).toHaveTextContent('Fluency 70.0');
   expect(listScores).toHaveTextContent('Vocabulary 76.0');
-  expect(listScores).toHaveTextContent('Tasks 50.0%');
+  expect(listScores).not.toHaveTextContent('Tasks');
   expect(screen.queryByText(/Job Interview - 06\/05/)).not.toBeInTheDocument();
 
   fireEvent.click(await screen.findByRole('button', { name: /Open Job Interview/ }));
 
   const detailScores = await screen.findByLabelText('Summary scores');
   expect(detailScores).toHaveTextContent('Grammar 100.0');
-  expect(detailScores).toHaveTextContent('Tasks 50.0%');
+  expect(detailScores).toHaveTextContent('Vocabulary 76.0');
+  expect(detailScores).not.toHaveTextContent('Tasks');
   const scoreChanges = await screen.findByLabelText('Score changes');
   expect(scoreChanges).toHaveTextContent('Grammar +8.0');
   expect(scoreChanges).toHaveTextContent('Pronunciation -');
   expect(scoreChanges).toHaveTextContent('Fluency +5.0');
   expect(scoreChanges).toHaveTextContent('Vocabulary +6.0');
-  expect(scoreChanges).toHaveTextContent('Tasks +25.0pp');
+  expect(scoreChanges).not.toHaveTextContent('Tasks');
   expect(screen.queryByText(/Job Interview - 06\/05/)).not.toBeInTheDocument();
 });
 
@@ -859,6 +860,12 @@ test('disables turn and recording controls after ending a session', async () => 
   fireEvent.click(screen.getByRole('button', { name: 'End' }));
 
   expect(await screen.findByText('Practice using: I have worked on...')).toBeInTheDocument();
+  const summaryBlock = screen.getByRole('heading', { name: 'Summary' }).closest('section');
+  expect(within(summaryBlock).getByText('Grammar').nextElementSibling).toHaveTextContent('100.0');
+  expect(within(summaryBlock).getByText('Pronunciation').nextElementSibling).toHaveTextContent('-');
+  expect(within(summaryBlock).getByText('Fluency').nextElementSibling).toHaveTextContent('70.0');
+  expect(within(summaryBlock).getByText('Vocabulary').nextElementSibling).toHaveTextContent('76.0');
+  expect(screen.queryByText('Tasks')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Your reply')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();

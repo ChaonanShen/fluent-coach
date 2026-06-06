@@ -1224,15 +1224,19 @@ export default function App() {
               <dl>
                 <div>
                   <dt>Grammar</dt>
-                  <dd>{summary.grammar_score ?? '-'}</dd>
+                  <dd>{formatScore(summary.grammar_score)}</dd>
                 </div>
                 <div>
                   <dt>Pronunciation</dt>
                   <dd>{formatScore(summary.pronunciation_score)}</dd>
                 </div>
                 <div>
-                  <dt>Tasks</dt>
-                  <dd>{formatPercent(summary.task_completion_rate)}</dd>
+                  <dt>Fluency</dt>
+                  <dd>{formatScore(summary.fluency_score)}</dd>
+                </div>
+                <div>
+                  <dt>Vocabulary</dt>
+                  <dd>{formatScore(summary.vocabulary_score)}</dd>
                 </div>
               </dl>
               <ul className="drill-list">
@@ -1371,7 +1375,6 @@ function summaryScoreItems(summary) {
     { label: 'Pronunciation', value: formatScore(summary.pronunciation_score) },
     { label: 'Fluency', value: formatScore(summary.fluency_score) },
     { label: 'Vocabulary', value: formatScore(summary.vocabulary_score) },
-    { label: 'Tasks', value: formatPercent(summary.task_completion_rate) },
   ];
 }
 
@@ -1381,28 +1384,40 @@ function summaryDeltaItems(current, previous) {
     { label: 'Pronunciation', value: formatDelta(current.pronunciation_score, previous.pronunciation_score) },
     { label: 'Fluency', value: formatDelta(current.fluency_score, previous.fluency_score) },
     { label: 'Vocabulary', value: formatDelta(current.vocabulary_score, previous.vocabulary_score) },
-    { label: 'Tasks', value: formatDelta(current.task_completion_rate, previous.task_completion_rate, true) },
   ];
+}
+
+function overallScore(summary) {
+  if (!summary) {
+    return null;
+  }
+  const weightedScores = [
+    { value: summary.grammar_score, weight: 0.35 },
+    { value: summary.pronunciation_score, weight: 0.25 },
+    { value: summary.fluency_score, weight: 0.2 },
+    { value: summary.vocabulary_score, weight: 0.2 },
+  ].filter((item) => typeof item.value === 'number');
+  const totalWeight = weightedScores.reduce((total, item) => total + item.weight, 0);
+  if (!totalWeight) {
+    return null;
+  }
+  return weightedScores.reduce((total, item) => total + item.value * item.weight, 0) / totalWeight;
 }
 
 function formatScore(value) {
   return typeof value === 'number' ? value.toFixed(1) : '-';
 }
 
-function formatPercent(value) {
-  return typeof value === 'number' ? `${(value * 100).toFixed(1)}%` : '-';
-}
-
-function formatDelta(current, previous, percent = false) {
+function formatDelta(current, previous) {
   if (typeof current !== 'number' || typeof previous !== 'number') {
     return '-';
   }
-  const delta = percent ? (current - previous) * 100 : current - previous;
+  const delta = current - previous;
   if (delta === 0) {
-    return percent ? '0.0pp' : '0.0';
+    return '0.0';
   }
   const prefix = delta > 0 ? '+' : '';
-  return `${prefix}${delta.toFixed(1)}${percent ? 'pp' : ''}`;
+  return `${prefix}${delta.toFixed(1)}`;
 }
 
 function mistakeTypeFilters(record) {
