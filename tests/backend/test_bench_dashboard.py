@@ -48,6 +48,10 @@ def test_bench_dashboard_serves_runs_and_audio(monkeypatch, tmp_path) -> None:
     assert index.status_code == 200
     assert "面试官" in index.text
     assert "面试者" in index.text
+    assert "服务员" in index.text
+    assert "顾客" in index.text
+    assert "项目负责人" in index.text
+    assert "团队成员" in index.text
     runs = client.get("/api/runs")
     assert runs.status_code == 200
     assert runs.json()[0]["run_id"] == "dashboard-run"

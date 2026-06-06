@@ -435,6 +435,11 @@
   <script>
     const state = { runs: [], selectedRunId: null };
     const el = (id) => document.getElementById(id);
+    const ROLE_LABELS = {
+      interview: { interviewer: "面试官", candidate: "面试者" },
+      restaurant_ordering: { interviewer: "服务员", candidate: "顾客" },
+      meeting: { interviewer: "项目负责人", candidate: "团队成员" },
+    };
 
     el("refresh").addEventListener("click", () => loadRuns());
     loadRuns();
@@ -564,6 +569,7 @@
     }
 
     function renderTurnCard(run, turn, index) {
+      const labels = roleLabels(run);
       const interviewerText = interviewerTextFor(run, index);
       const candidateText = turn.injected_text || turn.expected_text || turn.user_text || turn.asr_text || "";
       const correctedText = turn.grammar && turn.grammar.corrected_text || turn.expected_corrected_text || "";
@@ -581,12 +587,12 @@
           </div>
           <div class="exchange">
             <div class="speaker-row interviewer">
-              <div class="speaker-label">面试官</div>
-              <div class="bubble">${escapeHtml(interviewerText || "面试官开场白未记录。")}</div>
+              <div class="speaker-label">${escapeHtml(labels.interviewer)}</div>
+              <div class="bubble">${escapeHtml(interviewerText || `${labels.interviewer}开场白未记录。`)}</div>
             </div>
             <div class="speaker-row candidate">
               <div class="speaker-label">
-                <span>面试者</span>
+                <span>${escapeHtml(labels.candidate)}</span>
                 ${turn.audio_path ? `<audio class="turn-audio" controls src="/api/runs/${encodeURIComponent(run.run_id)}/turns/${index}/audio"></audio>` : ""}
               </div>
               <div class="bubble">${escapeHtml(candidateText)}</div>
@@ -625,6 +631,7 @@
     }
 
     function renderFinalInterviewerLine(run) {
+      const labels = roleLabels(run);
       const turns = run.turns || [];
       if (turns.length === 0) return "";
       const last = turns[turns.length - 1];
@@ -632,16 +639,20 @@
       return `
         <article class="turn-card">
           <div class="turn-card-head">
-            <div class="turn-title">面试官后续追问</div>
+            <div class="turn-title">${escapeHtml(labels.interviewer)}后续追问</div>
           </div>
           <div class="exchange">
             <div class="speaker-row interviewer">
-              <div class="speaker-label">面试官</div>
+              <div class="speaker-label">${escapeHtml(labels.interviewer)}</div>
               <div class="bubble">${escapeHtml(last.reply_text)}</div>
             </div>
           </div>
         </article>
       `;
+    }
+
+    function roleLabels(run) {
+      return ROLE_LABELS[run.scenario_id] || { interviewer: "对话发起方", candidate: "练习者" };
     }
 
     function grammarMetricPills(turn) {
