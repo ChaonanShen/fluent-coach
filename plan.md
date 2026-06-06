@@ -2241,3 +2241,441 @@ POST /api/pronunciation/practice/upload
 - 用户删除 pronunciation mistake 后，错题本相关计数正常更新。
 - Mistake Book 批量 toolbar 与下方列表之间有自然间距。
 - 默认 `make test` 通过。
+
+### 2026-06-06 Follow-up: 三栏布局与对话逐句评测
+
+#### 背景
+
+- 当前 Practice 页面只有对话栏 + Coach 栏。
+- Coach 栏里的 Pronunciation 同时承担两种语义：
+  - 正式对话语音回合的 pronunciation assessment。
+  - 独立的 `Record Reading` 重读练习。
+- 这会造成误解：用户会以为 accuracy / fluency 只来自 Coach 的练习重读，而不是每一句真实对话语音都应该评测。
+- `Record Reading` 输入框目前默认值是测试 fixture 句子 `THEN HE WENT TO THEME PARK`，正式 UI 中不自然。
+- 目标是拆成三栏：
+  - `Conversation`
+  - `Conversation Assessment`
+  - `Reading Practice`
+- 进一步约定：自由朗读能力不是只属于对话页；对话界面和错题本界面都应有一个 `Reading Practice` / coach free-reading 栏。
+- 错题本 pronunciation item 内的重读不是自由朗读；它只能读该错题明确给出的 word / sentence target。
+
+#### 设计原则
+
+- `Conversation` 只负责真实对话输入输出。
+- `Conversation Assessment` 只展示真实对话产生的评测结果：
+  - text turn 的 grammar / expression correction。
+  - voice turn 的 grammar / expression correction。
+  - voice turn 的 pronunciation assessment：Overall / Accuracy / Fluency / low-score words。
+- `Reading Practice` 是完全独立练习区：
+  - 用户自行输入一个 word / phrase / sentence。
+  - 点击 `Record Reading` 重读重评。
+  - 结果只展示在 Reading Practice 内。
+  - 作为共享 panel 同时出现在 Practice 页面和 Mistake Book 页面。
+  - 不写入 session analysis。
+  - 不生成 mistake。
+  - 不影响 summary。
+  - 不刷新 mistake book。
+- Mistake Book 中 pronunciation item 的 `Read again` 继续使用 practice API，只展示局部练习结果，不修改原 mistake。
+- pronunciation 错题的 `Read again` 必须显式展示 practice target：
+  - 不能隐藏地拿整句作为 reference text。
+  - 如果错点是一个词，提供 `Read word`，只上传这个 word target。
+  - 如果提供句子练习，提供 `Read sentence`，只上传这个 sentence target。
+  - 如果 word 和 sentence 都存在，显示两个独立按钮，而不是一个可切换的隐藏状态。
+  - 两个 target 都必须先显示出来，让用户知道自己将读什么。
+  - 句子练习可以使用原句，也可以使用新的示例句；如果原句本身可能有语法/表达问题，优先使用 corrected / generated practice sentence。
+- UI 文案必须避免混淆：
+  - 正式对话评测：`Conversation Assessment`
+  - 独立重读练习：`Reading Practice`
+  - 错题局部重读：`Read again`
+
+#### 数据流目标
+
+正式对话语音回合：
+
+1. 用户在 `Conversation` 底部点击 `Record`。
+2. 后端 WebSocket ASR 返回用户 turn。
+3. 后端对该 turn 做 grammar correction。
+4. 后端对该 turn 做 pronunciation assessment。
+5. 前端把 grammar / pronunciation 绑定到对应 `turn_id`。
+6. `Conversation Assessment` 按 turn 展示该句评测。
+7. 这些正式评测继续进入 summary / mistake book。
+
+Reading Practice：
+
+1. 用户在 Practice 页面或 Mistake Book 页面右侧的 `Reading Practice` 输入 reference text。
+2. 点击 `Record Reading`。
+3. 前端调用 `/api/pronunciation/practice/upload`。
+4. 前端只在 Reading Practice 展示 practice result。
+5. 不影响 Conversation Assessment / summary / mistake book。
+
+Mistake Book pronunciation item `Read word` / `Read sentence`：
+
+1. item 显式展示 word target / sentence target。
+2. 用户点击 `Read word` 或 `Read sentence`。
+3. 前端用对应 target 调用 `/api/pronunciation/practice/upload`。
+4. 结果只显示在该 mistake item 内。
+5. 不允许在 item 内自由输入任意 reference text。
+6. 不修改原 mistake，不影响 summary，不刷新 mistake book。
+
+#### PR-3COL-A：文档计划追加
+
+功能描述：
+
+- 记录三栏布局与对话逐句评测的详细代码修改计划。
+
+实现思路：
+
+- 在 `plan.md` 追加本节。
+- 明确正式对话评测与独立 Reading Practice 的边界。
+- 明确后续 PR 切分与验收标准。
+
+测试方式：
+
+- 文档变更，无需运行自动化测试。
+
+#### PR-3COL-B：WebSocket analysis 事件携带 turn_id
+
+功能描述：
+
+- 后端 WebSocket 的 analysis result/error 事件携带对应用户 turn id，方便前端把评测挂到具体句子。
+
+实现思路：
+
+- `_run_ws_grammar_analysis(...)`：
+  - `analysis.result` payload 增加：
+    - `turn_id`
+  - `analysis.error` payload 增加：
+    - `turn_id`
+- `_run_ws_pronunciation_analysis(...)`：
+  - `analysis.result` payload 增加：
+    - `turn_id`
+  - `analysis.error` payload 增加：
+    - `turn_id`
+- 现有 `result` 内部模型不强行加 `turn_id`，避免污染 `GrammarCorrection` / `PronunciationAssessment` schema。
+- 兼容旧前端：旧代码即使忽略 `turn_id` 也能运行。
+
+测试方式：
+
+- WebSocket voice turn 测试确认 grammar `analysis.result.turn_id` 等于用户 turn id。
+- pronunciation 开启时，pronunciation `analysis.result.turn_id` 等于用户 turn id。
+- pronunciation error 时，`analysis.error.turn_id` 存在。
+- 后端测试通过。
+
+#### PR-3COL-C：前端建立按 turn 归档的评测状态
+
+功能描述：
+
+- 前端新增按用户 turn 存储的 assessment state，为三栏 UI 做数据准备。
+
+实现思路：
+
+- 新增 state：
+  - `turnCorrections`
+    - shape: `{ [turnId]: GrammarCorrection }`
+  - `turnPronunciations`
+    - shape: `{ [turnId]: PronunciationAssessment }`
+  - `turnAssessmentErrors`
+    - shape: `{ [turnId]: AnalysisError[] }`
+- text turn：
+  - `sendTurn()` 已拿到 `user_turn` 和 `grammar_result`。
+  - 将 `grammar_result` 写入 `turnCorrections[user_turn.id]`。
+- voice turn：
+  - `asr.final` 里已有 `user_turn_id`，先生成/替换 user turn。
+  - `analysis.result` 根据 `message.turn_id` 写入：
+    - grammar -> `turnCorrections[turn_id]`
+    - pronunciation -> `turnPronunciations[turn_id]`
+  - `analysis.error` 根据 `message.turn_id` 写入 `turnAssessmentErrors[turn_id]`。
+- 保留 `latestCorrection` 的 UI 依赖时可先由 `turnCorrections` 推导：
+  - 最新有 correction 的 turn 作为 latest correction。
+  - 后续 PR 再删除旧 state。
+- 保留 `pronunciation` 最新值时可先由 `turnPronunciations` 推导，用于过渡。
+
+测试方式：
+
+- text turn 后，Conversation Assessment 可拿到该 turn 的 grammar correction。
+- voice turn 后，pronunciation result 被绑定到对应 user turn。
+- 多个 voice turn 时，后一个 pronunciation 不覆盖前一个 turn 的结果。
+- 前端测试通过。
+
+#### PR-3COL-D：布局改为三栏
+
+功能描述：
+
+- Practice 页面改为三栏：
+  - Conversation
+  - Conversation Assessment
+  - Reading Practice
+- Mistake Book 页面增加共享的 Reading Practice 栏，方便用户在看错题时也能自由朗读练习。
+
+实现思路：
+
+- JSX 拆分：
+  - `conversation-panel`：保留场景选择、消息列表、输入区、Start/End、Send、Record。
+  - 新增 `assessment-panel`：
+    - 标题：`Conversation Assessment`
+    - 展示真实对话评测。
+  - 新增 `reading-practice-panel`：
+    - 标题：`Reading Practice`
+    - 放独立重读练习输入框、Record Reading、practice result。
+- 抽出可复用组件：
+  - `ReadingPracticePanel`
+  - Practice 页面右栏渲染一次。
+  - Mistake Book 页面右栏也渲染一次。
+- Reading Practice state 建议提升到 `App` 顶层，保证用户从对话页切到错题本页时自由朗读输入和最近结果可保留。
+- CSS：
+  - `.workspace` 改为三列 grid：
+    - 建议：`minmax(0, 1fr) minmax(280px, 340px) minmax(260px, 320px)`
+  - Mistake Book view 增加类似两列布局：
+    - `minmax(0, 1fr) minmax(260px, 320px)`
+    - 左侧是 mistake book content，右侧是 Reading Practice。
+  - 最大宽度从 `1220px` 适当扩大到 `1440px` 左右。
+  - 三栏都 `min-height: 0`，内部需要滚动的区域使用 `overflow-y: auto`。
+  - 移动端降为单列堆叠：
+    - Conversation
+    - Conversation Assessment
+    - Reading Practice
+- 旧 `.coach-panel` 可重命名或拆成：
+  - `.assessment-panel`
+  - `.reading-practice-panel`
+- 避免卡片嵌套卡片；每栏是一个主 panel，栏内 repeated items 才用轻量分隔。
+
+测试方式：
+
+- 页面存在三个 landmark/section：
+  - `Conversation`
+  - `Conversation Assessment`
+  - `Reading Practice`
+- Start/End、Send、Record 仍在 Conversation 底部。
+- 对话页和错题本页都能看到 `Reading Practice`。
+- Record Reading 只在 Reading Practice 栏，不出现在 Conversation Assessment。
+- 前端测试通过。
+
+#### PR-3COL-E：Conversation Assessment 展示逐句评测
+
+功能描述：
+
+- `Conversation Assessment` 栏按用户 turn 展示正式对话评测。
+
+实现思路：
+
+- 新增 helper：
+  - `userTurnsWithAssessments(session, turnCorrections, turnPronunciations, turnAssessmentErrors)`
+- 每个用户 turn 展示一个 assessment item：
+  - turn text 摘要。
+  - Grammar / Expression：
+    - 如果有 correction issues，展示 corrected text / first issue explanation。
+    - 如果没有 issues，展示 `No grammar or expression issue.`
+  - Pronunciation：
+    - 如果该 turn 有 pronunciation assessment，展示 `PronunciationResult`：
+      - Overall
+      - Accuracy
+      - Fluency
+      - Low-score words
+    - 如果该 turn 是 voice turn 但 pronunciation 暂无结果，显示 `Pronunciation pending`。
+    - 如果该 turn 是 text turn，不显示 pronunciation pending。
+  - Errors：
+    - 展示该 turn 对应 analysis errors。
+- 初版可以按时间倒序展示最近若干条，例如最近 5 条，避免面板过长。
+- 后续可加“全部/最近”切换，不在本 PR 做。
+
+测试方式：
+
+- text turn 后，Assessment 栏出现 grammar correction。
+- voice turn 后，Assessment 栏出现该句 pronunciation scores。
+- voice turn pronunciation result 不出现在 Reading Practice 栏。
+- 多个 user turns 时，评测按对应 turn 展示，不互相覆盖。
+- 前端测试通过。
+
+#### PR-3COL-F：Reading Practice 独立化与默认空输入
+
+功能描述：
+
+- Reading Practice 栏作为完全独立、可复用的自由重读练习工具。
+- Practice 页面和 Mistake Book 页面都显示 Reading Practice。
+- 去掉默认 fixture 句子。
+
+实现思路：
+
+- 抽出组件：
+  - `ReadingPracticePanel`
+  - props 包括：
+    - `practiceReferenceText`
+    - `setPracticeReferenceText`
+    - `readingState`
+    - `startReadingRecording`
+    - `stopReadingRecording`
+    - `practicePronunciation`
+    - `assessedPracticeReferenceText`
+- `practiceReferenceText` 初始值从 `THEN HE WENT TO THEME PARK` 改为 `''`。
+- 输入框 placeholder：
+  - `Enter a word, phrase, or sentence to read`
+- `Record Reading` disabled 条件：
+  - `!practiceReferenceText.trim() || readingState === 'assessing'`
+- Reading Practice 的结果标题或 aria label 改为：
+  - `Practice result`
+- `PronunciationResult` 支持可选 `label` 或 `ariaLabel`：
+  - 正式对话：`Pronunciation scores`
+  - Reading Practice：`Practice result`
+  - Mistake Book Read again：`Practice result`
+- 保持 `/api/pronunciation/practice/upload` 无副作用调用。
+
+测试方式：
+
+- 初始页面不显示 `THEN HE WENT TO THEME PARK`。
+- 初始 `Record Reading` disabled。
+- 输入 `backend systems` 后按钮 enabled。
+- 录音后 Reading Practice 显示 `Practice result`。
+- 切到 Mistake Book 页面后仍能看到 Reading Practice。
+- 请求体不包含 `session_id`。
+- 不刷新 `/api/mistakes` / `/api/mistake-books`。
+- 前端测试通过。
+
+#### PR-3COL-G：清理旧混合状态与文案
+
+功能描述：
+
+- 清理旧 Coach 语义和混合 pronunciation 展示，确保 UI 术语一致。
+
+实现思路：
+
+- 删除或重命名旧 `coach-panel` 文案。
+- 删除不再需要的 `pronunciation` 最新状态，或只保留为 derived value。
+- `latestCorrection` 如果已由 `turnCorrections` 覆盖，可删除旧 state。
+- 统一组件命名：
+  - `ConversationAssessmentPanel`
+  - `ReadingPracticePanel`
+  - `PronunciationResult`
+- 确保 mistake book 的 `Read again` 仍调用 practice API，且 aria label 不和正式对话 pronunciation 混淆。
+
+测试方式：
+
+- 页面不再出现 `Coach` 标题。
+- 页面出现 `Conversation Assessment` 和 `Reading Practice`。
+- Conversation Assessment 中的 pronunciation 来自正式 voice turn。
+- Reading Practice 中的 result 来自 practice API。
+- Practice 页面和 Mistake Book 页面都复用 Reading Practice，而不是各自复制一套逻辑。
+- Mistake Book Read again 仍可用。
+- 前端测试通过。
+
+#### PR-3COL-H：完善 Mistake Book pronunciation Read again 目标设计
+
+功能描述：
+
+- pronunciation 错题的 `Read again` 不再隐式使用隐藏句子。
+- 用户在点击重读前必须能看到本次 practice target。
+- 支持按词或句子重读；如果二者都存在，显示两颗独立按钮。
+
+当前问题：
+
+- 现有实现的 reference text 选择顺序是：
+  1. `mistake.practice_sentence`
+  2. `mistake.word`
+  3. `mistake.wrong`
+- 这会导致一个单词 pronunciation 错题默认要求用户读整句。
+- 更糟糕的是，这句 `practice_sentence` 之前没有在 item 中显式展示，用户点击 `Read again` 后才发现系统评测的是一句话。
+
+目标交互：
+
+- pronunciation mistake item 展示一个明确的 practice target 区域：
+  - `Word: systems`
+- 如果有句子练习，额外展示：
+  - `Sentence: I have worked on backend systems for three years.`
+- 如果只有 word target：
+  - 显示 `Read word`
+  - 上传 word target。
+- 如果只有 sentence target：
+  - 显示 `Read sentence`
+  - 上传 sentence target。
+- 如果 word 和 sentence 都存在：
+  - 同时显示 `Read word` 和 `Read sentence`。
+  - 两个按钮分别上传对应 target。
+- 不在 pronunciation item 内提供自由输入框；自由输入只属于共享的 Reading Practice 栏。
+- 如果 sentence target 来自原用户句子，UI 标明：
+  - `Original sentence`
+- 如果 sentence target 是 corrected / generated sentence，UI 标明：
+  - `Practice sentence`
+
+实现思路：
+
+- 新增 helper：
+  - `pronunciationPracticeTargets(mistake)`
+  - 返回：
+    - `wordTarget`
+    - `sentenceTarget`
+    - `sentenceLabel`
+- target 规则：
+  - `wordTarget = mistake.word || mistake.wrong`
+  - `sentenceTarget = mistake.practice_sentence`
+- UI：
+  - pronunciation item 内显示 target 区域。
+  - 如果有 `wordTarget`，显示 `Word: <wordTarget>` 和 `Read word`。
+  - 如果有 `sentenceTarget`，显示 `<sentenceLabel>: <sentenceTarget>` 和 `Read sentence`。
+  - 如果两个 target 都有，两组内容和按钮都显示。
+- 前端录音 state 需要记录当前 target：
+  - `mistakeReadingState = { mistakeId, targetType, status }`
+  - targetType 可为 `word` 或 `sentence`。
+- 点击 `Read word`：
+  - 只上传 word target。
+- 点击 `Read sentence`：
+  - 只上传 sentence target。
+- 结果展示：
+  - word result 显示 `Read word: <target>`。
+  - sentence result 显示 `Read sentence: <target>`。
+  - target 和 result 一一对应。
+- 不改后端 API。
+- 不修改原 mistake item。
+- 不刷新 mistake book。
+
+后续增强：
+
+- 如果原句有 grammar/expression correction，可优先使用 corrected sentence 作为 sentence target。
+- 如果只有一个低分词，可以调用 LLM 生成一个新的短句作为 practice sentence，例如：
+  - word: `systems`
+  - generated sentence: `I designed reliable backend systems.`
+- 这类生成句子需要后端支持或在 mistake 生成时落库，作为后续单独 PR，不混入本次 UI 修复。
+
+测试方式：
+
+- pronunciation mistake 有 `word` 和 `practice_sentence` 时：
+  - 同时显示 `Read word` 和 `Read sentence`。
+  - 点击 `Read word` 上传 word target。
+  - 点击 `Read sentence` 上传 sentence target。
+  - sentence target 在 UI 中显式可见。
+- pronunciation mistake 没有 `word` 时：
+  - fallback 使用 `wrong` 作为 word target，或仅显示 sentence target。
+- practice result 显示的 `Read word: ...` / `Read sentence: ...` 与上传 target 一致。
+- 原 mistake 仍存在，计数不变。
+- grammar/expression mistake 不显示 target controls / Read again。
+- 前端测试通过。
+
+#### PR 切分建议
+
+1. `PR-3COL-A`：只改 `plan.md`。
+2. `PR-3COL-B`：只改后端 WebSocket analysis 事件 payload 和后端测试。
+3. `PR-3COL-C`：只加前端按 turn 归档状态，不大改 UI。
+4. `PR-3COL-D`：只做三栏布局骨架。
+5. `PR-3COL-E`：只实现 Conversation Assessment 逐句展示。
+6. `PR-3COL-F`：只独立化 Reading Practice、去掉默认 fixture 文案。
+7. `PR-3COL-G`：只清理旧 Coach 状态/文案和测试收尾。
+8. `PR-3COL-H`：只完善 Mistake Book pronunciation `Read again` target 选择与展示。
+
+#### 验收标准
+
+- Practice 页面清晰分成三栏：
+  - Conversation
+  - Conversation Assessment
+  - Reading Practice
+- 用户用底部 `Record` 说出的每一句 voice turn，都能在 Conversation Assessment 中看到 pronunciation：
+  - Overall
+  - Accuracy
+  - Fluency
+  - Low-score words
+- text turn 不显示 pronunciation pending。
+- voice turn pronunciation 继续影响 summary / mistake book。
+- Reading Practice 默认输入为空，不再出现 fixture 句子。
+- Reading Practice 的重读评测只展示 practice result，不影响 summary / mistake book。
+- Mistake Book pronunciation `Read again` 继续只做局部 practice result。
+- Mistake Book pronunciation `Read again` 点击前必须显式展示将要朗读的 target。
+- 单词级 pronunciation 错题默认重读该词，不默认隐藏使用整句。
+- 如果提供句子重读，句子必须在 item 中显式展示，并且用户可以选择 word / sentence target。
+- 默认 `make test` 通过。
