@@ -1319,11 +1319,14 @@ export default function App() {
           <aside className="coach-panel reading-practice-panel" aria-label="Reading Practice">
             <ReadingPracticePanel
               assessedPracticeReferenceText={assessedPracticeReferenceText}
+              latestTiming={latestTiming}
               practicePronunciation={practicePronunciation}
               practiceReferenceText={practiceReferenceText}
               readingState={readingState}
               startReadingRecording={startReadingRecording}
               stopReadingRecording={stopReadingRecording}
+              summary={summary}
+              summaryState={summaryState}
             />
           </aside>
         </section>
@@ -1428,10 +1431,7 @@ export default function App() {
         <ConversationAssessmentPanel
           analysisErrors={analysisErrors}
           latestCorrection={latestCorrection}
-          latestTiming={latestTiming}
           session={session}
-          summary={summary}
-          summaryState={summaryState}
           turnAssessmentErrors={turnAssessmentErrors}
           turnCorrections={turnCorrections}
           turnPronunciations={turnPronunciations}
@@ -1440,6 +1440,7 @@ export default function App() {
         <aside className="coach-panel reading-practice-panel" aria-label="Reading Practice">
           <ReadingPracticePanel
             assessedPracticeReferenceText={assessedPracticeReferenceText}
+            latestTiming={latestTiming}
             mistakeCount={mistakes.length}
             openMistakeBook={() => setMainView('mistakes')}
             practicePronunciation={practicePronunciation}
@@ -1447,6 +1448,8 @@ export default function App() {
             readingState={readingState}
             startReadingRecording={startReadingRecording}
             stopReadingRecording={stopReadingRecording}
+            summary={summary}
+            summaryState={summaryState}
           />
         </aside>
       </section>
@@ -1558,17 +1561,13 @@ function SummaryScores({ summary, variant = 'detail' }) {
 function ConversationAssessmentPanel({
   analysisErrors,
   latestCorrection,
-  latestTiming,
   session,
-  summary,
-  summaryState,
   turnCorrections,
   turnPronunciations,
   turnAssessmentErrors,
 }) {
   const correctionItems = userTurnsWithCorrections(session, turnCorrections, turnAssessmentErrors);
   const pronunciationItems = userTurnsWithPronunciation(session, turnPronunciations, turnAssessmentErrors);
-  const timingItems = latestTiming ? timingRows(latestTiming.timings) : [];
   const correctionListRef = useAutoScrollToBottom(correctionItems.length);
   const pronunciationListRef = useAutoScrollToBottom(pronunciationItems.length);
   return (
@@ -1646,24 +1645,6 @@ function ConversationAssessmentPanel({
         )}
       </section>
 
-      <section className="assessment-section-block" aria-label="Timing">
-        <h3>Timing</h3>
-        {timingItems.length ? (
-          <div className="timing-footnote timing-section">
-            <ul>
-              {timingItems.map(([label, value]) => (
-                <li key={label}>
-                  <span>{label}</span>
-                  <span>{formatMs(value)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : (
-          <p className="empty-note">No timing yet.</p>
-        )}
-      </section>
-
       {analysisErrors.length ? (
         <section className="coach-block">
           <h3>Issues</h3>
@@ -1675,46 +1656,6 @@ function ConversationAssessmentPanel({
               </article>
             ))}
           </div>
-        </section>
-      ) : null}
-      {summaryState === 'loading' ? (
-        <section className="coach-block">
-          <h3>Summary</h3>
-          <p>Generating summary...</p>
-        </section>
-      ) : null}
-      {summaryState === 'error' ? (
-        <section className="coach-block">
-          <h3>Summary</h3>
-          <p>Summary is unavailable for this session.</p>
-        </section>
-      ) : null}
-      {summary ? (
-        <section className="coach-block">
-          <h3>Summary</h3>
-          <dl>
-            <div>
-              <dt>Grammar</dt>
-              <dd>{formatScore(summary.grammar_score)}</dd>
-            </div>
-            <div>
-              <dt>Pronunciation</dt>
-              <dd>{formatScore(summary.pronunciation_score)}</dd>
-            </div>
-            <div>
-              <dt>Fluency</dt>
-              <dd>{formatScore(summary.fluency_score)}</dd>
-            </div>
-            <div>
-              <dt>Vocabulary</dt>
-              <dd>{formatScore(summary.vocabulary_score)}</dd>
-            </div>
-          </dl>
-          <ul className="drill-list">
-            {summary.next_drills.map((drill) => (
-              <li key={drill}>{drill}</li>
-            ))}
-          </ul>
         </section>
       ) : null}
     </aside>
@@ -1739,6 +1680,7 @@ function TurnAssessmentErrors({ errors, turnId }) {
 
 function ReadingPracticePanel({
   assessedPracticeReferenceText,
+  latestTiming,
   mistakeCount,
   openMistakeBook,
   practicePronunciation,
@@ -1746,6 +1688,8 @@ function ReadingPracticePanel({
   readingState,
   startReadingRecording,
   stopReadingRecording,
+  summary,
+  summaryState,
 }) {
   return (
     <section className="reading-practice-content">
@@ -1780,6 +1724,81 @@ function ReadingPracticePanel({
           </button>
         </section>
       ) : null}
+      <TimingPanel latestTiming={latestTiming} />
+      <SummaryPanel summary={summary} summaryState={summaryState} />
+    </section>
+  );
+}
+
+function TimingPanel({ latestTiming }) {
+  const timingItems = latestTiming ? timingRows(latestTiming.timings) : [];
+  return (
+    <section className="reading-practice-link" aria-label="Timing">
+      <h3>Timing</h3>
+      {timingItems.length ? (
+        <div className="timing-footnote timing-section">
+          <ul>
+            {timingItems.map(([label, value]) => (
+              <li key={label}>
+                <span>{label}</span>
+                <span>{formatMs(value)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : (
+        <p className="empty-note">No timing yet.</p>
+      )}
+    </section>
+  );
+}
+
+function SummaryPanel({ summary, summaryState }) {
+  if (summaryState === 'loading') {
+    return (
+      <section className="reading-practice-link" aria-label="Summary">
+        <h3>Summary</h3>
+        <p>Generating summary...</p>
+      </section>
+    );
+  }
+  if (summaryState === 'error') {
+    return (
+      <section className="reading-practice-link" aria-label="Summary">
+        <h3>Summary</h3>
+        <p>Summary is unavailable for this session.</p>
+      </section>
+    );
+  }
+  if (!summary) {
+    return null;
+  }
+  return (
+    <section className="reading-practice-link" aria-label="Summary">
+      <h3>Summary</h3>
+      <dl>
+        <div>
+          <dt>Grammar</dt>
+          <dd>{formatScore(summary.grammar_score)}</dd>
+        </div>
+        <div>
+          <dt>Pronunciation</dt>
+          <dd>{formatScore(summary.pronunciation_score)}</dd>
+        </div>
+        <div>
+          <dt>Fluency</dt>
+          <dd>{formatScore(summary.fluency_score)}</dd>
+        </div>
+        <div>
+          <dt>Vocabulary</dt>
+          <dd>{formatScore(summary.vocabulary_score)}</dd>
+        </div>
+      </dl>
+      <ul className="drill-list">
+        {summary.next_drills.map((drill) => (
+          <li key={drill}>{drill}</li>
+        ))}
+      </ul>
     </section>
   );
 }

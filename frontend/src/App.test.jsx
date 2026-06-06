@@ -538,10 +538,11 @@ test('loads scenarios and starts a session', async () => {
   const assessmentPanel = screen.getByLabelText('Conversation Assessment');
   expect(within(assessmentPanel).getByRole('heading', { name: 'Grammar / Expression Correction' })).toBeInTheDocument();
   expect(within(assessmentPanel).getByRole('heading', { name: 'Pronunciation' })).toBeInTheDocument();
-  expect(within(assessmentPanel).getByRole('heading', { name: 'Timing' })).toBeInTheDocument();
+  expect(within(assessmentPanel).queryByRole('heading', { name: 'Timing' })).not.toBeInTheDocument();
+  expect(within(readingPracticePanel).getByRole('heading', { name: 'Timing' })).toBeInTheDocument();
   expect(within(assessmentPanel).getByText('No correction yet.')).toBeInTheDocument();
   expect(within(assessmentPanel).getByText('No pronunciation result yet.')).toBeInTheDocument();
-  expect(within(assessmentPanel).getByText('No timing yet.')).toBeInTheDocument();
+  expect(within(readingPracticePanel).getByText('No timing yet.')).toBeInTheDocument();
   expect(within(assessmentPanel).queryByRole('button', { name: 'Mistake Book (2)' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
@@ -944,11 +945,14 @@ test('disables turn and recording controls after ending a session', async () => 
   fireEvent.click(screen.getByRole('button', { name: 'End' }));
 
   expect(await screen.findByText('Practice using: I have worked on...')).toBeInTheDocument();
-  const summaryBlock = screen.getByRole('heading', { name: 'Summary' }).closest('section');
+  const readingPracticePanel = screen.getByLabelText('Reading Practice');
+  const summaryBlock = within(readingPracticePanel).getByRole('heading', { name: 'Summary' }).closest('section');
   expect(within(summaryBlock).getByText('Grammar').nextElementSibling).toHaveTextContent('100.0');
   expect(within(summaryBlock).getByText('Pronunciation').nextElementSibling).toHaveTextContent('-');
   expect(within(summaryBlock).getByText('Fluency').nextElementSibling).toHaveTextContent('70.0');
   expect(within(summaryBlock).getByText('Vocabulary').nextElementSibling).toHaveTextContent('76.0');
+  expect(within(screen.getByLabelText('Conversation Assessment')).queryByRole('heading', { name: 'Summary' }))
+    .not.toBeInTheDocument();
   expect(screen.queryByText('Tasks')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Your reply')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
@@ -971,10 +975,13 @@ test('records microphone audio over the session websocket', async () => {
   expect(await screen.findByText('Thanks for sharing that project. What impact did it have?')).toBeInTheDocument();
   expect(within(screen.getByLabelText('Conversation history')).getByText('I have worked on backend systems for three years.'))
     .toBeInTheDocument();
-  expect(screen.getByRole('heading', { name: 'Timing' })).toBeInTheDocument();
-  expect(screen.getByText('ASR')).toBeInTheDocument();
-  expect(screen.getByText('123 ms')).toBeInTheDocument();
-  expect(await screen.findByText('TTS')).toBeInTheDocument();
+  const readingPracticePanel = screen.getByLabelText('Reading Practice');
+  expect(within(readingPracticePanel).getByRole('heading', { name: 'Timing' })).toBeInTheDocument();
+  expect(within(screen.getByLabelText('Conversation Assessment')).queryByRole('heading', { name: 'Timing' }))
+    .not.toBeInTheDocument();
+  expect(within(readingPracticePanel).getByText('ASR')).toBeInTheDocument();
+  expect(within(readingPracticePanel).getByText('123 ms')).toBeInTheDocument();
+  await waitFor(() => expect(within(readingPracticePanel).getByText('TTS')).toBeInTheDocument());
   await waitFor(() => {
     expect(voice.sentMessages.some((payload) => payload instanceof ArrayBuffer)).toBe(true);
     expect(voice.sentMessages.some((payload) => eventType(payload) === 'start_turn')).toBe(true);
