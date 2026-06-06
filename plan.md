@@ -2679,3 +2679,232 @@ Mistake Book pronunciation item `Read word` / `Read sentence`：
 - 单词级 pronunciation 错题默认重读该词，不默认隐藏使用整句。
 - 如果提供句子重读，句子必须在 item 中显式展示，并且用户可以选择 word / sentence target。
 - 默认 `make test` 通过。
+
+### 2026-06-06 Follow-up v2: Conversation Assessment 分区与 Reading Practice 收口
+
+#### 背景
+
+- 三栏拆分后，用户进一步试用发现几个 UI/语义问题：
+  - 选择 `Custom` 场景后出现的自定义场景输入框高度高于 `Scenario` select，toolbar 视觉不齐。
+  - 原 `Correction` 面板被并入 `Conversation Assessment` 后，用户可能误以为 correction 被删掉了。
+  - `Conversation Assessment` 当前更像按 turn 的卡片列表；需要更稳定地分为 correction / pronunciation / timing 三个区域。
+  - `Conversation Assessment` 的区域不应等用户说出第一句后才出现；页面初始就应固定展示结构。
+  - `Mistake Book` 入口放在 `Conversation Assessment` 内语义不够清楚；它更适合放到 `Reading Practice` 面板底部。
+  - `Reading Practice` 的 `Record Reading` 需要再次检查：输入文本后必须能录音、上传并显示 practice result。
+
+#### 已确认设计
+
+- 不恢复旧的独立 `Correction` 面板。
+- 原 correction 能力继续存在，并明确并入 `Conversation Assessment` 的：
+  - `Grammar / Expression Correction`
+- `Conversation Assessment` 固定展示三个 section：
+  - `Grammar / Expression Correction`
+  - `Pronunciation`
+  - `Timing`
+- 三个 section 从页面初始状态就一直展示。
+- section 之间只使用浅色分隔线，不做重卡片，不增加复杂视觉层级。
+- `Reading Practice` 继续保持自由朗读练习语义：
+  - 输入 reference text。
+  - 点击 `Record Reading`。
+  - 结果只显示为 `Practice result`。
+  - 不写入 session analysis。
+  - 不生成 mistake。
+  - 不刷新 mistake book。
+- `Mistake Book` 入口移动到 `Reading Practice` 面板底部，用浅色分隔线与 reading controls 分开。
+
+#### PR-3COL-I：Custom 场景输入框与 Scenario select 对齐
+
+功能描述：
+
+- `Custom` 场景输入框高度与 `Scenario` select 保持一致，避免 toolbar 视觉跳变。
+
+实现思路：
+
+- `Custom scenario` 输入保留当前 textarea 或改为 input，首选最小改动：
+  - `rows={1}`
+  - CSS 固定 `height: 42px`
+  - `min-height: 42px`
+  - `resize: none`
+- 保持原 placeholder 与 `maxLength`。
+- 不改变 custom scenario 提交流程：
+  - `scenario_id: custom`
+  - `custom_prompt: customScenarioText.trim()`
+
+测试方式：
+
+- 选择 `Custom` 后，`Custom scenario` 输入存在。
+- `Custom scenario` 输入为单行高度，例如测试 `rows="1"`。
+- `Start` 在 custom 文本少于 3 个字符时仍 disabled。
+- 输入 `airport check-in` 后可正常创建 custom session。
+- 前端测试通过。
+
+#### PR-3COL-J：Conversation Assessment 固定三分区
+
+功能描述：
+
+- `Conversation Assessment` 栏固定展示三个 section：
+  - `Grammar / Expression Correction`
+  - `Pronunciation`
+  - `Timing`
+- 三个 section 初始页面就展示，即使还没有任何 turn / assessment / timing。
+
+实现思路：
+
+- 重构 `ConversationAssessmentPanel`，从“单一按 turn item 列表”改为稳定 section 布局。
+- 顶层结构：
+  - `<section aria-label="Grammar / Expression Correction">`
+  - `<section aria-label="Pronunciation">`
+  - `<section aria-label="Timing">`
+- section 之间用浅色 border 分隔：
+  - 例如 `.assessment-section-block + .assessment-section-block { border-top: 1px solid #edf1ee; }`
+- `Grammar / Expression Correction`：
+  - 展示最近若干个已有 grammar correction 的用户 turn。
+  - 每条包含：
+    - 用户 turn 文本摘要。
+    - corrected text。
+    - first issue explanation。
+  - 如果 correction 没有 issues，展示 `No grammar or expression issue.`
+  - 如果完全没有 correction，展示轻量空状态，例如 `No correction yet.`
+  - 不再单独显示旧 `Correction` 面板。
+- `Pronunciation`：
+  - 只展示正式对话 voice/audio turn 的 pronunciation assessment。
+  - 每条包含：
+    - 用户 voice turn 文本摘要。
+    - `PronunciationResult`，aria label 仍为 `Pronunciation scores`。
+  - text turn 不显示 pronunciation pending。
+  - voice turn 如果已进入 pronunciation assessment 但还没返回，可以显示 `Pronunciation pending.`
+  - 如果完全没有 voice pronunciation，展示轻量空状态，例如 `No pronunciation result yet.`
+  - Reading Practice 的 `Practice result` 不允许出现在这里。
+- `Timing`：
+  - 固定作为 Conversation Assessment 最下方 section。
+  - 没有 timing 时展示 `No timing yet.`
+  - 有 timing 时展示：
+    - ASR
+    - Reply
+    - Grammar
+    - Pronunciation
+    - TTS
+  - 继续使用 `timingRows(latestTiming.timings)`。
+
+测试方式：
+
+- 初始 Practice 页面即存在三个 section：
+  - `Grammar / Expression Correction`
+  - `Pronunciation`
+  - `Timing`
+- 初始无数据时三个 section 都显示空状态。
+- text turn 后，correction 出现在 `Grammar / Expression Correction` section。
+- text turn 不在 `Pronunciation` section 显示 pronunciation pending。
+- voice turn pronunciation result 出现在 `Pronunciation` section。
+- Reading Practice result 不出现在 `Pronunciation` section。
+- timing result 出现在 `Timing` section。
+- 前端测试通过。
+
+#### PR-3COL-K：Mistake Book 入口移动到 Reading Practice
+
+功能描述：
+
+- `Mistake Book` 入口从 `Conversation Assessment` 栏移动到 `Reading Practice` 栏底部。
+- 保持三栏语义清晰：
+  - Conversation Assessment 只关心正式对话评测与 timing。
+  - Reading Practice 面板底部承载学习工具入口。
+
+实现思路：
+
+- `ReadingPracticePanel` 增加 props：
+  - `mistakeCount`
+  - `openMistakeBook`
+- 在 `ReadingPracticePanel` 底部增加一个 section：
+  - 标题：`Mistake Book`
+  - 按钮：`Mistake Book ({mistakeCount})`
+- Reading controls / practice result 与 Mistake Book section 之间用浅色 border 分隔。
+- 从 `ConversationAssessmentPanel` 删除 Mistake Book 按钮。
+- Practice 页面和 Mistake Book 页面复用同一个 `ReadingPracticePanel` 时：
+  - Practice 页面传入 `mistakeCount` 和 `openMistakeBook`。
+  - Mistake Book 页面可不传 `openMistakeBook`，或隐藏入口，避免在 Mistake Book 页面内重复出现“打开 Mistake Book”的按钮。
+  - 推荐：只有 Practice 页面显示这个入口；Mistake Book 页面右侧只显示 Reading Practice controls。
+
+测试方式：
+
+- Practice 页面 `Mistake Book (n)` 按钮位于 `Reading Practice` 面板内。
+- `Conversation Assessment` 面板内不再有 `Mistake Book (n)` 按钮。
+- 点击 `Mistake Book (n)` 仍能进入 Mistake Book 页面。
+- Mistake Book 页面仍显示 Reading Practice。
+- 前端测试通过。
+
+#### PR-3COL-L：检查并修复 Reading Practice Record Reading
+
+功能描述：
+
+- 确保 `Reading Practice` 的 `Record Reading` 练习读按钮可用。
+- 输入为空时 disabled 可以保留；输入文本后必须可点击并完成录音评测流程。
+
+当前需要核查：
+
+- 如果用户没有输入 reference text，按钮 disabled 是预期行为。
+- 如果用户已输入 reference text 但按钮仍不可用，属于 UI state bug。
+- 如果按钮可点击但录音/上传失败，需要检查：
+  - `startReadingRecording`
+  - `stopReadingRecording`
+  - `finishReadingAssessment`
+  - `uploadPracticePronunciation`
+  - `ReadingPracticePanel` props 是否正确传递。
+
+实现思路：
+
+- 保持 disabled 条件：
+  - `!practiceReferenceText.trim() || readingState === 'assessing'`
+- 输入 reference text 后，按钮 enabled。
+- 点击 `Record Reading`：
+  - 请求 microphone。
+  - `readingState` 进入 `recording`。
+  - 按钮文案变为 `Stop Reading`。
+- 点击 `Stop Reading`：
+  - `readingState` 进入 `assessing`。
+  - 调用 `/api/pronunciation/practice/upload`。
+  - 请求体包含：
+    - `reference_text`
+    - `audio_base64`
+    - `mime_type`
+  - 请求体不包含：
+    - `session_id`
+- 成功后：
+  - `readingState` 回到 `idle`。
+  - `Practice result` 显示在 Reading Practice 内。
+  - 不调用 `/api/mistakes` 或 `/api/mistake-books` 刷新。
+- 失败后：
+  - 错误 inline 展示。
+  - 不影响 Conversation Assessment / session / mistake book。
+
+测试方式：
+
+- 初始 `Record Reading` disabled。
+- 输入 `backend systems` 后 `Record Reading` enabled。
+- 点击后进入 recording，按钮变为 `Stop Reading`。
+- 停止后调用 `/api/pronunciation/practice/upload`。
+- 成功后显示 `Practice result`。
+- 请求体不包含 `session_id`。
+- 录音失败 / provider 失败时 inline error 正常展示。
+- 前端测试通过。
+
+#### PR 切分建议
+
+1. `PR-3COL-I`：只修 custom 输入框高度与测试。
+2. `PR-3COL-J`：只重构 Conversation Assessment 固定三分区与测试。
+3. `PR-3COL-K`：只移动 Mistake Book 入口到 Reading Practice 与测试。
+4. `PR-3COL-L`：只检查/修复 Record Reading 可用性与测试。
+
+#### 验收标准
+
+- `Custom` 场景输入框与 `Scenario` select 高度一致。
+- Practice 页面初始就显示：
+  - `Grammar / Expression Correction`
+  - `Pronunciation`
+  - `Timing`
+- `Grammar / Expression Correction` 中能看到正式对话 turn 的 correction。
+- `Pronunciation` 中只显示正式 voice/audio turn 的 pronunciation。
+- `Timing` 固定在 `Conversation Assessment` 最下方。
+- `Mistake Book (n)` 入口位于 `Reading Practice` 面板底部。
+- 输入 reference text 后，`Record Reading` 可点击并能显示 `Practice result`。
+- Reading Practice 不影响 summary / mistake book / Conversation Assessment。
+- 默认 `make test` 通过。
