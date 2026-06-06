@@ -105,7 +105,15 @@ def _detected_error_types(grammar: dict[str, Any] | None) -> set[str]:
 def _error_type_matches(expected: str, detected: str) -> bool:
     expected_aliases = ERROR_TYPE_ALIASES.get(expected, {expected})
     detected_aliases = ERROR_TYPE_ALIASES.get(detected, {detected})
-    return bool(expected_aliases & detected_aliases)
+    expected_normalized = {_normalize_type(alias) for alias in expected_aliases}
+    detected_normalized = {_normalize_type(alias) for alias in detected_aliases}
+    if expected_normalized & detected_normalized:
+        return True
+    return any(
+        expected_alias in detected_alias or detected_alias in expected_alias
+        for expected_alias in expected_normalized
+        for detected_alias in detected_normalized
+    )
 
 
 def _canonical_error_type(value: str) -> str:

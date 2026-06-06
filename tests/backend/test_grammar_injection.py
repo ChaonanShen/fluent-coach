@@ -62,6 +62,21 @@ def test_score_grammar_result_normalizes_real_provider_error_type_names() -> Non
     assert metrics["matched_error_types"] == ["gerund", "verb_tense"]
 
 
+def test_score_grammar_result_matches_compound_real_provider_error_type() -> None:
+    case = next_error_case("interview", 0)
+    grammar = {
+        "corrected_text": "I have three years of experience in backend development.",
+        "issues": [
+            {"error_type": "subject-verb agreement and noun number"},
+        ],
+    }
+
+    metrics = score_grammar_result(case, grammar, "I has three year experience in backend development.")
+
+    assert metrics["expected_error_recall"] == 1.0
+    assert metrics["matched_error_types"] == ["plural_noun", "subject_verb_agreement"]
+
+
 def test_inject_errors_derives_case_from_clean_text() -> None:
     case = inject_errors(
         "I have three years of experience and finished a platform project.",
