@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>XEngineer Bench Dashboard</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --panel: #ffffff;
+      --line: #d9dde5;
+      --text: #1f2328;
+      --muted: #68707d;
+      --accent: #0f766e;
+      --accent-2: #2563eb;
+      --danger: #b42318;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    header {
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+
+    .bar {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+      font-weight: 700;
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    main {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 18px 20px 28px;
+      display: grid;
+      grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    aside,
+    section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      min-width: 0;
+    }
+
+    aside {
+      align-self: start;
+      overflow: hidden;
+    }
+
+    .section-head {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    button {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 6px;
+      min-height: 32px;
+      padding: 0 10px;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .run-list {
+      display: grid;
+    }
+
+    .run-item {
+      width: 100%;
+      min-height: 58px;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      border-radius: 0;
+      text-align: left;
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    .run-item.active {
+      border-left: 4px solid var(--accent);
+      padding-left: 8px;
+      background: #eef8f6;
+    }
+
+    .run-id {
+      display: block;
+      font-weight: 650;
+      overflow-wrap: anywhere;
+      line-height: 1.25;
+    }
+
+    .run-sub {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    .content {
+      display: grid;
+      gap: 16px;
+      min-width: 0;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .summary-cell {
+      background: #fff;
+      padding: 12px 14px;
+      min-width: 0;
+    }
+
+    .label {
+      color: var(--muted);
+      display: block;
+      font-size: 12px;
+      margin-bottom: 5px;
+    }
+
+    .value {
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+
+    .panel-body {
+      padding: 14px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 9px 8px;
+      text-align: left;
+      vertical-align: top;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    th {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      background: #fafbfc;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .latency-chart {
+      width: 100%;
+      min-height: 160px;
+      margin-bottom: 14px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+      margin: 0 4px 4px 0;
+      white-space: nowrap;
+    }
+
+    .error {
+      color: var(--danger);
+    }
+
+    audio {
+      width: 180px;
+      max-width: 100%;
+      height: 32px;
+    }
+
+    .empty {
+      color: var(--muted);
+      padding: 16px 14px;
+    }
+
+    @media (max-width: 900px) {
+      main {
+        grid-template-columns: 1fr;
+      }
+
+      .summary-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 560px) {
+      .bar {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .meta {
+        white-space: normal;
+      }
+
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      th,
+      td {
+        min-width: 120px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="bar">
+      <h1>XEngineer Bench Dashboard</h1>
+      <div class="meta" id="status">Loading</div>
+    </div>
+  </header>
+  <main>
+    <aside>
+      <div class="section-head">
+        <h2>Runs</h2>
+        <button id="refresh" type="button">Refresh</button>
+      </div>
+      <div id="runs" class="run-list"></div>
+    </aside>
+    <div class="content">
+      <section>
+        <div class="section-head">
+          <h2>Summary</h2>
+        </div>
+        <div id="summary" class="empty">No run selected.</div>
+      </section>
+      <section>
+        <div class="section-head">
+          <h2>Latency</h2>
+        </div>
+        <div id="latency" class="panel-body"></div>
+      </section>
+      <section>
+        <div class="section-head">
+          <h2>Turns</h2>
+        </div>
+        <div id="turns" class="panel-body"></div>
+      </section>
+    </div>
+  </main>
+  <script>
+    const state = { runs: [], selectedRunId: null };
+    const el = (id) => document.getElementById(id);
+
+    el("refresh").addEventListener("click", () => loadRuns());
+    loadRuns();
+
+    async function loadRuns() {
+      setStatus("Loading");
+      const response = await fetch("/api/runs");
+      state.runs = response.ok ? await response.json() : [];
+      renderRunList();
+      if (state.runs.length === 0) {
+        setStatus("No runs");
+        renderEmpty();
+        return;
+      }
+      const nextId = state.selectedRunId || state.runs[0].run_id;
+      await loadRun(nextId);
+    }
+
+    function renderRunList() {
+      el("runs").innerHTML = state.runs.map((run) => `
+        <button class="run-item ${run.run_id === state.selectedRunId ? "active" : ""}" data-run-id="${escapeAttr(run.run_id)}" type="button">
+          <span class="run-id">${escapeHtml(run.run_id)}</span>
+          <span class="run-sub">${escapeHtml(run.scenario_id)} · ${escapeHtml(run.mode)} · ${run.turn_count} turns</span>
+        </button>
+      `).join("") || '<div class="empty">No runs found.</div>';
+      document.querySelectorAll(".run-item").forEach((button) => {
+        button.addEventListener("click", () => loadRun(button.dataset.runId));
+      });
+    }
+
+    async function loadRun(runId) {
+      state.selectedRunId = runId;
+      renderRunList();
+      const response = await fetch(`/api/runs/${encodeURIComponent(runId)}`);
+      if (!response.ok) {
+        setStatus("Run unavailable");
+        renderEmpty();
+        return;
+      }
+      const run = await response.json();
+      setStatus(`${run.run_id} · ${run.turns.length} turns`);
+      renderSummary(run);
+      renderLatency(run);
+      renderTurns(run);
+    }
+
+    function renderSummary(run) {
+      const providers = Object.entries(run.providers || {}).map(([key, value]) => `${key}: ${value || "none"}`).join(" · ");
+      el("summary").className = "summary-grid";
+      el("summary").innerHTML = `
+        ${summaryCell("Run", run.run_id)}
+        ${summaryCell("Scenario", run.scenario_id)}
+        ${summaryCell("Mode", run.mode)}
+        ${summaryCell("Generated", run.generated_at)}
+        ${summaryCell("Turns", String(run.turns.length))}
+        ${summaryCell("Providers", providers || "none")}
+        ${summaryCell("Median TTFT", formatStat(run.latency_summary, "reply_first_delta_ms", "p50"))}
+        ${summaryCell("Median ITL", formatStat(run.latency_summary, "reply_itl_ms", "p50"))}
+      `;
+    }
+
+    function summaryCell(label, value) {
+      return `<div class="summary-cell"><span class="label">${escapeHtml(label)}</span><span class="value">${escapeHtml(value || "")}</span></div>`;
+    }
+
+    function renderLatency(run) {
+      const entries = Object.entries(run.latency_summary || {});
+      if (entries.length === 0) {
+        el("latency").innerHTML = '<div class="empty">No latency samples.</div>';
+        return;
+      }
+      el("latency").innerHTML = renderLatencyChart(entries) + `
+        <table>
+          <thead><tr><th>Segment</th><th>p50</th><th>p90</th><th>p95</th><th>Max</th><th>Mean</th><th>Count</th></tr></thead>
+          <tbody>
+            ${entries.map(([key, stat]) => `
+              <tr>
+                <td><strong>${escapeHtml(key)}</strong></td>
+                <td>${ms(stat.p50)}</td>
+                <td>${ms(stat.p90)}</td>
+                <td>${ms(stat.p95)}</td>
+                <td>${ms(stat.max)}</td>
+                <td>${ms(stat.mean)}</td>
+                <td>${stat.count}</td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderLatencyChart(entries) {
+      const rows = entries.filter(([key]) => ["asr_ms", "reply_first_delta_ms", "reply_itl_ms", "dialogue_reply_ms", "grammar_ms", "pronunciation_ms"].includes(key));
+      if (rows.length === 0) return "";
+      const max = Math.max(...rows.map(([, stat]) => stat.p95), 1);
+      const width = 760;
+      const rowHeight = 24;
+      const height = rows.length * rowHeight + 24;
+      const bars = rows.map(([key, stat], index) => {
+        const y = 18 + index * rowHeight;
+        const barWidth = Math.max(2, (stat.p95 / max) * 520);
+        const color = key === "reply_first_delta_ms" || key === "reply_itl_ms" ? "var(--accent)" : "var(--accent-2)";
+        return `
+          <text x="0" y="${y + 12}" font-size="12" fill="#68707d">${escapeHtml(key)}</text>
+          <rect x="190" y="${y}" width="${barWidth}" height="14" rx="3" fill="${color}"></rect>
+          <text x="${200 + barWidth}" y="${y + 12}" font-size="12" fill="#1f2328">${ms(stat.p95)}</text>
+        `;
+      }).join("");
+      return `<svg class="latency-chart" viewBox="0 0 ${width} ${height}" role="img">${bars}</svg>`;
+    }
+
+    function renderTurns(run) {
+      if (!run.turns || run.turns.length === 0) {
+        el("turns").innerHTML = '<div class="empty">No turns recorded.</div>';
+        return;
+      }
+      el("turns").innerHTML = `
+        <table>
+          <thead>
+            <tr>
+              <th style="width:44px">#</th>
+              <th style="width:210px">Audio</th>
+              <th>Expected / ASR</th>
+              <th>Reply</th>
+              <th>Grammar</th>
+              <th>Pronunciation</th>
+              <th>Timing</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${run.turns.map((turn, index) => `
+              <tr>
+                <td>${turn.index}</td>
+                <td>${turn.audio_path ? `<audio controls src="/api/runs/${encodeURIComponent(run.run_id)}/turns/${index}/audio"></audio>` : ""}</td>
+                <td>
+                  ${line("Expected", turn.expected_text)}
+                  ${line("ASR", turn.asr_text)}
+                  ${turn.wer == null ? "" : `<span class="pill">WER ${Number(turn.wer).toFixed(4)}</span>`}
+                </td>
+                <td>${escapeHtml(turn.reply_text || "")}</td>
+                <td>${formatGrammar(turn.grammar, turn.errors)}</td>
+                <td>${formatPronunciation(turn.pronunciation)}</td>
+                <td>
+                  ${timingPill("ASR", turn.timings_ms.asr_ms)}
+                  ${timingPill("TTFT", turn.timings_ms.reply_first_delta_ms)}
+                  ${timingPill("ITL", turn.timings_ms.reply_itl_ms)}
+                  ${timingPill("Grammar", turn.timings_ms.grammar_ms)}
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function line(label, value) {
+      if (!value) return "";
+      return `<div><span class="label">${escapeHtml(label)}</span>${escapeHtml(value)}</div>`;
+    }
+
+    function formatGrammar(grammar, errors) {
+      if (errors && errors.length) {
+        return errors.map((error) => `<div class="error">${escapeHtml(error.stage || "error")}: ${escapeHtml(error.code || error.user_message_zh || "")}</div>`).join("");
+      }
+      if (!grammar) return "";
+      const issues = grammar.issues || [];
+      return `
+        <div>${escapeHtml(grammar.corrected_text || "")}</div>
+        ${issues.map((issue) => `<span class="pill">${escapeHtml(issue.error_type || "issue")}</span>`).join("")}
+      `;
+    }
+
+    function formatPronunciation(pronunciation) {
+      if (!pronunciation) return "";
+      return `
+        <span class="pill">Overall ${number(pronunciation.overall)}</span>
+        <span class="pill">Accuracy ${number(pronunciation.accuracy)}</span>
+        <span class="pill">Fluency ${number(pronunciation.fluency)}</span>
+      `;
+    }
+
+    function timingPill(label, value) {
+      if (value == null) return "";
+      return `<span class="pill">${escapeHtml(label)} ${ms(value)}</span>`;
+    }
+
+    function formatStat(summary, key, field) {
+      const stat = summary && summary[key];
+      return stat ? ms(stat[field]) : "";
+    }
+
+    function ms(value) {
+      return `${Number(value).toFixed(1)} ms`;
+    }
+
+    function number(value) {
+      return value == null ? "" : Number(value).toFixed(1);
+    }
+
+    function renderEmpty() {
+      el("summary").className = "empty";
+      el("summary").textContent = "No run selected.";
+      el("latency").innerHTML = "";
+      el("turns").innerHTML = "";
+    }
+
+    function setStatus(value) {
+      el("status").textContent = value;
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? "" : value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    function escapeAttr(value) {
+      return escapeHtml(value);
+    }
+  </script>
+</body>
+</html>
