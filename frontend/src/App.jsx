@@ -417,20 +417,6 @@ export default function App() {
     }
   }
 
-  async function reviewMistake(mistakeId) {
-    setError('');
-    try {
-      const reviewed = await request(`/api/mistakes/${mistakeId}/review`, {
-        method: 'POST',
-        body: JSON.stringify({}),
-      });
-      setMistakes((current) => current.map((mistake) => (mistake.id === reviewed.id ? reviewed : mistake)));
-      updateDetailMistake(reviewed);
-    } catch (err) {
-      handleRequestError(err);
-    }
-  }
-
   async function deleteMistake(mistakeId) {
     setError('');
     try {
@@ -950,9 +936,6 @@ export default function App() {
                                   ) : null}
                                 </div>
                                 <div className="mistake-actions">
-                                  <button className="review-button" onClick={() => reviewMistake(mistake.id)} type="button">
-                                    Review {mistake.review_count}
-                                  </button>
                                   <button className="delete-button" onClick={() => deleteMistake(mistake.id)} type="button">
                                     Delete
                                   </button>

@@ -355,9 +355,6 @@ beforeEach(() => {
         fallback_applied: true,
       });
     }
-    if (url === '/api/mistakes/mistake_1/review') {
-      return jsonResponse(mockGrammarMistake({ mastery: 0.25, review_count: 1 }));
-    }
     if (url.startsWith('/api/mistakes/') && options.method === 'DELETE') {
       const mistakeId = url.split('/').at(-1);
       deletedMistakeIds.add(mistakeId);
@@ -658,7 +655,7 @@ test('plays cloud TTS audio when the backend returns audio', async () => {
   expect(window.speechSynthesis.speak).toHaveBeenCalledTimes(0);
 });
 
-test('reviews a saved mistake', async () => {
+test('shows saved mistake details without review actions', async () => {
   render(<App />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
@@ -667,10 +664,7 @@ test('reviews a saved mistake', async () => {
   expect(await screen.findByText('am working')).toBeInTheDocument();
   expect(screen.getByText('I am working in this field since three years.')).toBeInTheDocument();
   expect(screen.getByText('时态错误。')).toBeInTheDocument();
-  const reviewButtons = await screen.findAllByRole('button', { name: 'Review 0' });
-  fireEvent.click(reviewButtons[0]);
-
-  expect(await screen.findByRole('button', { name: 'Review 1' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: /Review/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Back to Practice' }));
   expect(await screen.findByRole('heading', { name: 'Speaking Coach' })).toBeInTheDocument();
 });

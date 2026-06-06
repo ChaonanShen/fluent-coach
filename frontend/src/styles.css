@@ -734,17 +734,6 @@ h3 {
   margin-top: 8px;
 }
 
-.review-button {
-  background: #f8faf8;
-  border: 1px solid #cbd4cf;
-  border-radius: 6px;
-  color: #2f4e47;
-  cursor: pointer;
-  font-size: 0.86rem;
-  font-weight: 700;
-  min-height: 34px;
-}
-
 .mistake-actions {
   display: flex;
   flex-wrap: wrap;
