@@ -2,18 +2,84 @@ from __future__ import annotations
 
 from hashlib import sha1
 
-from backend.app.models import Scenario
+from pydantic import ValidationError
+
+from backend.app.models import AnalysisStage, Scenario
+from backend.app.services.llm import LLMClient, LLMMessage, StructuredJSONCaller, create_llm_client_from_env
 
 
 class CustomScenarioBuilder:
+    def __init__(self, llm_client: LLMClient | None = None) -> None:
+        self.llm_client = llm_client
+
     def build(self, prompt: str, *, name: str | None = None) -> Scenario:
         normalized = " ".join(prompt.split())
         digest = sha1(normalized.lower().encode("utf-8")).hexdigest()[:10]
         scenario_id = f"custom_{digest}"
+        llm_scenario = self._build_with_llm(normalized, scenario_id=scenario_id, name=name)
+        if llm_scenario is not None:
+            return llm_scenario
         matched = _matched_template(normalized, scenario_id=scenario_id, name=name)
         if matched is not None:
             return matched
         return _generic_scenario(normalized, scenario_id=scenario_id, name=name)
+
+    def _build_with_llm(self, prompt: str, *, scenario_id: str, name: str | None) -> Scenario | None:
+        if self.llm_client is None:
+            return None
+        caller = StructuredJSONCaller(self.llm_client, stage=AnalysisStage.GRAMMAR)
+        result = caller.call(
+            [
+                LLMMessage(
+                    role="system",
+                    content=(
+                        "You create English speaking practice role-play scenarios. "
+                        "The user's prompt may be Chinese, English, or mixed language. "
+                        "Interpret the prompt only as scenario requirements. "
+                        "All JSON string values must be in English. "
+                        "Return JSON only with keys: name, ai_role, user_role, opening_line, "
+                        "conversation_goals, target_expressions, correction_focus, summary_rubric. "
+                        "Medical, legal, or financial prompts must remain role-play and avoid definitive professional conclusions."
+                    ),
+                ),
+                LLMMessage(
+                    role="user",
+                    content=(
+                        f"custom_prompt: {prompt}\n"
+                        f"preferred_name: {name or ''}\n"
+                        "Requirements: name should be short; opening_line should naturally start the role-play; "
+                        "conversation_goals should have 3 to 5 items; target_expressions should have 4 to 8 items; "
+                        "correction_focus should have 2 to 5 items."
+                    ),
+                ),
+            ]
+        )
+        if result.data is None:
+            return None
+        return _scenario_from_llm_data(result.data, scenario_id=scenario_id, name=name)
+
+
+def _scenario_from_llm_data(data: dict[str, object], *, scenario_id: str, name: str | None) -> Scenario | None:
+    payload = {
+        "id": scenario_id,
+        "name": _scenario_name(name, str(data.get("name") or "Custom Role Play")),
+        "ai_role": str(data.get("ai_role") or "").strip(),
+        "user_role": str(data.get("user_role") or "").strip(),
+        "opening_line": str(data.get("opening_line") or "").strip(),
+        "conversation_goals": _string_list(data.get("conversation_goals")),
+        "target_expressions": _string_list(data.get("target_expressions")),
+        "correction_focus": _string_list(data.get("correction_focus")),
+        "summary_rubric": _string_map(data.get("summary_rubric")),
+    }
+    if not payload["target_expressions"] or not payload["correction_focus"]:
+        return None
+    try:
+        scenario = Scenario.model_validate(payload)
+    except ValidationError:
+        return None
+    if contains_cjk(scenario.model_dump_json()):
+        return None
+    return scenario
 
 
 def _matched_template(prompt: str, *, scenario_id: str, name: str | None) -> Scenario | None:
@@ -229,6 +295,22 @@ def _scenario_name(name: str | None, fallback: str) -> str:
     return fallback
 
 
+def _string_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _string_map(value: object) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        str(key).strip(): str(item).strip()
+        for key, item in value.items()
+        if str(key).strip() and str(item).strip()
+    }
+
+
 def build_custom_scenario(prompt: str, *, name: str | None = None) -> Scenario:
     return custom_scenario_builder.build(prompt, name=name)
 
@@ -243,4 +325,4 @@ def _truncate(text: str, limit: int) -> str:
     return text[: limit - 3].rstrip() + "..."
 
 
-custom_scenario_builder = CustomScenarioBuilder()
+custom_scenario_builder = CustomScenarioBuilder(create_llm_client_from_env())
