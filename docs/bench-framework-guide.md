@@ -372,7 +372,7 @@ python3 scripts/run_conversation_bench.py \
 
 ```bash
 ASR_PROVIDER=faster_whisper
-ASR_MODEL_SIZE=/home/scn/xe2/models/faster-whisper-small.en
+ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en
 LLM_PROVIDER=openai_compatible
 LLM_BASE_URL=...
 LLM_API_KEY=...
@@ -530,4 +530,3 @@ python3 scripts/bench_dashboard.py
 python3 scripts/run_conversation_bench.py --scenario interview --turns 2 --output-dir /tmp/bench-test
 BENCH_RUNS_DIR=/tmp/bench-test/runs python3 scripts/bench_dashboard.py
 ```
-

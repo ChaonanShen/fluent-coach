@@ -24,3 +24,6 @@ coverage/
 htmlcov/
 frontend/test-results/
 frontend/playwright-report/
+reports/bench-latest.json
+reports/bench-latest.md
+reports/runs/
