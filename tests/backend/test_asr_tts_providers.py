@@ -6,7 +6,12 @@ from fastapi.testclient import TestClient
 
 from backend.app.main import app
 from backend.app.services.asr import FakeASR, FasterWhisperASR, create_asr_provider
-from backend.app.services.tts import BrowserTTSProvider, OpenAICompatibleTTSProvider, create_tts_provider
+from backend.app.services.tts import (
+    BrowserTTSProvider,
+    KokoroTTSProvider,
+    OpenAICompatibleTTSProvider,
+    create_tts_provider,
+)
 
 
 def test_fake_asr_returns_expected_partial_and_final() -> None:
@@ -76,6 +81,16 @@ def test_tts_factory_builds_openai_compatible_provider(monkeypatch) -> None:
     monkeypatch.setenv("TTS_PROVIDER", "openai_compatible")
 
     assert isinstance(create_tts_provider(), OpenAICompatibleTTSProvider)
+
+
+def test_tts_factory_builds_kokoro_provider(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("TTS_PROVIDER", "kokoro")
+    monkeypatch.setenv("KOKORO_MODEL_DIR", str(tmp_path))
+
+    provider = create_tts_provider()
+
+    assert isinstance(provider, KokoroTTSProvider)
+    assert provider.provider_name == "kokoro"
 
 
 def test_tts_api_returns_browser_fallback() -> None:
