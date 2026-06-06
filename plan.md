@@ -1308,3 +1308,242 @@ WebSocket 事件：
 - Custom 场景支持输入多句 prompt，并生成结构化 `Scenario`。
 - custom prompt 场景创建后，后续文本对话、语法纠错、总结、错题本都使用该 session 保存的 scenario 快照。
 - 默认 `make test` 仍离线可复现，不依赖真实 LLM、ASR 或腾讯云。
+
+### 2026-06-06 CustomScenarioBuilder 英文约束执行计划
+
+> 说明：当前 custom prompt 已能从前端 textarea 传到后端并保存到 session，但后端仍主要通过 fallback 模板生成场景。比如用户输入中文“我希望你扮演一位医生，我向你问诊”，当前还不能稳定生成英文的 doctor/patient 场景。下一步要把用户 prompt 解析成结构化英文 `Scenario`，并保证后续 AI 对话始终使用英文。
+
+#### 核心约束
+
+- 用户 custom prompt 可以是中文、英文或中英混合。
+- 用户 prompt 只作为场景需求描述，不作为后续对话语言。
+- 生成出的 `Scenario` 所有字段必须是英文：
+  - `name`
+  - `ai_role`
+  - `user_role`
+  - `opening_line`
+  - `conversation_goals`
+  - `target_expressions`
+  - `correction_focus`
+  - `summary_rubric`
+- 后续 AI 回复必须是英文，即使 custom prompt 是中文。
+- 医生、律师、金融顾问等高风险角色只能作为英语口语 role-play 场景，不做真实诊断、处方、法律结论或投资建议。
+
+#### 目标例子
+
+输入：
+
+```text
+我希望你扮演一位医生，我向你问诊
+```
+
+期望生成：
+
+```json
+{
+  "name": "Doctor Consultation",
+  "ai_role": "Doctor in a clinic role-play",
+  "user_role": "Patient describing symptoms and asking for advice",
+  "opening_line": "Good morning. What symptoms have you been having?",
+  "conversation_goals": [
+    "Describe symptoms clearly",
+    "Answer follow-up questions about duration and severity",
+    "Ask about possible next steps"
+  ],
+  "target_expressions": [
+    "I have been feeling...",
+    "It started...",
+    "The pain gets worse when...",
+    "What should I do next?"
+  ],
+  "correction_focus": [
+    "symptom descriptions",
+    "present perfect for ongoing symptoms",
+    "clear time expressions",
+    "polite health-related questions"
+  ]
+}
+```
+
+#### PR-SC-B1：CustomScenarioBuilder 框架
+
+功能描述：
+
+- 新增 `CustomScenarioBuilder` 服务，统一负责 custom prompt -> `Scenario`。
+- 暂时只迁移现有 fallback 逻辑，不接真实 LLM。
+
+实现思路：
+
+- 新文件：`backend/app/services/custom_scenarios.py`。
+- 提供：
+  - `CustomScenarioBuilder.build(prompt: str, name: str | None = None) -> Scenario`
+  - `build_custom_scenario(prompt, name=None)` 作为默认实例入口。
+- `backend/app/services/scenarios.py` 保留固定 fixture 场景相关能力，custom 生成逻辑逐步迁出。
+- 所有输出字段用 Pydantic `Scenario` 校验。
+
+测试方式：
+
+- custom prompt 能生成合法 `Scenario`。
+- `custom_name` 优先作为 `Scenario.name`。
+- 空白压缩、字段长度裁剪稳定。
+- 现有 custom topic API 测试继续通过。
+
+#### PR-SC-B2：英文规则 fallback 与常见角色识别
+
+功能描述：
+
+- LLM 不可用时，根据中文/英文关键词生成更合理的英文场景。
+
+实现思路：
+
+- 增加规则识别：
+  - `医生`、`问诊`、`doctor`、`clinic` -> `Doctor Consultation`
+  - `酒店`、`hotel`、`front desk` -> `Hotel Check-in`
+  - `机场`、`登机`、`flight`、`airport` -> `Airport Check-in`
+  - `面试`、`interview` -> `Job Interview`
+  - `点餐`、`餐厅`、`restaurant` -> `Restaurant Ordering`
+  - `会议`、`meeting` -> `Work Meeting`
+- 每个规则模板输出英文 `ai_role/user_role/opening_line/goals/target_expressions/correction_focus/summary_rubric`。
+- 未命中时走 generic English fallback，不把中文 prompt 塞进英文开场白。
+
+测试方式：
+
+- 输入“我希望你扮演一位医生，我向你问诊”：
+  - `name == "Doctor Consultation"`
+  - `ai_role` 包含 `Doctor`
+  - `user_role` 包含 `Patient`
+  - `opening_line` 不包含中文
+- 输入酒店/机场/会议中文 prompt，生成英文场景字段。
+- 未命中中文 prompt 也生成英文 generic 场景。
+
+#### PR-SC-B2.5：强制英文输出校验
+
+功能描述：
+
+- 给 custom scenario builder 增加“明显中文检测”，确保 `Scenario` 字段不含中文。
+
+实现思路：
+
+- 增加轻量检测函数，例如检查 CJK 字符。
+- fallback 模板必须全部英文。
+- LLM 结果若含明显中文，先丢弃或后续进入修复；第一版可直接 fallback 到规则模板。
+- `dialogue` prompt 增加硬约束：`Always reply in English, regardless of the language used to describe the scenario.`
+
+测试方式：
+
+- 中文 prompt 生成的 `Scenario` 所有字段不含中文。
+- custom session 文本回合 AI 回复不含中文。
+- 固定场景原有对话测试不回退。
+
+#### PR-SC-B3：LLM 结构化生成
+
+功能描述：
+
+- 用现有 LLM client 将 custom prompt 解析为结构化英文 `Scenario`。
+
+实现思路：
+
+- `CustomScenarioBuilder` 接收 `LLMClient | None`。
+- 有 LLM 时调用 `StructuredJSONCaller`。
+- system prompt 明确：
+  - User prompt may be Chinese or mixed language.
+  - Interpret it only as scenario requirements.
+  - All JSON values must be in English.
+  - Return JSON only.
+  - This is an English speaking role-play scenario.
+  - Medical/legal/financial prompts must remain role-play and avoid real professional conclusions.
+- 输出字段必须通过 `Scenario` schema 校验和英文检查。
+- 无效 JSON、字段缺失、含中文、LLM 异常时 fallback 到 PR-SC-B2。
+
+测试方式：
+
+- `FakeLLMClient` 返回合法 JSON -> 使用 LLM 结果。
+- `FakeLLMClient` 返回非法 JSON -> fallback。
+- `FakeLLMClient` 返回含中文字段 -> fallback。
+- LLM 抛异常 -> fallback。
+
+#### PR-SC-B4：接入 create session 主路径
+
+功能描述：
+
+- `POST /api/sessions` 的 custom 场景改用 `CustomScenarioBuilder`。
+
+实现思路：
+
+- `create_session()` 调用 `build_custom_scenario(custom_prompt, name=request.custom_name)`。
+- 生成后的 `Scenario` 存到 `session.custom_scenario`。
+- 原始 prompt 继续存到 `session.custom_prompt`。
+- 固定场景路径不变。
+
+测试方式：
+
+- custom prompt 创建 session 返回结构化英文 `Scenario`。
+- 中文 doctor prompt 创建 session 后 opening line 是英文问诊开场。
+- 后续 `/turns/text`、`/summary`、`/mistake-books` 使用 session 内保存的 custom scenario 快照。
+- 旧 `custom_topic` 兼容测试继续通过。
+
+#### PR-SC-B5：高风险角色边界
+
+功能描述：
+
+- 对医生等高风险角色做 role-play 边界，避免生成真实诊断/处方式场景。
+
+实现思路：
+
+- doctor fallback 模板使用：
+  - `Doctor in a clinic role-play`
+  - `Patient describing symptoms and asking for advice`
+  - opening line 只询问症状，不做诊断。
+- LLM prompt 加边界约束。
+- 后续可在 dialogue system prompt 中补充：stay in role-play, do not provide definitive medical diagnosis。
+
+测试方式：
+
+- doctor scenario 不包含 `diagnose you with`、`prescribe` 等确定性医疗结论。
+- opening line 是问题，不是诊断或建议。
+
+#### PR-SC-B6：前端显示生成后的场景摘要
+
+功能描述：
+
+- Start custom session 后，轻量展示生成后的英文场景名和目标摘要。
+
+实现思路：
+
+- 复用 `SessionResponse.scenario`。
+- 不做大块说明，只在对话工具栏附近或 Coach 中显示当前 scenario name。
+- 目标摘要可以折叠或小号显示，避免破坏当前应用式布局。
+
+测试方式：
+
+- 输入中文 custom prompt 后 Start，页面显示英文 scenario name。
+- 开场白仍自动朗读。
+
+#### PR-SC-B7：Preview API 可选增强
+
+功能描述：
+
+- 开始前预览生成的 custom scenario，用户确认后再创建 session。
+
+实现思路：
+
+- 新增 `POST /api/scenarios/custom/preview`。
+- 返回 `Scenario`，不创建 session。
+- 前端可做 `Preview -> Start`。
+- 时间紧可后置，不影响主链路。
+
+测试方式：
+
+- preview 返回合法英文 scenario。
+- preview 不产生 session 和 turn。
+- 确认创建后仍保存 custom prompt 和 scenario 快照。
+
+#### 执行顺序
+
+1. 先做 PR-SC-B1，建立 builder 文件和测试，不改变行为。
+2. 再做 PR-SC-B2，doctor/hotel/airport 等中文 prompt 有英文 fallback。
+3. 接着做 PR-SC-B2.5，强制英文输出和 dialogue 英文回复约束。
+4. 再做 PR-SC-B3，接 LLM 结构化生成和 fallback。
+5. 最后做 PR-SC-B4，create session 主路径切到 builder。
+6. B5 紧跟 B4，补高风险边界测试。
+7. B6/B7 作为体验增强，视时间后置。
