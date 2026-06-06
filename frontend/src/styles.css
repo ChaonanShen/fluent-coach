@@ -474,6 +474,91 @@ h3 {
   max-width: 860px;
 }
 
+.mistake-book-list,
+.mistake-turn-list,
+.mistake-book-detail {
+  display: grid;
+  gap: 12px;
+}
+
+.mistake-book-record {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e3e8e4;
+  border-radius: 8px;
+  color: #243139;
+  cursor: pointer;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 12px;
+  text-align: left;
+}
+
+.mistake-book-record strong,
+.mistake-book-heading h2 {
+  color: #243139;
+  display: block;
+  font-size: 1rem;
+  line-height: 1.25;
+  margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+
+.mistake-book-record p,
+.mistake-book-heading p {
+  color: #63726d;
+  font-size: 0.86rem;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.mistake-book-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.mistake-book-counts span {
+  background: #eef5f0;
+  border: 1px solid #d8e4dc;
+  border-radius: 999px;
+  color: #2f4e47;
+  font-size: 0.74rem;
+  font-weight: 750;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.mistake-book-heading {
+  border-bottom: 1px solid #e3e8e4;
+  display: grid;
+  gap: 8px;
+  padding-bottom: 12px;
+}
+
+.mistake-book-heading .mistake-book-counts {
+  justify-content: flex-start;
+}
+
+.mistake-turn-group {
+  display: grid;
+  gap: 8px;
+}
+
+.mistake-turn-text {
+  background: #f6f8f6;
+  border: 1px solid #e3e8e4;
+  border-radius: 8px;
+  color: #2d3d43;
+  font-weight: 650;
+  line-height: 1.35;
+  margin: 0;
+  overflow-wrap: anywhere;
+  padding: 10px 12px;
+}
+
 .mistake-item {
   border: 1px solid #e3e8e4;
   border-radius: 8px;
@@ -599,6 +684,14 @@ h3 {
   .scenario-select-label input,
   .scenario-select-label textarea {
     grid-column: auto;
+  }
+
+  .mistake-book-record {
+    grid-template-columns: 1fr;
+  }
+
+  .mistake-book-counts {
+    justify-content: flex-start;
   }
 
   .session-action {

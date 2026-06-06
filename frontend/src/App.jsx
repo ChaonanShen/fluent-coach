@@ -35,6 +35,10 @@ export default function App() {
   const [inputText, setInputText] = useState('');
   const [latestCorrection, setLatestCorrection] = useState(null);
   const [mistakes, setMistakes] = useState([]);
+  const [mistakeBooks, setMistakeBooks] = useState([]);
+  const [selectedMistakeBookId, setSelectedMistakeBookId] = useState(null);
+  const [mistakeBookDetail, setMistakeBookDetail] = useState(null);
+  const [mistakeBookState, setMistakeBookState] = useState('idle');
   const [pronunciation, setPronunciation] = useState(null);
   const [partialText, setPartialText] = useState('');
   const [voiceState, setVoiceState] = useState('idle');
@@ -67,14 +71,15 @@ export default function App() {
 
   useEffect(() => {
     let active = true;
-    Promise.all([request('/api/scenarios'), request('/api/mistakes')])
-      .then(([scenarioBody, mistakeBody]) => {
+    Promise.all([request('/api/scenarios'), request('/api/mistakes'), request('/api/mistake-books')])
+      .then(([scenarioBody, mistakeBody, mistakeBookBody]) => {
         if (!active) {
           return;
         }
         setScenarios(scenarioBody.scenarios);
         setSelectedScenarioId(scenarioBody.scenarios[0]?.id || '');
         setMistakes(mistakeBody.mistakes);
+        setMistakeBooks(mistakeBookBody.books);
         setStatus('Ready');
       })
       .catch((err) => {
@@ -158,8 +163,12 @@ export default function App() {
   }, [latestTurnText, mainView, turns.length]);
 
   async function refreshMistakes() {
-    const body = await request('/api/mistakes');
-    setMistakes(body.mistakes);
+    const [mistakeBody, mistakeBookBody] = await Promise.all([
+      request('/api/mistakes'),
+      request('/api/mistake-books'),
+    ]);
+    setMistakes(mistakeBody.mistakes);
+    setMistakeBooks(mistakeBookBody.books);
   }
 
   function resetSessionDerivedState() {
@@ -184,6 +193,41 @@ export default function App() {
     setPronunciation(null);
     setAnalysisErrors([]);
     setLatestTiming(null);
+  }
+
+  async function openMistakeBook(sessionId) {
+    setError('');
+    setSelectedMistakeBookId(sessionId);
+    setMistakeBookState('loading');
+    try {
+      const detail = await request(`/api/mistake-books/${sessionId}`);
+      setMistakeBookDetail(detail);
+      setMistakeBookState('ready');
+    } catch (err) {
+      handleRequestError(err, 'Mistake book failed to load.');
+      setMistakeBookState('error');
+    }
+  }
+
+  function closeMistakeBookDetail() {
+    setSelectedMistakeBookId(null);
+    setMistakeBookDetail(null);
+    setMistakeBookState('idle');
+  }
+
+  function updateDetailMistake(reviewed) {
+    setMistakeBookDetail((current) => {
+      if (!current) {
+        return current;
+      }
+      return {
+        ...current,
+        turn_groups: current.turn_groups.map((group) => ({
+          ...group,
+          mistakes: group.mistakes.map((mistake) => (mistake.id === reviewed.id ? reviewed : mistake)),
+        })),
+      };
+    });
   }
 
   function handleRequestError(err, fallbackMessage = 'Request failed.') {
@@ -344,6 +388,7 @@ export default function App() {
         body: JSON.stringify({}),
       });
       setMistakes((current) => current.map((mistake) => (mistake.id === reviewed.id ? reviewed : mistake)));
+      updateDetailMistake(reviewed);
     } catch (err) {
       handleRequestError(err);
     }
@@ -734,7 +779,14 @@ export default function App() {
           <div>
             <h1>Mistake Book</h1>
           </div>
-          <button className="secondary-action topbar-action" onClick={() => setMainView('practice')} type="button">
+          <button
+            className="secondary-action topbar-action"
+            onClick={() => {
+              setMainView('practice');
+              closeMistakeBookDetail();
+            }}
+            type="button"
+          >
             Back to Practice
           </button>
         </header>
@@ -742,24 +794,83 @@ export default function App() {
         {error ? <p className="inline-error">{error}</p> : null}
 
         <section className="mistake-book" aria-label="Mistake Book">
-          {mistakes.length ? (
-            <div className="mistake-list">
-              {mistakes.map((mistake) => (
-                <article className="mistake-item" key={mistake.id}>
-                  <div>
-                    <span>{mistake.type}</span>
-                    <p>{mistake.wrong}</p>
-                    <strong>{mistake.correct}</strong>
-                    {mistake.explanation_zh ? <p className="mistake-explanation">{mistake.explanation_zh}</p> : null}
+          {selectedMistakeBookId ? (
+            <div className="mistake-book-detail">
+              <button className="secondary-action" onClick={closeMistakeBookDetail} type="button">
+                All Books
+              </button>
+              {mistakeBookState === 'loading' ? <p>Loading mistake book...</p> : null}
+              {mistakeBookState === 'error' ? <p>Could not load this mistake book.</p> : null}
+              {mistakeBookDetail ? (
+                <>
+                  <div className="mistake-book-heading">
+                    <h2>{mistakeBookDetail.record.title}</h2>
+                    <p>
+                      {mistakeBookDetail.record.scenario_name} - {formatDateTime(mistakeBookDetail.record.created_at)}
+                    </p>
+                    <div className="mistake-book-counts" aria-label="Mistake counts">
+                      <span>Grammar {mistakeBookDetail.record.grammar_count}</span>
+                      <span>Expression {mistakeBookDetail.record.expression_count}</span>
+                      <span>Pronunciation {mistakeBookDetail.record.pronunciation_count}</span>
+                    </div>
                   </div>
-                  <button className="review-button" onClick={() => reviewMistake(mistake.id)} type="button">
-                    Review {mistake.review_count}
-                  </button>
-                </article>
+                  {mistakeBookDetail.turn_groups.length ? (
+                    <div className="mistake-turn-list">
+                      {mistakeBookDetail.turn_groups.map((group, index) => (
+                        <section className="mistake-turn-group" key={group.turn?.id || `other-${index}`}>
+                          <p className="mistake-turn-text">{group.turn?.text || 'Other practice'}</p>
+                          <div className="mistake-list">
+                            {group.mistakes.map((mistake) => (
+                              <article className="mistake-item" key={mistake.id}>
+                                <div>
+                                  <span>{mistake.subtype || mistake.type}</span>
+                                  <p>{mistake.wrong}</p>
+                                  <strong>{mistake.correct}</strong>
+                                  {mistake.explanation_zh ? (
+                                    <p className="mistake-explanation">{mistake.explanation_zh}</p>
+                                  ) : null}
+                                </div>
+                                <button className="review-button" onClick={() => reviewMistake(mistake.id)} type="button">
+                                  Review {mistake.review_count}
+                                </button>
+                              </article>
+                            ))}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>No saved mistakes for this conversation.</p>
+                  )}
+                </>
+              ) : null}
+            </div>
+          ) : mistakeBooks.length ? (
+            <div className="mistake-book-list">
+              {mistakeBooks.map((book) => (
+                <button
+                  className="mistake-book-record"
+                  key={book.session_id}
+                  onClick={() => openMistakeBook(book.session_id)}
+                  type="button"
+                >
+                  <div>
+                    <strong>{book.title}</strong>
+                    <p>
+                      {book.scenario_name} - {formatDateTime(book.created_at)}
+                    </p>
+                  </div>
+                  <div className="mistake-book-counts" aria-label={`${book.title} counts`}>
+                    <span>{book.mistake_count} total</span>
+                    <span>Grammar {book.grammar_count}</span>
+                    <span>Expression {book.expression_count}</span>
+                    <span>Pronunciation {book.pronunciation_count}</span>
+                  </div>
+                </button>
               ))}
             </div>
           ) : (
-            <p>No saved mistakes yet.</p>
+            <p>No conversation mistake books yet.</p>
           )}
         </section>
       </main>
@@ -1018,6 +1129,22 @@ function replaceTurnIdAndText(session, oldId, turn) {
     ...session,
     turns: session.turns.map((existing) => (existing.id === oldId ? turn : existing)),
   };
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return '';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat(undefined, {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
 }
 
 async function blobToBase64(blob) {

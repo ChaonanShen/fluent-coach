@@ -60,6 +60,13 @@ beforeEach(() => {
           {
             id: 'mistake_1',
             type: 'grammar',
+            session_id: 'session_1',
+            turn_id: 'turn_user_1',
+            source_stage: 'grammar',
+            source_id: 'correction_1',
+            subtype: 'tense',
+            severity: 'major',
+            tags: ['interview', 'tense'],
             wrong: 'am working',
             correct: 'have been working',
             explanation_zh: '时态错误。',
@@ -69,6 +76,86 @@ beforeEach(() => {
             mastery: 0.1,
             review_count: 0,
             created_at: '2026-06-05T00:00:04Z',
+            last_seen_at: '2026-06-05T00:00:04Z',
+            next_review_at: null,
+          },
+        ],
+      });
+    }
+    if (url === '/api/mistake-books') {
+      return jsonResponse({
+        books: [
+          {
+            session_id: 'session_1',
+            title: 'Job Interview - 2026-06-05 00:00 UTC',
+            scenario_id: 'interview',
+            scenario_name: 'Job Interview',
+            status: 'active',
+            created_at: '2026-06-05T00:00:00Z',
+            ended_at: null,
+            mistake_count: 1,
+            grammar_count: 1,
+            expression_count: 0,
+            pronunciation_count: 0,
+            lowest_mastery: 0.1,
+            due_count: 0,
+          },
+        ],
+      });
+    }
+    if (url === '/api/mistake-books/session_1') {
+      return jsonResponse({
+        record: {
+          session_id: 'session_1',
+          title: 'Job Interview - 2026-06-05 00:00 UTC',
+          scenario_id: 'interview',
+          scenario_name: 'Job Interview',
+          status: 'active',
+          created_at: '2026-06-05T00:00:00Z',
+          ended_at: null,
+          mistake_count: 1,
+          grammar_count: 1,
+          expression_count: 0,
+          pronunciation_count: 0,
+          lowest_mastery: 0.1,
+          due_count: 0,
+        },
+        turn_groups: [
+          {
+            turn: {
+              id: 'turn_user_1',
+              session_id: 'session_1',
+              speaker: 'user',
+              text: 'I am working in this field since three years.',
+              created_at: '2026-06-05T00:00:01Z',
+              mode: 'text',
+              audio_path: null,
+              asr_confidence: null,
+            },
+            mistakes: [
+              {
+                id: 'mistake_1',
+                type: 'grammar',
+                session_id: 'session_1',
+                turn_id: 'turn_user_1',
+                source_stage: 'grammar',
+                source_id: 'correction_1',
+                subtype: 'tense',
+                severity: 'major',
+                tags: ['interview', 'tense'],
+                wrong: 'am working',
+                correct: 'have been working',
+                explanation_zh: '时态错误。',
+                practice_sentence: 'I have been working in this field for three years.',
+                word: null,
+                phoneme: null,
+                mastery: 0.1,
+                review_count: 0,
+                created_at: '2026-06-05T00:00:04Z',
+                last_seen_at: '2026-06-05T00:00:04Z',
+                next_review_at: null,
+              },
+            ],
           },
         ],
       });
@@ -97,6 +184,13 @@ beforeEach(() => {
       return jsonResponse({
         id: 'mistake_1',
         type: 'grammar',
+        session_id: 'session_1',
+        turn_id: 'turn_user_1',
+        source_stage: 'grammar',
+        source_id: 'correction_1',
+        subtype: 'tense',
+        severity: 'major',
+        tags: ['interview', 'tense'],
         wrong: 'am working',
         correct: 'have been working',
         explanation_zh: '时态错误。',
@@ -106,6 +200,8 @@ beforeEach(() => {
         mastery: 0.25,
         review_count: 1,
         created_at: '2026-06-05T00:00:04Z',
+        last_seen_at: '2026-06-05T00:00:04Z',
+        next_review_at: null,
       });
     }
     if (url === '/api/sessions') {
@@ -397,7 +493,9 @@ test('reviews a saved mistake', async () => {
 
   fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (1)' }));
   expect(await screen.findByRole('heading', { name: 'Mistake Book' })).toBeInTheDocument();
-  expect(screen.getByText('am working')).toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('button', { name: /Job Interview/ }));
+  expect(await screen.findByText('am working')).toBeInTheDocument();
+  expect(screen.getByText('I am working in this field since three years.')).toBeInTheDocument();
   expect(screen.getByText('时态错误。')).toBeInTheDocument();
   const review = await screen.findByRole('button', { name: 'Review 0' });
   fireEvent.click(review);
