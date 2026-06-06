@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { flushSync } from 'react-dom';
 
 async function request(path, options = {}) {
   const response = await fetch(path, {
@@ -860,8 +861,7 @@ export default function App() {
       if (message.type === 'asr.final') {
         const userTurnId = message.user_turn_id || `local-user-${Date.now()}`;
         pendingVoiceUserTurnIdRef.current = userTurnId;
-        setPartialText(message.text);
-        setSession((current) => appendTurn(current, {
+        const userTurn = {
           id: userTurnId,
           session_id: session.id,
           speaker: 'user',
@@ -870,7 +870,11 @@ export default function App() {
           mode: 'audio',
           audio_path: null,
           asr_confidence: null,
-        }));
+        };
+        flushSync(() => {
+          setPartialText(message.text);
+          setSession((current) => appendTurn(current, userTurn));
+        });
       }
       if (message.type === 'reply.text') {
         const replyReadyAt = nowMs();
