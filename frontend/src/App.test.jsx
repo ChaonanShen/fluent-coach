@@ -868,8 +868,10 @@ test('records read aloud audio and uploads it for assessment', async () => {
   fireEvent.change(await screen.findByLabelText('Text to read'), {
     target: { value: 'backend systems' },
   });
+  expect(screen.getByRole('button', { name: 'Record Reading' })).toBeEnabled();
   fireEvent.click(await screen.findByRole('button', { name: 'Record Reading' }));
   await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  expect(await screen.findByRole('button', { name: 'Stop Reading' })).toBeInTheDocument();
   fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
 
   expect(screen.getByRole('heading', { name: 'Reading Practice' })).toBeInTheDocument();
