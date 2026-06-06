@@ -740,6 +740,11 @@ h3 {
   gap: 8px;
 }
 
+.mistake-read-action {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
 .delete-button {
   background: #fff7f5;
   border: 1px solid #efc8c0;

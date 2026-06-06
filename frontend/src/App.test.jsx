@@ -786,6 +786,31 @@ test('selects one mistake book without opening it and deletes the selection', as
   expect(await screen.findByRole('button', { name: 'Mistake Book (1)' })).toBeInTheDocument();
 });
 
+test('reassesses a pronunciation mistake without changing the saved mistake', async () => {
+  extraMistakeBookEnabled = true;
+  const voice = installVoiceMocks();
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (3)' }));
+  fireEvent.click(await screen.findByRole('button', { name: /Open Presentation Practice/ }));
+
+  expect((await screen.findAllByText('systems')).length).toBeGreaterThan(0);
+  expect(screen.queryByText('am working')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Read again' })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Read again' }));
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
+
+  expect(await screen.findByText('Read: I have worked on backend systems for three years.')).toBeInTheDocument();
+  expect(await screen.findByLabelText('Pronunciation scores')).toHaveTextContent('Overall 50');
+  expect(screen.getAllByText('systems').length).toBeGreaterThan(0);
+  expect(screen.getByRole('button', { name: 'Pronunciation 1' })).toBeInTheDocument();
+  const uploadCall = global.fetch.mock.calls.find(([url]) => url === '/api/pronunciation/practice/upload');
+  expect(JSON.parse(uploadCall[1].body)).toMatchObject({
+    reference_text: 'I have worked on backend systems for three years.',
+  });
+});
+
 test('selects all mistake books and bulk deletes them', async () => {
   extraMistakeBookEnabled = true;
   render(<App />);
