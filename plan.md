@@ -1547,3 +1547,122 @@ WebSocket 事件：
 5. 最后做 PR-SC-B4，create session 主路径切到 builder。
 6. B5 紧跟 B4，补高风险边界测试。
 7. B6/B7 作为体验增强，视时间后置。
+
+### 2026-06-06 Mistake Book 筛选、删除与滚动改进计划
+
+> 说明：当前 Mistake Book 已按对话形成记录，并能点进详情查看 turn 分组错题。但详情顶部的 Grammar/Expression/Pronunciation 统计只是展示，不能筛选；错题本和单条错题都没有删除能力；桌面固定高度布局下错题本页没有独立滚动，长列表会被截断。
+
+#### 目标
+
+- 对话错题本详情顶部的 `Grammar` / `Expression` / `Pronunciation` 统计变成可点击筛选。
+- 默认展示全部错题；点击某类型后只展示该类型；再次点击同一类型恢复全部。
+- 某个对话错题本可以删除。删除语义是删除该 session 下的所有 mistake items，不删除原始 session/turn 对话记录。
+- 错题本列表支持多选、全选、批量删除。
+- 错题本详情中某一条错题可以删除。
+- 删除后列表、详情和统计计数都要同步刷新。
+- Mistake Book 页面在桌面固定高度布局下支持内部滚动，长列表和长详情都能看到底部内容。
+
+#### PR-MB-F：后端删除 API
+
+功能描述：
+
+- 增加删除单条错题、删除某个对话错题本、批量删除错题本的后端能力。
+
+实现思路：
+
+- `SQLiteLogStore` 新增：
+  - `delete_mistake_item(mistake_id: str) -> bool`
+  - `delete_mistake_items_for_session(session_id: str) -> int`
+  - `delete_mistake_items_for_sessions(session_ids: list[str]) -> int`
+- `MistakeService` 新增对应方法。
+- API：
+  - `DELETE /api/mistakes/{mistake_id}`
+  - `DELETE /api/mistake-books/{session_id}`
+  - `POST /api/mistake-books/delete`，body: `{ "session_ids": [...] }`
+- 删除错题本只删除 mistakes，不删除 session、turn、summary。
+- 删除不存在的单条错题返回 404；删除不存在或空的错题本返回 200，`deleted_count=0`，便于批量操作幂等。
+
+测试方式：
+
+- 单条删除后 `/api/mistakes` 和 `/api/mistake-books/{session_id}` 不再返回该错题。
+- 删除错题本后 `/api/mistake-books` 默认不再显示该 session。
+- 批量删除多个 session 的错题后列表为空或只剩未选 session。
+- 旧 review API 行为不变。
+
+#### PR-MB-G：详情类型筛选与单条删除 UI
+
+功能描述：
+
+- 详情页顶部统计变成筛选按钮。
+- 每条错题卡片增加 Delete 操作。
+
+实现思路：
+
+- 前端增加 `activeMistakeTypeFilter` 状态，值为 `null | grammar | expression | pronunciation`。
+- `Mistake counts` 中三项改为 button：
+  - 当前选中项使用 active 样式。
+  - 再点同一项清空 filter。
+- 渲染 `turn_groups` 时按 active type 过滤 mistakes；过滤后没有错题的 turn group 不展示。
+- 单条 Delete 调 `DELETE /api/mistakes/{id}`。
+- 删除成功后重新拉取 `/api/mistakes`、`/api/mistake-books` 和当前 detail，保证计数准确。
+
+测试方式：
+
+- 详情页默认展示所有类型。
+- 点击 Grammar 只展示 grammar 错题；再次点击 Grammar 恢复全部。
+- 删除单条错题后该错题消失，详情计数更新。
+
+#### PR-MB-H：列表多选、全选和批量删除 UI
+
+功能描述：
+
+- 错题本列表页支持多选、全选、批量删除。
+
+实现思路：
+
+- 前端增加 `selectedMistakeBookIds: Set<string>`。
+- 每条 record 左侧加 checkbox，点击 checkbox 不进入详情。
+- 顶部加 Select all / Clear / Delete selected。
+- Delete selected 调 `POST /api/mistake-books/delete`。
+- 删除成功后刷新 book list 和 mistakes，清空选择。
+- 单条 record 可以保留整行点击进入详情，checkbox 专门负责选择。
+
+测试方式：
+
+- 勾选一条后 Delete selected 删除该记录。
+- Select all 后批量删除全部记录。
+- 点击 checkbox 不打开详情；点击 record 其他区域仍打开详情。
+
+#### PR-MB-I：Mistake Book 页面滚动
+
+功能描述：
+
+- 修复错题本长列表/长详情在桌面固定高度下底部不可见的问题。
+
+实现思路：
+
+- `main.app-shell` 在 Mistake Book view 下继续固定一屏。
+- `.mistake-book` 设置：
+  - `width: 100%`
+  - `flex: 1`
+  - `min-height: 0`
+  - `overflow-y: auto`
+  - `padding-bottom` 保留底部余量
+- `.mistake-book-list` 和 `.mistake-book-detail` 不自行撑破父容器。
+- 移动端继续允许页面自然滚动。
+
+测试方式：
+
+- 前端测试保持通过。
+- Playwright 或手动检查：生成多条错题本记录/详情错题后，Mistake Book 内容区能独立滚动到底部。
+
+#### 验收标准
+
+- 进入某个对话错题本后，默认显示全部错误。
+- 点击 `Grammar` 后只显示 grammar 错误；再次点击 `Grammar` 恢复全部。
+- 点击 `Expression` 或 `Pronunciation` 也有同样 toggle 行为。
+- 删除单条错题后，该卡片消失，顶部统计立即更新。
+- 删除某个对话错题本后，该记录从 Mistake Book 首页消失。
+- 多选/全选删除可一次删除多个错题本记录。
+- 桌面端 Mistake Book 页面长内容可以滚动到底部。
+- 默认 `make test` 仍通过。
