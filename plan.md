@@ -1004,3 +1004,307 @@ WebSocket 事件：
 - Timing 是底部浅色多行调试文本。
 - 桌面浏览器页面本身不需要滚动；只允许消息区和 Coach 栏内部滚动。
 - 小屏下仍能正常访问内容，不因固定高度导致不可用。
+
+### 2026-06-06 错题本分组与自定义场景 Prompt 化计划
+
+> 说明：本节基于当前代码状态制定。当前 `MistakeItem` 是全局平铺列表，`/api/mistakes` 只返回所有错题；当前自定义场景已有 `custom_topic`，但只是把短主题套进固定模板，还不是用户输入一整段 prompt 来定义场景。
+
+#### 目标
+
+- 错题本首页不再直接罗列所有错误，而是按一次对话形成一条错题本记录。
+- 点进某条对话记录后，按 turn、错误类型、严重程度展示本次对话中的具体错误。
+- 对话支持用户手动命名；未命名时自动生成“简短标题 + 时间”的显示名。
+- 错误仍能跨对话按类别、关键词、掌握度检索，避免只按对话分组后难以复习同类问题。
+- 自定义场景从单行 topic 升级为自由 prompt，用户可以描述角色、地点、目标、难度、语气、纠错重点等。
+- 自定义场景生成后保存到 session 快照，后续对话、总结、错题本都能看到当时的场景定义。
+
+#### 当前问题判断
+
+1. **错题来源关系不足**
+   - 当前 `MistakeItem` 没有 `session_id`、`turn_id`、`source_id`、`subtype`、`severity`、`tags`。
+   - `MistakeService._upsert_or_merge()` 按 `type/wrong/correct` 做全局合并，会丢失“这个错误来自哪次对话、哪一句话”的产品语义。
+   - `grammar_corrections` 与 `pronunciation_assessments` 也没有直接 session 索引，只靠 `analysis_store` 维护当前进程内结果，重启后会话级聚合能力弱。
+
+2. **错题本 UI 只是平铺列表**
+   - `Mistake Book` 页面当前直接 map `mistakes`，展示 type、wrong、correct、解释、Review。
+   - 没有对话记录列表、详情页、筛选、搜索、分类汇总，也没有“本次对话错题”的入口。
+
+3. **自定义场景能力偏模板化**
+   - `CreateSessionRequest` 只有 `custom_topic`，长度限制 160。
+   - `make_custom_scenario(topic)` 只生成固定角色、固定目标表达、固定纠错重点。
+   - 前端 Custom 只是一个 input，placeholder 是 `airport check-in` 这种短主题，不适合输入完整场景描述。
+
+#### 产品形态
+
+1. **错题本首页：Conversation Books**
+   - 首页展示一组对话错题本记录，每条对应一个 session。
+   - 每条记录展示：
+     - 显示标题，例如 `机场值机练习 · 06/06 14:20`、`Job Interview: backend project · 06/06 14:20`。
+     - 场景名或自定义场景标题。
+     - 创建时间和结束状态。
+     - 错题数量、语法/表达/发音数量。
+     - 本次最低掌握度或待复习数量。
+   - 支持按最近、错题最多、待复习优先排序。
+
+2. **对话错题详情**
+   - 顶部展示对话标题、场景、时间、总错题数、分类统计。
+   - 主体按用户 turn 分组：
+     - 原始用户句子。
+     - 对应 AI 回复可折叠展示，用于保留上下文。
+     - 本 turn 产生的 grammar/expression/pronunciation 错误。
+   - 每条错误展示：
+     - 错误表达、正确表达、中文解释、练习句。
+     - 类型和子类型，例如 `grammar / tense`、`expression / politeness`、`pronunciation / word_accuracy`。
+     - 严重程度、掌握度、复习次数。
+     - Review / Practice 操作。
+
+3. **跨对话分类检索**
+   - 在错题本首页增加分类入口或 tabs：
+     - `All`
+     - `Grammar`
+     - `Expression`
+     - `Pronunciation`
+     - `Due`
+   - 支持关键词搜索：wrong、correct、解释、练习句、场景标题。
+   - 支持过滤：type、subtype、severity、scenario_id、mastery 区间、是否待复习。
+   - 搜索结果可以仍展示平铺错误，但必须标明来源 session，并能跳回对应对话详情。
+
+4. **标题生成规则**
+   - 用户可以手动改名，手动标题优先。
+   - 自动标题优先级：
+     - 自定义场景：用 LLM 或规则从 custom prompt 提炼 4 到 8 个词的标题。
+     - 固定场景：用场景名 + 第一条或前两条用户发言提炼短标题。
+     - 兜底：`{Scenario Name} · {local date time}`。
+   - 后端存 UTC 时间，前端按浏览器本地时间显示。
+   - 标题生成不阻塞创建 session。第一版可以 start 时先用兜底标题，第一条用户 turn 后或 end session 时再刷新标题。
+
+5. **错题概念和出现记录**
+   - 推荐最终模型拆成两层：
+     - `MistakeItem`：可复习的“错题概念”，负责 wrong/correct/type/subtype/mastery/review_count/next_review_at。
+     - `MistakeOccurrence`：某次出现，负责 session_id、turn_id、source_stage、source_id、context_text、explanation、created_at。
+   - 小步落地时可先给现有 `MistakeItem` 增加来源字段，后续再拆 occurrence 表；但不要继续只做全局合并。
+   - 合并策略：
+     - 同一 session 同一 turn 的同一 wrong/correct/type 合并为一条。
+     - 跨 session 的同类错误可以关联到同一概念，但详情页仍显示每次 occurrence。
+
+#### 后端改造计划
+
+1. **Session 标题与元数据**
+   - `Session` 新增：
+     - `title: str | None`
+     - `title_source: auto | manual | fallback`
+     - `scenario_name_snapshot: str | None`
+     - `custom_prompt: str | None`
+   - API：
+     - `PATCH /api/sessions/{id}/title`
+     - `POST /api/sessions/{id}/title/generate` 或在 end session 时自动生成。
+   - 测试：
+     - 手动标题优先，不被自动标题覆盖。
+     - 未命名 session 返回兜底标题。
+     - 自定义场景标题能从 prompt 或 topic 生成。
+
+2. **错题来源字段**
+   - `MistakeItem` 第一阶段新增：
+     - `session_id: str | None`
+     - `turn_id: str | None`
+     - `source_stage: grammar | expression | pronunciation`
+     - `source_id: str | None`
+     - `subtype: str | None`
+     - `severity: minor | major | None`
+     - `tags: list[str]`
+     - `last_seen_at`
+     - `next_review_at`
+   - `GrammarCorrection` 保存时需要带上 session/turn 上下文，或者 `mistake_service.add_from_grammar()` 增加 `session_id`、`turn_id` 参数。
+   - `PronunciationAssessment` 同理需要关联 session，若来自跟读面板但没有 turn，可以 `turn_id=None`，source_stage 为 pronunciation。
+   - SQLite 继续保留 payload 兼容，但增加可查询列：`session_id`、`turn_id`、`type`、`subtype`、`created_at`。
+
+3. **会话级错题 API**
+   - 新增响应模型：
+     - `MistakeBookRecord`
+     - `MistakeBookDetail`
+     - `MistakeFilter`
+   - API：
+     - `GET /api/mistake-books`
+     - `GET /api/mistake-books/{session_id}`
+     - `GET /api/mistakes?session_id=&type=&subtype=&severity=&q=&due=`
+   - 保留旧 `/api/mistakes` 行为，默认仍可返回平铺列表，避免一次性破坏现有 UI 和测试。
+   - 聚合逻辑：
+     - 从 sessions + turns + mistake_items 生成 record。
+     - 没有错题的 session 默认不显示，除非 query 参数 `include_empty=true`。
+     - 详情页按 turn.created_at 排序，未绑定 turn 的错题放到 `Other practice` 分组。
+
+4. **错题分类**
+   - Grammar subtype 初版从 `GrammarIssue.error_type` 映射。
+   - Expression subtype 初版可用 `natural_expression`、`politeness`、`clarity`、`scenario_fit`。
+   - Pronunciation subtype 初版可用 `word_accuracy`、`phoneme_accuracy`、`fluency`、`prosody`。
+   - 后续可以让 LLM 在 grammar check 输出中稳定给 category，但必须有 fallback 映射。
+
+5. **复习能力增强**
+   - `review()` 增加结果参数：
+     - `easy`
+     - `hard`
+     - `again`
+   - 根据结果更新 mastery 和 next_review_at。
+   - 第一版 UI 可继续用一个 Review 按钮，后端先支持更完整模型。
+
+#### 前端改造计划
+
+1. **Mistake Book 首页**
+   - 从 `/api/mistake-books` 加载对话记录，而不是直接显示所有 mistakes。
+   - 顶部增加搜索框和类型 filter。
+   - 每条 session record 点击进入 detail。
+   - 空状态区分：
+     - 还没有完成任何对话。
+     - 有对话但没有错题。
+     - 当前筛选无结果。
+
+2. **Mistake Book Detail**
+   - 使用 `/api/mistake-books/{session_id}`。
+   - 顶部可编辑标题。
+   - 错题按 turn 分组展示。
+   - 错题卡片保留当前 wrong/correct/explanation/review，但补充来源句和类别标签。
+   - 支持从分类搜索结果跳转到某个 session detail。
+
+3. **Coach 面板入口**
+   - 当前会话进行中时，Mistake Book 入口显示：
+     - `Mistake Book`
+     - 本 session 新增错题数。
+   - 点击后如果有 active session，默认打开本 session detail；否则打开首页。
+
+4. **视觉和交互边界**
+   - 错题本是学习记录页面，不要挤在右侧 Coach 栏里。
+   - 详情页信息密度可以高，但需要清晰区分 session record、turn group、mistake item。
+   - Review 操作后只局部刷新对应错误，不强制回到列表顶部。
+
+#### 自定义场景 Prompt 化计划
+
+1. **输入形态**
+   - 前端 Custom 从单行 input 升级为 textarea。
+   - 支持用户输入一段自然语言 prompt，例如：
+
+     ```text
+     I want to practice checking in at a hotel. The AI should be a front desk clerk.
+     Please make it B1 level, include a problem with my reservation, and focus on polite requests.
+     ```
+
+   - 可选增加简单高级字段，但第一版先不复杂化：
+     - difficulty: A2/B1/B2/C1
+     - correction focus
+     - role preference
+   - `custom_topic` 继续兼容，旧测试和旧调用不需要马上删除。
+
+2. **后端模型**
+   - `CreateSessionRequest` 新增：
+     - `custom_prompt: str | None = Field(max_length=2000)`
+     - `custom_name: str | None`
+   - `Scenario` 可保持现有结构，必要的原始 prompt 放在 `Session.custom_prompt`，不要塞进 `Scenario` 破坏 fixture schema。
+   - `make_custom_scenario()` 升级为服务：
+     - `build_custom_scenario(prompt, name=None) -> Scenario`
+     - LLM 可用时走结构化 JSON。
+     - LLM 不可用时走确定性 fallback。
+
+3. **结构化生成**
+   - LLM 输出必须符合 `Scenario` JSON schema：
+     - `name`
+     - `ai_role`
+     - `user_role`
+     - `opening_line`
+     - `conversation_goals`
+     - `target_expressions`
+     - `correction_focus`
+     - `summary_rubric`
+   - 约束：
+     - 仍然是英语口语练习场景。
+     - opening line 需要自然地进入角色，不要解释功能。
+     - goals 3 到 5 条。
+     - target expressions 4 到 8 条。
+     - correction focus 2 到 5 条。
+   - 解析失败时 fallback，不让创建 session 失败。
+
+4. **Preview 流程**
+   - 第一版可以 start 时直接生成并创建 session。
+   - 更好的体验是新增 preview：
+     - `POST /api/scenarios/custom/preview`
+     - 返回生成后的 Scenario。
+     - 用户确认后 `POST /api/sessions` 带 `custom_prompt` 和可选 `custom_scenario_override`。
+   - 如果时间紧，先做直接创建；preview 作为 P1。
+
+5. **Prompt 安全与边界**
+   - 自定义 prompt 只用于生成场景，不允许改变系统行为。
+   - 后端 prompt 模板中明确：
+     - 不输出非 JSON。
+     - 不暴露 system/developer 信息。
+     - 不生成和英语练习无关的助手行为。
+   - 字段长度做服务端裁剪和校验，避免超长 prompt 影响对话上下文。
+
+6. **自定义场景与错题本联动**
+   - 错题本 record 显示自定义场景标题。
+   - 详情页可以折叠展示 custom prompt 摘要。
+   - 自动 session title 优先使用 custom scenario name。
+
+#### 新 PR 切分
+
+1. **PR-MB-A：错题来源关系**
+   - 给 `MistakeItem` 和生成路径增加 `session_id`、`turn_id`、`source_stage`、`source_id`、`subtype`、`severity`、`tags`。
+   - 修改 text turn、WS turn、pronunciation upload 的 `mistake_service` 调用，写入来源关系。
+   - 测试：同一 session 内可查到本轮新增错题，旧 `/api/mistakes` 仍返回兼容字段。
+
+2. **PR-MB-B：Session 标题**
+   - `Session` 增加 title/title_source/custom_prompt 等元数据。
+   - 实现自动标题 fallback 和手动 rename API。
+   - 测试：固定场景、自定义场景、手动标题优先级。
+
+3. **PR-MB-C：会话级错题本 API**
+   - 新增 `/api/mistake-books` 和 `/api/mistake-books/{session_id}`。
+   - 支持 counts、分类统计、turn 分组。
+   - 测试：多 session、多 type、多 turn 的聚合顺序和统计。
+
+4. **PR-MB-D：错题本首页与详情 UI**
+   - 前端 Mistake Book 首页改成对话记录列表。
+   - 增加 detail view，按 turn 展示具体错误。
+   - 保留 Review 操作。
+   - 测试：点击 Mistake Book 先看到 session record，点进去看到具体 wrong/correct。
+
+5. **PR-MB-E：分类、搜索与待复习**
+   - `/api/mistakes` 支持 query 过滤。
+   - 前端增加 type tabs、搜索、Due 过滤。
+   - Review 支持 `easy/hard/again` 的后端模型，UI 可先保持简化。
+
+6. **PR-SC-A：Custom prompt 请求模型兼容升级**
+   - `CreateSessionRequest` 增加 `custom_prompt`、`custom_name`。
+   - 保留 `custom_topic`，后端把 topic 转成 prompt fallback。
+   - 测试：旧 custom_topic 测试继续通过，新 custom_prompt 创建 session。
+
+7. **PR-SC-B：Custom scenario builder**
+   - 新增 `CustomScenarioBuilder`，支持 fake/fallback 和真实 LLM 结构化生成。
+   - 生成 `Scenario` 后做 schema 校验和字段裁剪。
+   - 测试：fake JSON、无效 JSON fallback、字段长度限制。
+
+8. **PR-SC-C：前端 Custom textarea**
+   - Custom 选择后显示 textarea，placeholder 给一段 prompt 示例。
+   - Start 时发送 `custom_prompt`。
+   - 显示生成后的 opening line，保持现有朗读行为。
+   - 测试：输入多句 prompt 后创建 session，请求体包含 custom_prompt。
+
+9. **PR-SC-D：Custom preview 可选增强**
+   - 新增 preview API 和前端预览确认。
+   - 用户可以在开始前看到 AI role、user role、goals、target expressions。
+   - 时间紧可以后置，不影响主链路。
+
+10. **PR-MB/SC-F：文档与 smoke 更新**
+    - README 增加错题本分组和 custom prompt 的演示路径。
+    - Playwright smoke 覆盖：
+      - 自定义 prompt 创建场景。
+      - 完成一轮对话后进入本 session 错题详情。
+      - 按 Grammar filter 能看到对应错误。
+
+#### 验收标准
+
+- Mistake Book 首页默认显示对话记录，不再直接平铺所有错误。
+- 未命名对话能显示“简短标题 + 时间”，手动改名后不会被覆盖。
+- 点进对话记录能看到该 session 的具体错误，并按用户 turn 分组。
+- 错误卡片能显示类型、子类型、解释、练习句、review 状态。
+- 可以跨对话按 Grammar/Expression/Pronunciation 分类查看错误。
+- Custom 场景支持输入多句 prompt，并生成结构化 `Scenario`。
+- custom prompt 场景创建后，后续文本对话、语法纠错、总结、错题本都使用该 session 保存的 scenario 快照。
+- 默认 `make test` 仍离线可复现，不依赖真实 LLM、ASR 或腾讯云。
