@@ -11,6 +11,7 @@ class TurnRecord(BaseModel):
     asr_text: str
     expected_text: str | None = None
     audio_path: str | None = None
+    interviewer_text: str | None = None
     reply_text: str
     grammar: dict[str, object] | None = None
     pronunciation: dict[str, object] | None = None

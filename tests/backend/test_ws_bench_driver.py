@@ -14,6 +14,10 @@ def test_ws_bench_driver_records_streaming_turns(monkeypatch, tmp_path) -> None:
     turns = run_ws_conversation(scenario_id="interview", turns=3)
 
     assert len(turns) == 3
+    assert turns[0].interviewer_text == (
+        "Good morning. Thanks for joining today. Could you start by briefly introducing yourself?"
+    )
+    assert turns[1].interviewer_text == turns[0].reply_text
     for turn in turns:
         assert turn.expected_text == turn.asr_text
         assert turn.wer == 0

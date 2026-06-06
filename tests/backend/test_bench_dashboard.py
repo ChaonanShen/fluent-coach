@@ -27,6 +27,7 @@ def test_bench_dashboard_serves_runs_and_audio(monkeypatch, tmp_path) -> None:
                     asr_text="hello",
                     expected_text="hello",
                     audio_path=str(audio_path),
+                    interviewer_text="Good morning. Could you introduce yourself?",
                     reply_text="hi",
                     clean_text="I have three years of experience.",
                     injected_text="I has three year experience.",
@@ -43,13 +44,17 @@ def test_bench_dashboard_serves_runs_and_audio(monkeypatch, tmp_path) -> None:
 
     client = TestClient(dashboard_app)
 
-    assert client.get("/").status_code == 200
+    index = client.get("/")
+    assert index.status_code == 200
+    assert "面试官" in index.text
+    assert "面试者" in index.text
     runs = client.get("/api/runs")
     assert runs.status_code == 200
     assert runs.json()[0]["run_id"] == "dashboard-run"
     detail = client.get("/api/runs/dashboard-run")
     assert detail.status_code == 200
     assert detail.json()["turns"][0]["reply_text"] == "hi"
+    assert detail.json()["turns"][0]["interviewer_text"] == "Good morning. Could you introduce yourself?"
     assert detail.json()["turns"][0]["injected_text"] == "I has three year experience."
     assert detail.json()["turns"][0]["grammar_metrics"]["expected_error_recall"] == 1.0
     audio = client.get("/api/runs/dashboard-run/turns/0/audio")

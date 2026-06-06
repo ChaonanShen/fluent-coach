@@ -229,6 +229,114 @@
       white-space: nowrap;
     }
 
+    .turn-cards {
+      display: grid;
+      gap: 12px;
+    }
+
+    .turn-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .turn-card-head {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      background: #fafbfc;
+    }
+
+    .turn-title {
+      font-weight: 700;
+    }
+
+    .turn-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 4px;
+    }
+
+    .exchange {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .speaker-row {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .speaker-row.interviewer {
+      justify-items: start;
+    }
+
+    .speaker-row.candidate {
+      justify-items: end;
+    }
+
+    .speaker-row.analysis {
+      justify-items: start;
+      border-top: 1px solid var(--line);
+      padding-top: 10px;
+    }
+
+    .speaker-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .bubble {
+      max-width: min(760px, 100%);
+      width: fit-content;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+      background: #fff;
+    }
+
+    .interviewer .bubble {
+      background: #eff6ff;
+      border-color: #bfdbfe;
+    }
+
+    .candidate .bubble {
+      background: #f0fdfa;
+      border-color: #99f6e4;
+    }
+
+    .analysis .bubble {
+      background: #fff7ed;
+      border-color: #fed7aa;
+    }
+
+    .subline {
+      max-width: min(760px, 100%);
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+      overflow-wrap: anywhere;
+    }
+
+    .turn-audio {
+      width: 220px;
+      max-width: 100%;
+    }
+
     .error {
       color: var(--danger);
     }
@@ -266,6 +374,19 @@
 
       .summary-grid {
         grid-template-columns: 1fr;
+      }
+
+      .turn-card-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .turn-metrics {
+        justify-content: flex-start;
+      }
+
+      .speaker-row.candidate {
+        justify-items: start;
       }
 
       th,
@@ -435,44 +556,119 @@
         return;
       }
       el("turns").innerHTML = `
-        <table>
-          <thead>
-            <tr>
-              <th style="width:44px">#</th>
-              <th style="width:210px">Audio</th>
-              <th>Input / ASR</th>
-              <th>Reply</th>
-              <th>Grammar</th>
-              <th>Pronunciation</th>
-              <th>Timing</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${run.turns.map((turn, index) => `
-              <tr>
-                <td>${turn.index}</td>
-                <td>${turn.audio_path ? `<audio controls src="/api/runs/${encodeURIComponent(run.run_id)}/turns/${index}/audio"></audio>` : ""}</td>
-                <td>
-                  ${line("Clean", turn.clean_text)}
-                  ${line("Injected", turn.injected_text)}
-                  ${line("Expected", turn.expected_text)}
-                  ${line("ASR", turn.asr_text)}
-                  ${turn.wer == null ? "" : `<span class="pill">WER ${Number(turn.wer).toFixed(4)}</span>`}
-                </td>
-                <td>${escapeHtml(turn.reply_text || "")}</td>
-                <td>${formatGrammar(turn)}</td>
-                <td>${formatPronunciation(turn.pronunciation)}</td>
-                <td>
-                  ${timingPill("TTS", turn.timings_ms.tts_ms)}
-                  ${timingPill("ASR", turn.timings_ms.asr_ms)}
-                  ${timingPill("TTFT", turn.timings_ms.reply_first_delta_ms)}
-                  ${timingPill("ITL", turn.timings_ms.reply_itl_ms)}
-                  ${timingPill("Grammar", turn.timings_ms.grammar_ms)}
-                </td>
-              </tr>
-            `).join("")}
-          </tbody>
-        </table>
+        <div class="turn-cards">
+          ${run.turns.map((turn, index) => renderTurnCard(run, turn, index)).join("")}
+          ${renderFinalInterviewerLine(run)}
+        </div>
+      `;
+    }
+
+    function renderTurnCard(run, turn, index) {
+      const interviewerText = interviewerTextFor(run, index);
+      const candidateText = turn.injected_text || turn.expected_text || turn.user_text || turn.asr_text || "";
+      const correctedText = turn.grammar && turn.grammar.corrected_text || turn.expected_corrected_text || "";
+      return `
+        <article class="turn-card">
+          <div class="turn-card-head">
+            <div class="turn-title">Turn ${escapeHtml(turn.index)}</div>
+            <div class="turn-metrics">
+              ${turn.wer == null ? "" : `<span class="pill">WER ${Number(turn.wer).toFixed(4)}</span>`}
+              ${timingPill("TTS", turn.timings_ms.tts_ms)}
+              ${timingPill("ASR", turn.timings_ms.asr_ms)}
+              ${timingPill("TTFT", turn.timings_ms.reply_first_delta_ms)}
+              ${timingPill("Grammar", turn.timings_ms.grammar_ms)}
+            </div>
+          </div>
+          <div class="exchange">
+            <div class="speaker-row interviewer">
+              <div class="speaker-label">面试官</div>
+              <div class="bubble">${escapeHtml(interviewerText || "面试官开场白未记录。")}</div>
+            </div>
+            <div class="speaker-row candidate">
+              <div class="speaker-label">
+                <span>面试者</span>
+                ${turn.audio_path ? `<audio class="turn-audio" controls src="/api/runs/${encodeURIComponent(run.run_id)}/turns/${index}/audio"></audio>` : ""}
+              </div>
+              <div class="bubble">${escapeHtml(candidateText)}</div>
+              ${turn.asr_text ? `<div class="subline"><strong>ASR</strong> ${escapeHtml(turn.asr_text)}</div>` : ""}
+              ${turn.clean_text ? `<div class="subline"><strong>Clean</strong> ${escapeHtml(turn.clean_text)}</div>` : ""}
+            </div>
+            ${correctedText || turn.grammar_metrics && Object.keys(turn.grammar_metrics).length ? `
+              <div class="speaker-row analysis">
+                <div class="speaker-label">
+                  <span>语法纠错</span>
+                  ${grammarMetricPills(turn)}
+                </div>
+                <div class="bubble">${escapeHtml(correctedText)}</div>
+                ${grammarIssuePills(turn)}
+              </div>
+            ` : ""}
+            ${formatPronunciation(turn.pronunciation) ? `
+              <div class="speaker-row analysis">
+                <div class="speaker-label">发音评测</div>
+                <div>${formatPronunciation(turn.pronunciation)}</div>
+              </div>
+            ` : ""}
+            ${formatErrors(turn.errors)}
+          </div>
+        </article>
+      `;
+    }
+
+    function interviewerTextFor(run, index) {
+      const turn = run.turns[index];
+      if (turn && turn.interviewer_text) return turn.interviewer_text;
+      if (index > 0 && run.turns[index - 1] && run.turns[index - 1].reply_text) {
+        return run.turns[index - 1].reply_text;
+      }
+      return "";
+    }
+
+    function renderFinalInterviewerLine(run) {
+      const turns = run.turns || [];
+      if (turns.length === 0) return "";
+      const last = turns[turns.length - 1];
+      if (!last.reply_text) return "";
+      return `
+        <article class="turn-card">
+          <div class="turn-card-head">
+            <div class="turn-title">面试官后续追问</div>
+          </div>
+          <div class="exchange">
+            <div class="speaker-row interviewer">
+              <div class="speaker-label">面试官</div>
+              <div class="bubble">${escapeHtml(last.reply_text)}</div>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function grammarMetricPills(turn) {
+      const metrics = turn.grammar_metrics || {};
+      return `
+        ${metrics.expected_error_recall == null ? "" : `<span class="pill">Recall ${Number(metrics.expected_error_recall).toFixed(4)}</span>`}
+        ${metrics.corrected_text_match == null ? "" : `<span class="pill">Corrected ${metrics.corrected_text_match ? "match" : "diff"}</span>`}
+      `;
+    }
+
+    function grammarIssuePills(turn) {
+      const expected = turn.expected_error_types || [];
+      const issues = turn.grammar && turn.grammar.issues ? turn.grammar.issues : [];
+      const pills = [
+        ...expected.map((type) => `<span class="pill">Expected ${escapeHtml(type)}</span>`),
+        ...issues.map((issue) => `<span class="pill">${escapeHtml(issue.error_type || "issue")}</span>`),
+      ];
+      return pills.length ? `<div>${pills.join("")}</div>` : "";
+    }
+
+    function formatErrors(errors) {
+      if (!errors || !errors.length) return "";
+      return `
+        <div class="speaker-row analysis">
+          <div class="speaker-label">错误</div>
+          ${errors.map((error) => `<div class="error">${escapeHtml(error.stage || "error")}: ${escapeHtml(error.code || error.user_message_zh || "")}</div>`).join("")}
+        </div>
       `;
     }
 

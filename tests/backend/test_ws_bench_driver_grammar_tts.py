@@ -79,6 +79,10 @@ def test_ws_bench_driver_records_grammar_tts_turns(monkeypatch, tmp_path) -> Non
     )
 
     assert len(turns) == 2
+    assert turns[0].interviewer_text == (
+        "Good morning. Thanks for joining today. Could you start by briefly introducing yourself?"
+    )
+    assert turns[1].interviewer_text == turns[0].reply_text
     for turn in turns:
         assert turn.clean_text
         assert turn.injected_text

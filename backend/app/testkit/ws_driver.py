@@ -62,6 +62,7 @@ def run_ws_conversation(
 
         with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
             for index in range(turns):
+                history = _session_history(main_module, session_id)
                 turn_context = _prepare_turn_context(
                     index=index,
                     scenario_id=scenario_id,
@@ -70,7 +71,7 @@ def run_ws_conversation(
                     audio_files=audio_files,
                     tts_provider=tts_provider or main_module.tts_provider,
                     virtual_user=selected_virtual_user,
-                    history=_session_history(main_module, session_id),
+                    history=history,
                 )
                 event = {"type": "start_turn", "mime_type": turn_context["mime_type"]}
                 if turn_context["expected_text"]:
@@ -86,6 +87,7 @@ def run_ws_conversation(
                         session_id=session_id,
                         index=index,
                         expected_text=turn_context["expected_text"],
+                        interviewer_text=_last_speaker_text(history, TurnSpeaker.AI.value),
                         clean_text=turn_context.get("clean_text"),
                         injected_text=turn_context.get("injected_text"),
                         expected_corrected_text=turn_context.get("expected_corrected_text"),
@@ -107,6 +109,7 @@ def _collect_turn(
     session_id: str,
     index: int,
     expected_text: str | None,
+    interviewer_text: object = None,
     clean_text: object = None,
     injected_text: object = None,
     expected_corrected_text: object = None,
@@ -190,6 +193,7 @@ def _collect_turn(
         asr_text=asr_text,
         expected_text=expected_text,
         audio_path=audio_path,
+        interviewer_text=str(interviewer_text) if interviewer_text else None,
         reply_text=reply_text,
         grammar=grammar,
         pronunciation=pronunciation,
@@ -342,6 +346,13 @@ def _session_history(main_module: ModuleType, session_id: str) -> list[dict[str,
     if session is None:
         return []
     return [{"speaker": turn.speaker.value, "text": turn.text} for turn in session.turns[-8:]]
+
+
+def _last_speaker_text(history: list[dict[str, str]], speaker: str) -> str | None:
+    for item in reversed(history):
+        if item.get("speaker") == speaker and item.get("text"):
+            return item["text"]
+    return None
 
 
 def _virtual_user(main_module: ModuleType, source: str) -> VirtualUser:
