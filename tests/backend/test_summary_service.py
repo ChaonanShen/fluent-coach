@@ -8,11 +8,13 @@ from backend.app.services.grammar import grammar_service
 from backend.app.services.pronunciation import pronunciation_provider
 from backend.app.services.scenarios import get_scenario
 from backend.app.services.sessions import session_store
+from backend.app.services.storage import log_store
 from backend.app.services.summary import summary_service
 
 
 @pytest.fixture(autouse=True)
 def clear_session_store() -> None:
+    log_store.clear_all()
     session_store.clear()
     analysis_store.clear()
 
@@ -111,6 +113,48 @@ def test_summary_api_returns_session_summary() -> None:
     assert body["session_id"] == session_id
     assert body["pronunciation_score"] is None
     assert body["top_issues"]
+
+
+def test_summary_api_reuses_saved_session_summary(monkeypatch) -> None:
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+    client.post(
+        f"/api/sessions/{session_id}/turns/text",
+        json={"text": "I am working in this field since three years."},
+    )
+
+    first_response = client.get(f"/api/sessions/{session_id}/summary")
+    first_body = first_response.json()
+    stored = log_store.get_session_summary(session_id)
+
+    def fail_summarize(**kwargs):
+        del kwargs
+        raise AssertionError("saved summary should be reused")
+
+    monkeypatch.setattr(summary_service, "summarize", fail_summarize)
+    second_response = client.get(f"/api/sessions/{session_id}/summary")
+
+    assert first_response.status_code == 200
+    assert stored is not None
+    assert stored.id == first_body["id"]
+    assert second_response.status_code == 200
+    assert second_response.json()["id"] == first_body["id"]
+
+
+def test_end_session_saves_session_summary() -> None:
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+    client.post(
+        f"/api/sessions/{session_id}/turns/text",
+        json={"text": "I am working in this field since three years."},
+    )
+
+    response = client.post(f"/api/sessions/{session_id}/end")
+
+    assert response.status_code == 200
+    assert log_store.get_session_summary(session_id) is not None
 
 
 def test_summary_api_rejects_unknown_session() -> None:

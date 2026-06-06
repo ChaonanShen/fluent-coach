@@ -10,6 +10,7 @@ from backend.app.models import (
     MistakeType,
     PronunciationAssessment,
     Session,
+    SessionSummary,
     TurnSpeaker,
 )
 from backend.app.services.storage import SQLiteLogStore
@@ -55,6 +56,14 @@ def test_sqlite_log_store_persists_analysis_outputs(tmp_path) -> None:
         accuracy=80,
         fluency=75,
     )
+    summary = SessionSummary(
+        session_id="session_1",
+        grammar_score=82,
+        pronunciation_score=80,
+        fluency_score=75,
+        vocabulary_score=79,
+        task_completion_rate=0.5,
+    )
     mistake = MistakeItem(
         type=MistakeType.GRAMMAR,
         session_id="session_1",
@@ -79,13 +88,19 @@ def test_sqlite_log_store_persists_analysis_outputs(tmp_path) -> None:
 
     store.save_grammar_correction(correction)
     store.save_pronunciation_assessment(assessment)
+    store.save_session_summary(summary)
     store.save_mistake_item(mistake)
     store.save_analysis_error(error)
 
     assert store.count_rows("grammar_corrections") == 1
     assert store.count_rows("pronunciation_assessments") == 1
+    assert store.count_rows("session_summaries") == 1
     assert store.count_rows("mistake_items") == 1
     assert store.count_rows("analysis_errors") == 1
+    restored_summary = store.get_session_summary("session_1")
+    assert restored_summary is not None
+    assert restored_summary.grammar_score == 82
+    assert [item.id for item in store.list_session_summaries()] == [summary.id]
     restored_mistake = store.list_mistake_items(session_id="session_1")[0]
     assert restored_mistake.id == mistake.id
     assert restored_mistake.turn_id == "turn_1"

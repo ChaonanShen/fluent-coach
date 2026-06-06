@@ -10,9 +10,21 @@ from backend.app.models import (
 )
 from backend.app.services.analysis import analysis_store
 from backend.app.services.grammar import grammar_service
+from backend.app.services.storage import SQLiteLogStore, log_store
 
 
 class SummaryService:
+    def __init__(self, storage: SQLiteLogStore = log_store) -> None:
+        self.storage = storage
+
+    def get_or_create(self, *, session: Session, scenario: Scenario) -> SessionSummary:
+        existing = self.storage.get_session_summary(session.id)
+        if existing is not None:
+            return existing
+        summary = self.summarize(session=session, scenario=scenario)
+        self.storage.save_session_summary(summary)
+        return summary
+
     def summarize(self, *, session: Session, scenario: Scenario) -> SessionSummary:
         user_turns = [turn for turn in session.turns if turn.speaker == TurnSpeaker.USER]
         corrections = analysis_store.grammar_results(session.id)

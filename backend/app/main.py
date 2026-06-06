@@ -136,6 +136,7 @@ def end_session(session_id: str) -> SessionResponse:
     scenario = resolve_session_scenario(session)
     if scenario is None:
         raise HTTPException(status_code=500, detail="Session references an unknown scenario")
+    summary_service.get_or_create(session=session, scenario=scenario)
     return SessionResponse(
         session=session,
         scenario=scenario,
@@ -263,7 +264,7 @@ def get_session_summary(session_id: str) -> SessionSummary:
     scenario = resolve_session_scenario(session)
     if scenario is None:
         raise HTTPException(status_code=500, detail="Session references an unknown scenario")
-    return summary_service.summarize(session=session, scenario=scenario)
+    return summary_service.get_or_create(session=session, scenario=scenario)
 
 
 @app.get("/api/sessions/{session_id}/analysis", response_model=SessionAnalysisResponse)

@@ -13,6 +13,7 @@ from backend.app.models import (
     MistakeType,
     PronunciationAssessment,
     Session,
+    SessionSummary,
     Turn,
 )
 
@@ -81,6 +82,13 @@ class SQLiteLogStore:
                     id TEXT PRIMARY KEY,
                     stage TEXT NOT NULL,
                     code TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    payload TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS session_summaries (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     payload TEXT NOT NULL
                 );
@@ -164,6 +172,34 @@ class SQLiteLogStore:
                     _dump_model(assessment),
                 ),
             )
+
+    def save_session_summary(self, summary: SessionSummary) -> None:
+        with self._connect() as connection:
+            connection.execute(
+                """
+                INSERT OR REPLACE INTO session_summaries (id, session_id, created_at, payload)
+                VALUES (?, ?, ?, ?)
+                """,
+                (
+                    summary.id,
+                    summary.session_id,
+                    summary.created_at.isoformat(),
+                    _dump_model(summary),
+                ),
+            )
+
+    def get_session_summary(self, session_id: str) -> SessionSummary | None:
+        row = self._fetch_one(
+            "SELECT payload FROM session_summaries WHERE session_id = ? ORDER BY created_at DESC LIMIT 1",
+            (session_id,),
+        )
+        if row is None:
+            return None
+        return SessionSummary.model_validate(json.loads(row["payload"]))
+
+    def list_session_summaries(self) -> list[SessionSummary]:
+        rows = self._fetch_all("SELECT payload FROM session_summaries ORDER BY created_at DESC", ())
+        return [SessionSummary.model_validate(json.loads(row["payload"])) for row in rows]
 
     def save_mistake_item(self, mistake: MistakeItem) -> None:
         with self._connect() as connection:
@@ -269,6 +305,7 @@ class SQLiteLogStore:
             "pronunciation_assessments",
             "mistake_items",
             "analysis_errors",
+            "session_summaries",
         }
         if table not in allowed:
             raise ValueError(f"Unsupported table: {table}")
@@ -279,6 +316,7 @@ class SQLiteLogStore:
         with self._connect() as connection:
             for table in [
                 "analysis_errors",
+                "session_summaries",
                 "mistake_items",
                 "pronunciation_assessments",
                 "grammar_corrections",
