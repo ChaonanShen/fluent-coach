@@ -51,12 +51,13 @@ from backend.app.models import (
 from backend.app.services.analysis import analysis_store
 from backend.app.services.asr import asr_provider
 from backend.app.services.audio import save_turn_audio
+from backend.app.services.custom_scenarios import build_custom_scenario
 from backend.app.services.dialogue import dialogue_service
 from backend.app.services.grammar import grammar_service
 from backend.app.services.mistakes import mistake_service
 from backend.app.services.pronunciation import pronunciation_provider
 from backend.app.services.progress import progress_service
-from backend.app.services.scenarios import get_scenario, list_scenarios, make_custom_scenario, resolve_session_scenario
+from backend.app.services.scenarios import get_scenario, list_scenarios, resolve_session_scenario
 from backend.app.services.sessions import session_store
 from backend.app.services.storage import log_store
 from backend.app.services.summary import summary_service
@@ -86,7 +87,7 @@ def create_session(request: CreateSessionRequest) -> SessionResponse:
     if request.scenario_id == "custom":
         if custom_prompt is None:
             raise HTTPException(status_code=422, detail="Custom prompt is required")
-        scenario = make_custom_scenario(custom_prompt, name=request.custom_name)
+        scenario = build_custom_scenario(custom_prompt, name=request.custom_name)
         custom_scenario = scenario
     else:
         scenario = get_scenario(request.scenario_id)
