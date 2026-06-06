@@ -553,6 +553,41 @@ test('loads scenarios and starts a session', async () => {
   expect(screen.getByRole('button', { name: 'End' })).toBeInTheDocument();
 });
 
+test('keeps browser TTS on one voice after voices load asynchronously', async () => {
+  const compactVoice = { name: 'Compact Voice', lang: 'en-US' };
+  const googleVoice = { name: 'Google US English', lang: 'en-US' };
+  let voicesLoaded = false;
+  let voicesChangedHandler = null;
+  window.speechSynthesis.getVoices = vi.fn(() => (voicesLoaded ? [compactVoice, googleVoice] : [compactVoice]));
+  window.speechSynthesis.addEventListener = vi.fn((event, handler) => {
+    if (event === 'voiceschanged') {
+      voicesChangedHandler = handler;
+    }
+  });
+  window.speechSynthesis.removeEventListener = vi.fn();
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await waitFor(() => expect(window.speechSynthesis.addEventListener).toHaveBeenCalledWith('voiceschanged', expect.any(Function)));
+  voicesLoaded = true;
+  voicesChangedHandler();
+
+  await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalledTimes(1));
+  const openingUtterance = window.speechSynthesis.speak.mock.calls[0][0];
+  expect(openingUtterance.text).toBe(scenario.opening_line);
+  expect(openingUtterance.voice).toBe(googleVoice);
+
+  fireEvent.change(screen.getByLabelText('Your reply'), {
+    target: { value: 'I am working in this field since three years.' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+  await screen.findByText('Great. Which project is most relevant to this role?');
+  await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalledTimes(2));
+  const replyUtterance = window.speechSynthesis.speak.mock.calls[1][0];
+  expect(replyUtterance.voice).toBe(openingUtterance.voice);
+});
+
 test('starts a custom scenario from the conversation toolbar', async () => {
   render(<App />);
 

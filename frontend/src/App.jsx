@@ -23,6 +23,17 @@ async function request(path, options = {}) {
 }
 
 const MESSAGE_LIST_BOTTOM_THRESHOLD_PX = 72;
+const BROWSER_VOICE_READY_TIMEOUT_MS = 500;
+const PREFERRED_ENGLISH_VOICE_NAME_PARTS = [
+  'natural',
+  'neural',
+  'online',
+  'google',
+  'microsoft',
+  'samantha',
+  'daniel',
+  'karen',
+];
 
 function isNearMessageListBottom(list) {
   return list.scrollHeight - list.scrollTop - list.clientHeight <= MESSAGE_LIST_BOTTOM_THRESHOLD_PX;
@@ -89,6 +100,7 @@ export default function App() {
   const readingStreamRef = useRef(null);
   const readingChunksRef = useRef([]);
   const readingCanceledRef = useRef(false);
+  const browserVoiceRef = useRef(null);
   const mistakeReadingRecorderRef = useRef(null);
   const mistakeReadingStreamRef = useRef(null);
   const mistakeReadingChunksRef = useRef([]);
@@ -344,10 +356,10 @@ export default function App() {
     } catch {
       // Browser speech remains the local fallback when cloud TTS is unavailable.
     }
-    speakWithBrowser(text, replyReadyAt);
+    await speakWithBrowser(text, replyReadyAt);
   }
 
-  function speakWithBrowser(text, replyReadyAt) {
+  async function speakWithBrowser(text, replyReadyAt) {
     if (!window.speechSynthesis || !window.SpeechSynthesisUtterance) {
       return;
     }
@@ -356,7 +368,7 @@ export default function App() {
     utterance.lang = 'en-US';
     utterance.rate = 0.94;
     utterance.pitch = 1;
-    const voice = chooseEnglishVoice(window.speechSynthesis.getVoices?.() || []);
+    const voice = await resolveEnglishVoice(window.speechSynthesis, browserVoiceRef);
     if (voice) {
       utterance.voice = voice;
     }
@@ -2165,25 +2177,78 @@ function nowMs() {
   return window.performance?.now?.() ?? Date.now();
 }
 
+async function resolveEnglishVoice(speechSynthesis, voiceRef) {
+  if (voiceRef.current) {
+    return voiceRef.current;
+  }
+  const currentVoices = speechSynthesis.getVoices?.() || [];
+  const preferred = choosePreferredEnglishVoice(currentVoices);
+  if (preferred) {
+    voiceRef.current = preferred;
+    return preferred;
+  }
+
+  const loadedVoices = await waitForBrowserVoices(speechSynthesis);
+  const selected = (
+    choosePreferredEnglishVoice(loadedVoices)
+    || chooseEnglishVoice(currentVoices)
+    || chooseEnglishVoice(loadedVoices)
+  );
+  if (selected) {
+    voiceRef.current = selected;
+  }
+  return selected;
+}
+
+function waitForBrowserVoices(speechSynthesis) {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timeoutId = null;
+    const previousOnVoicesChanged = speechSynthesis.onvoiceschanged;
+    const finish = () => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeoutId !== null) {
+        window.clearTimeout(timeoutId);
+      }
+      if (typeof speechSynthesis.removeEventListener === 'function') {
+        speechSynthesis.removeEventListener('voiceschanged', finish);
+      }
+      if (speechSynthesis.onvoiceschanged === finish) {
+        speechSynthesis.onvoiceschanged = previousOnVoicesChanged || null;
+      }
+      resolve(speechSynthesis.getVoices?.() || []);
+    };
+
+    if (typeof speechSynthesis.addEventListener === 'function') {
+      speechSynthesis.addEventListener('voiceschanged', finish);
+    } else if ('onvoiceschanged' in speechSynthesis) {
+      speechSynthesis.onvoiceschanged = finish;
+    }
+    timeoutId = window.setTimeout(finish, BROWSER_VOICE_READY_TIMEOUT_MS);
+  });
+}
+
+function englishVoices(voices) {
+  return voices.filter((voice) => voice.lang?.toLowerCase().startsWith('en'));
+}
+
+function choosePreferredEnglishVoice(voices) {
+  const candidates = englishVoices(voices);
+  return candidates.find((voice) => {
+    const name = voice.name.toLowerCase();
+    return PREFERRED_ENGLISH_VOICE_NAME_PARTS.some((part) => name.includes(part));
+  }) || null;
+}
+
 function chooseEnglishVoice(voices) {
-  const englishVoices = voices.filter((voice) => voice.lang?.toLowerCase().startsWith('en'));
-  if (!englishVoices.length) {
+  const candidates = englishVoices(voices);
+  if (!candidates.length) {
     return null;
   }
-  const preferredNameParts = [
-    'natural',
-    'neural',
-    'online',
-    'google',
-    'microsoft',
-    'samantha',
-    'daniel',
-    'karen',
-  ];
   return (
-    englishVoices.find((voice) => {
-      const name = voice.name.toLowerCase();
-      return preferredNameParts.some((part) => name.includes(part));
-    }) || englishVoices[0]
+    choosePreferredEnglishVoice(candidates) || candidates[0]
   );
 }
