@@ -550,6 +550,7 @@ test('starts a custom scenario from the conversation toolbar', async () => {
   expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled();
   expect(screen.queryByText('Custom scenario')).not.toBeInTheDocument();
   expect(screen.getByPlaceholderText('Describe the English conversation scenario you want to practice...')).toBeInTheDocument();
+  expect(screen.getByLabelText('Custom scenario')).toHaveAttribute('rows', '1');
   fireEvent.change(screen.getByLabelText('Custom scenario'), {
     target: { value: 'airport check-in' },
   });

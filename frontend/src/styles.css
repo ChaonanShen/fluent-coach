@@ -231,9 +231,10 @@ h3 {
 }
 
 .custom-scenario-label textarea {
+  height: 42px;
   line-height: 1.35;
   min-height: 42px;
-  resize: vertical;
+  resize: none;
   text-transform: none;
 }
 

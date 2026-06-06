@@ -1365,7 +1365,7 @@ export default function App() {
                   maxLength={2000}
                   onChange={(event) => setCustomScenarioText(event.target.value)}
                   placeholder="Describe the English conversation scenario you want to practice..."
-                  rows={3}
+                  rows={1}
                   value={customScenarioText}
                 />
               </label>
