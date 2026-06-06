@@ -32,6 +32,7 @@ let sessionRequestBodies = [];
 let deletedMistakeIds = new Set();
 let deletedBookSessionIds = new Set();
 let extraMistakeBookEnabled = false;
+let progressNeverResolves = false;
 
 function mockGrammarMistake(overrides = {}) {
   return {
@@ -281,6 +282,7 @@ beforeEach(() => {
   deletedMistakeIds = new Set();
   deletedBookSessionIds = new Set();
   extraMistakeBookEnabled = false;
+  progressNeverResolves = false;
   window.speechSynthesis = {
     cancel: vi.fn(),
     getVoices: vi.fn(() => [
@@ -333,6 +335,9 @@ beforeEach(() => {
       return jsonResponse(mockMistakeBookDetail('session_2'));
     }
     if (url === '/api/progress') {
+      if (progressNeverResolves) {
+        return new Promise(() => {});
+      }
       return jsonResponse(mockProgress());
     }
     if (url === '/api/tts/synthesize') {
@@ -734,6 +739,18 @@ test('shows saved mistake details without review actions', async () => {
   expect(screen.queryByRole('button', { name: /Review/ })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Back to Practice' }));
   expect(await screen.findByRole('heading', { name: 'Speaking Coach' })).toBeInTheDocument();
+});
+
+test('shows mistake book detail even when progress is still loading', async () => {
+  progressNeverResolves = true;
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
+  fireEvent.click(await screen.findByRole('button', { name: /Open Job Interview/ }));
+
+  expect(await screen.findByText('am working')).toBeInTheDocument();
+  expect(screen.queryByText('Loading mistake book...')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Score changes')).not.toBeInTheDocument();
 });
 
 test('shows summary scores on mistake book records and details', async () => {

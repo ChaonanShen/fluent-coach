@@ -261,13 +261,17 @@ export default function App() {
     setActiveMistakeTypeFilter(null);
     setMistakeBookState('loading');
     try {
-      const [detail, progress] = await Promise.all([
-        request(`/api/mistake-books/${sessionId}`),
-        request('/api/progress'),
-      ]);
+      const detail = await request(`/api/mistake-books/${sessionId}`);
       setMistakeBookDetail(detail);
-      setMistakeBookProgress(progress);
+      setMistakeBookProgress(null);
       setMistakeBookState('ready');
+      request('/api/progress')
+        .then((progress) => {
+          setMistakeBookProgress(progress);
+        })
+        .catch(() => {
+          setMistakeBookProgress(null);
+        });
     } catch (err) {
       handleRequestError(err, 'Mistake book failed to load.');
       setMistakeBookState('error');
