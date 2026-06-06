@@ -64,9 +64,11 @@ def test_create_custom_session_keeps_scenario_for_follow_up_calls() -> None:
     body = response.json()
     session_id = body["session"]["id"]
     assert body["session"]["scenario_id"].startswith("custom_")
-    assert body["session"]["custom_scenario"]["user_role"] == "Learner practicing: airport check-in"
+    assert body["scenario"]["name"] == "Airport Check-in"
+    assert body["session"]["custom_scenario"]["ai_role"] == "Airline check-in agent"
+    assert body["session"]["custom_scenario"]["user_role"] == "Passenger checking in for a flight"
     assert body["session"]["custom_prompt"] == "airport check-in"
-    assert "airport check-in" in body["opening_line"]
+    assert body["opening_line"] == "Hello. Where are you flying today?"
 
     turn_response = client.post(
         f"/api/sessions/{session_id}/turns/text",
@@ -100,9 +102,30 @@ def test_create_custom_session_accepts_prompt_and_name() -> None:
     body = response.json()
     assert body["scenario"]["name"] == "Hotel check-in"
     assert body["session"]["custom_prompt"] == prompt
-    assert body["session"]["custom_scenario"]["user_role"] == "Learner practicing: Hotel check-in"
-    assert body["opening_line"].startswith("Let's practice Hotel check-in.")
-    assert "reservation problem" in body["conversation_goals"][0]
+    assert body["session"]["custom_scenario"]["ai_role"] == "Hotel front desk clerk"
+    assert body["session"]["custom_scenario"]["user_role"] == "Hotel guest checking in and handling a reservation issue"
+    assert body["opening_line"].startswith("Good evening.")
+    assert "reservation" in body["conversation_goals"][1]
+
+
+def test_create_custom_session_from_chinese_prompt_returns_english_scenario() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/sessions",
+        json={
+            "scenario_id": "custom",
+            "custom_prompt": "我希望你扮演一位医生，我向你问诊",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["scenario"]["name"] == "Doctor Consultation"
+    assert "Doctor" in body["scenario"]["ai_role"]
+    assert "Patient" in body["scenario"]["user_role"]
+    assert body["opening_line"] == "Good morning. What symptoms have you been having?"
+    assert not _contains_cjk(str(body["scenario"]))
 
 
 def test_create_custom_session_requires_prompt_or_topic() -> None:
@@ -164,3 +187,7 @@ def test_end_session_rejects_unknown_session() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Unknown session"
+
+
+def _contains_cjk(text: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in text)

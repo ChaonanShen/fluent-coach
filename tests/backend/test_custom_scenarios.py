@@ -1,14 +1,14 @@
 from backend.app.services.custom_scenarios import CustomScenarioBuilder
 
 
-def test_custom_scenario_builder_generates_valid_scenario() -> None:
+def test_custom_scenario_builder_matches_airport_prompt() -> None:
     scenario = CustomScenarioBuilder().build("airport check-in")
 
     assert scenario.id.startswith("custom_")
-    assert scenario.name == "airport check-in"
-    assert scenario.ai_role == "Conversation partner"
-    assert scenario.user_role == "Learner practicing: airport check-in"
-    assert "airport check-in" in scenario.opening_line
+    assert scenario.name == "Airport Check-in"
+    assert scenario.ai_role == "Airline check-in agent"
+    assert scenario.user_role == "Passenger checking in for a flight"
+    assert scenario.opening_line == "Hello. Where are you flying today?"
     assert scenario.conversation_goals
     assert scenario.target_expressions
     assert scenario.correction_focus
@@ -22,5 +22,29 @@ def test_custom_scenario_builder_uses_custom_name() -> None:
     )
 
     assert scenario.name == "Hotel check-in"
-    assert scenario.user_role == "Learner practicing: Hotel check-in"
-    assert scenario.opening_line.startswith("Let's practice Hotel check-in.")
+    assert scenario.ai_role == "Hotel front desk clerk"
+    assert scenario.user_role == "Hotel guest checking in and handling a reservation issue"
+    assert scenario.opening_line.startswith("Good evening.")
+
+
+def test_custom_scenario_builder_matches_chinese_doctor_prompt_in_english() -> None:
+    scenario = CustomScenarioBuilder().build("我希望你扮演一位医生，我向你问诊")
+
+    assert scenario.name == "Doctor Consultation"
+    assert "Doctor" in scenario.ai_role
+    assert "Patient" in scenario.user_role
+    assert scenario.opening_line == "Good morning. What symptoms have you been having?"
+    assert not _contains_cjk(scenario.model_dump_json())
+
+
+def test_custom_scenario_builder_uses_english_generic_fallback() -> None:
+    scenario = CustomScenarioBuilder().build("我想练习一个很特别的生活场景")
+
+    assert scenario.name == "Custom Role Play"
+    assert scenario.ai_role == "Conversation partner in a custom English speaking role-play"
+    assert scenario.opening_line == "Let's start the role-play. What would you like to say first?"
+    assert not _contains_cjk(scenario.model_dump_json())
+
+
+def _contains_cjk(text: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in text)
