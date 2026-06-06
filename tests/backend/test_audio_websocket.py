@@ -219,9 +219,50 @@ def test_audio_websocket_runs_pronunciation_after_reply(monkeypatch, tmp_path) -
     assert pending["type"] == "analysis.pending"
     assert pending["stages"] == ["grammar", "pronunciation"]
     pronunciation = next(event for event in events if event.get("stage") == "pronunciation" and event["type"] == "analysis.result")
+    assert pronunciation["turn_id"] == reply["user_turn_id"]
     assert pronunciation["result"]["overall"] == 72
     analysis = client.get(f"/api/sessions/{session_id}/analysis").json()
     assert analysis["pronunciation_results"][0]["overall"] == 72
+
+
+def test_audio_websocket_pronunciation_error_includes_turn_id(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("APP_AUDIO_DIR", str(tmp_path))
+    monkeypatch.setenv("PRON_ASSESS_AUDIO_TURNS", "1")
+
+    class BrokenPronProvider:
+        provider_name = "mock-real"
+
+        def assess(self, *, reference_text=None, audio_file=None, fixture_id=None):
+            del reference_text, audio_file, fixture_id
+            raise RuntimeError("pronunciation timeout")
+
+    monkeypatch.setattr("backend.app.main.pronunciation_provider", BrokenPronProvider())
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json(
+            {
+                "type": "start_turn",
+                "expected_text": "I have worked on backend systems for three years.",
+                "mime_type": "audio/wav",
+            }
+        )
+        websocket.receive_json()
+        websocket.send_bytes(b"fake-wav-audio")
+        websocket.send_json({"type": "end_turn"})
+        websocket.receive_json()
+        reply = websocket.receive_json()
+        websocket.receive_json()
+        pending = websocket.receive_json()
+        events = [websocket.receive_json() for _ in range(4)]
+
+    assert reply["type"] == "reply.text"
+    assert pending["stages"] == ["grammar", "pronunciation"]
+    error = next(event for event in events if event.get("stage") == "pronunciation" and event["type"] == "analysis.error")
+    assert error["turn_id"] == reply["user_turn_id"]
+    assert error["error"]["stage"] == "pronunciation"
 
 
 def test_audio_websocket_saves_audio_turn_file(monkeypatch, tmp_path) -> None:

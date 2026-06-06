@@ -707,6 +707,8 @@ async def _run_ws_grammar_analysis(
             websocket,
             {
                 "type": "analysis.error",
+                "stage": "grammar",
+                "turn_id": turn_id,
                 "error": error.model_dump(mode="json"),
             },
         )
@@ -735,6 +737,7 @@ async def _run_ws_grammar_analysis(
         {
             "type": "analysis.result",
             "stage": "grammar",
+            "turn_id": turn_id,
             "result": correction.model_dump(mode="json"),
         },
     )
@@ -778,6 +781,7 @@ async def _run_ws_pronunciation_analysis(
             {
                 "type": "analysis.error",
                 "stage": "pronunciation",
+                "turn_id": turn_id,
                 "error": error.model_dump(mode="json"),
             },
         )
@@ -807,6 +811,7 @@ async def _run_ws_pronunciation_analysis(
             {
                 "type": "analysis.error",
                 "stage": "pronunciation",
+                "turn_id": turn_id,
                 "error": error.model_dump(mode="json"),
             },
         )
@@ -820,6 +825,7 @@ async def _run_ws_pronunciation_analysis(
         {
             "type": "analysis.result",
             "stage": "pronunciation",
+            "turn_id": turn_id,
             "result": assessment.model_dump(mode="json"),
         },
     )
