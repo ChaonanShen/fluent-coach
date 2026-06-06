@@ -91,11 +91,20 @@ def test_pronunciation_practice_sentence_uses_real_examples() -> None:
 
 
 def test_pronunciation_practice_sentence_uses_llm_when_available() -> None:
-    llm = FakeLLMClient(responses=["I have three meetings before lunch."])
+    llm = FakeLLMClient(
+        responses=[
+            """
+            {
+              "three": "I have three meetings before lunch.",
+              "systems": "Our systems handled the traffic well."
+            }
+            """
+        ]
+    )
     service = MistakeService(log_store, llm_client=llm)
     assessment = PronunciationAssessment(
         provider="mock",
-        reference_text="I have three meetings.",
+        reference_text="I have three systems.",
         overall=52,
         accuracy=48,
         fluency=70,
@@ -104,14 +113,24 @@ def test_pronunciation_practice_sentence_uses_llm_when_available() -> None:
                 kind="word_accuracy",
                 target="three",
                 message_zh="`three` 发音准确度偏低，建议单独跟读。",
+            ),
+            PronunciationIssue(
+                kind="word_accuracy",
+                target="systems",
+                message_zh="`systems` 发音准确度偏低，建议单独跟读。",
             )
         ],
     )
 
     mistakes = service.add_from_pronunciation(assessment, session_id="session_1", turn_id="turn_1")
 
-    assert llm.calls
-    assert mistakes[0].practice_sentence == "I have three meetings before lunch."
+    assert len(llm.calls) == 1
+    assert "three" in llm.calls[0][1].content
+    assert "systems" in llm.calls[0][1].content
+    assert [mistake.practice_sentence for mistake in mistakes] == [
+        "I have three meetings before lunch.",
+        "Our systems handled the traffic well.",
+    ]
 
 
 def test_pronunciation_practice_sentence_rejects_prompt_like_llm_output() -> None:

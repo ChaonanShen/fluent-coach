@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 
 from backend.app.models import (
@@ -101,6 +102,10 @@ class MistakeService:
         turn_id: str | None = None,
     ) -> list[MistakeItem]:
         created: list[MistakeItem] = []
+        practice_sentences = _pronunciation_practice_sentences(
+            [issue.target for issue in assessment.issues],
+            self.llm_client,
+        )
         for issue in assessment.issues:
             mistake = MistakeItem(
                 type=MistakeType.PRONUNCIATION,
@@ -114,7 +119,7 @@ class MistakeService:
                 wrong=issue.target,
                 correct=issue.target,
                 explanation_zh=issue.message_zh,
-                practice_sentence=_pronunciation_practice_sentence(issue.target, self.llm_client),
+                practice_sentence=practice_sentences[_practice_sentence_key(_normalize_pronunciation_target(issue.target))],
                 word=issue.target,
                 mastery=0.1,
             )
@@ -169,14 +174,30 @@ _PRONUNCIATION_SENTENCE_EXAMPLES = {
 }
 
 
+def _pronunciation_practice_sentences(words: list[str], llm_client: LLMClient | None = None) -> dict[str, str]:
+    targets = [_normalize_pronunciation_target(word) for word in words]
+    targets = [target for target in dict.fromkeys(targets) if target]
+    llm_sentences = _llm_pronunciation_practice_sentences(targets, llm_client)
+    return {
+        _practice_sentence_key(target): llm_sentences.get(
+            _practice_sentence_key(target),
+            _fallback_pronunciation_practice_sentence(target),
+        )
+        for target in targets
+    }
+
+
 def _pronunciation_practice_sentence(word: str, llm_client: LLMClient | None = None) -> str:
-    clean_word = re.sub(r"[^A-Za-z'-]+", " ", word).strip()
-    target = clean_word or word.strip() or "word"
-    normalized = target.lower()
+    target = _normalize_pronunciation_target(word)
 
     llm_sentence = _llm_pronunciation_practice_sentence(target, llm_client)
     if llm_sentence:
         return llm_sentence
+    return _fallback_pronunciation_practice_sentence(target)
+
+
+def _fallback_pronunciation_practice_sentence(target: str) -> str:
+    normalized = target.lower()
     if normalized in _PRONUNCIATION_SENTENCE_EXAMPLES:
         return _PRONUNCIATION_SENTENCE_EXAMPLES[normalized]
     if " " in normalized:
@@ -190,6 +211,62 @@ def _pronunciation_practice_sentence(word: str, llm_client: LLMClient | None = N
     if normalized.endswith("s") and not normalized.endswith(("ss", "is", "us")):
         return f"The team reviewed the {target} before launch."
     return f"I heard {target} during the meeting."
+
+
+def _normalize_pronunciation_target(word: str) -> str:
+    clean_word = re.sub(r"[^A-Za-z'-]+", " ", word).strip()
+    return clean_word or word.strip() or "word"
+
+
+def _practice_sentence_key(target: str) -> str:
+    return " ".join(target.strip().lower().split())
+
+
+def _llm_pronunciation_practice_sentences(
+    targets: list[str],
+    llm_client: LLMClient | None,
+) -> dict[str, str]:
+    if llm_client is None or not targets:
+        return {}
+    try:
+        content = llm_client.complete(
+            [
+                LLMMessage(
+                    role="system",
+                    content=(
+                        "You write natural English pronunciation practice sentences. "
+                        "Return JSON only. The JSON must map each exact target to one short, natural English sentence. "
+                        "Do not explain, do not use markdown, and do not mention that this is practice."
+                    ),
+                ),
+                LLMMessage(
+                    role="user",
+                    content=(
+                        "Targets: "
+                        f"{json.dumps(targets, ensure_ascii=True)}\n"
+                        "For each target, write one sentence that naturally includes the target once. "
+                        "Keep each sentence suitable for speaking practice and under 16 words."
+                    ),
+                ),
+            ]
+        )
+    except Exception:
+        return {}
+    try:
+        payload = json.loads(content)
+    except json.JSONDecodeError:
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    sentences: dict[str, str] = {}
+    for target in targets:
+        raw_sentence = payload.get(target) or payload.get(_practice_sentence_key(target))
+        if not isinstance(raw_sentence, str):
+            continue
+        sentence = _clean_pronunciation_sentence(raw_sentence, target)
+        if sentence:
+            sentences[_practice_sentence_key(target)] = sentence
+    return sentences
 
 
 def _llm_pronunciation_practice_sentence(target: str, llm_client: LLMClient | None) -> str | None:
