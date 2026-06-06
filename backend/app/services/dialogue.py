@@ -167,6 +167,7 @@ class DialogueService:
                     role="system",
                     content=(
                         "You are the AI role in an English speaking practice scenario. "
+                        "Always reply in English, regardless of the language used to describe the scenario. "
                         "Continue the conversation naturally. Do not teach grammar in the reply. "
                         "Return JSON only with keys: reply_text, current_goal, next_intent."
                     ),
@@ -214,6 +215,7 @@ class DialogueService:
                 role="system",
                 content=(
                     "You are the AI role in an English speaking practice scenario. "
+                    "Always reply in English, regardless of the language used to describe the scenario. "
                     "Reply as a natural conversation partner in one or two short sentences. "
                     "Do not teach grammar in this reply. Return plain English text only."
                 ),

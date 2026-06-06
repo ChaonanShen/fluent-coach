@@ -7,6 +7,7 @@ from backend.app.services.dialogue import dialogue_service
 from backend.app.services.dialogue import DialogueService
 from backend.app.services.llm import FakeLLMClient
 from backend.app.services.scenarios import get_scenario
+from backend.app.services.scenarios import make_custom_scenario
 from backend.app.services.sessions import session_store
 
 
@@ -87,6 +88,7 @@ def test_dialogue_service_uses_llm_for_unmatched_text() -> None:
 
     assert reply.text == "That sounds useful. What was your specific contribution?"
     assert reply.next_intent == "ask_for_specific_contribution"
+    assert "Always reply in English" in service.llm_client.calls[0][0].content
 
 
 def test_dialogue_service_streams_unmatched_text() -> None:
@@ -104,6 +106,22 @@ def test_dialogue_service_streams_unmatched_text() -> None:
     assert reply is not None
     assert "".join(reply.chunks) == "That sounds useful. What did you own?"
     assert reply.current_goal in scenario.conversation_goals
+    assert "Always reply in English" in service.llm_client.calls[0][0].content
+
+
+def test_custom_dialogue_fallback_replies_in_english_for_chinese_prompt() -> None:
+    scenario = make_custom_scenario("我希望你扮演一位医生，我向你问诊")
+    session = session_store.create(scenario, custom_scenario=scenario, custom_prompt="我希望你扮演一位医生，我向你问诊")
+    service = DialogueService()
+
+    reply = service.generate_reply(
+        session=session,
+        scenario=scenario,
+        user_text="我头疼，想咨询一下。",
+    )
+
+    assert reply.text == "Thanks. Could you tell me a little more?"
+    assert not _contains_cjk(reply.text)
 
 
 def test_dialogue_service_does_not_stream_fixture_replies() -> None:
@@ -147,3 +165,7 @@ def test_text_turn_api_rejects_unknown_session() -> None:
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Unknown session"
+
+
+def _contains_cjk(text: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in text)

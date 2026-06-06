@@ -224,13 +224,17 @@ def _contains_any(text: str, needles: list[str]) -> bool:
 
 
 def _scenario_name(name: str | None, fallback: str) -> str:
-    if name and name.strip():
+    if name and name.strip() and not contains_cjk(name):
         return _truncate(" ".join(name.split()), 80)
     return fallback
 
 
 def build_custom_scenario(prompt: str, *, name: str | None = None) -> Scenario:
     return custom_scenario_builder.build(prompt, name=name)
+
+
+def contains_cjk(text: str) -> bool:
+    return any("\u4e00" <= char <= "\u9fff" for char in text)
 
 
 def _truncate(text: str, limit: int) -> str:

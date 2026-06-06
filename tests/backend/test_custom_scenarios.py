@@ -1,4 +1,4 @@
-from backend.app.services.custom_scenarios import CustomScenarioBuilder
+from backend.app.services.custom_scenarios import CustomScenarioBuilder, contains_cjk
 
 
 def test_custom_scenario_builder_matches_airport_prompt() -> None:
@@ -34,7 +34,7 @@ def test_custom_scenario_builder_matches_chinese_doctor_prompt_in_english() -> N
     assert "Doctor" in scenario.ai_role
     assert "Patient" in scenario.user_role
     assert scenario.opening_line == "Good morning. What symptoms have you been having?"
-    assert not _contains_cjk(scenario.model_dump_json())
+    assert not contains_cjk(scenario.model_dump_json())
 
 
 def test_custom_scenario_builder_uses_english_generic_fallback() -> None:
@@ -43,8 +43,14 @@ def test_custom_scenario_builder_uses_english_generic_fallback() -> None:
     assert scenario.name == "Custom Role Play"
     assert scenario.ai_role == "Conversation partner in a custom English speaking role-play"
     assert scenario.opening_line == "Let's start the role-play. What would you like to say first?"
-    assert not _contains_cjk(scenario.model_dump_json())
+    assert not contains_cjk(scenario.model_dump_json())
 
 
-def _contains_cjk(text: str) -> bool:
-    return any("\u4e00" <= char <= "\u9fff" for char in text)
+def test_custom_scenario_builder_ignores_chinese_custom_name() -> None:
+    scenario = CustomScenarioBuilder().build(
+        "我希望你扮演一位医生，我向你问诊",
+        name="医生问诊",
+    )
+
+    assert scenario.name == "Doctor Consultation"
+    assert not contains_cjk(scenario.model_dump_json())
