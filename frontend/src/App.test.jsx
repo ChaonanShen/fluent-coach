@@ -112,13 +112,14 @@ beforeEach(() => {
       const requestBody = JSON.parse(options.body);
       sessionRequestBodies.push(requestBody);
       if (requestBody.scenario_id === 'custom') {
+        const customPrompt = requestBody.custom_prompt;
         const customScenario = {
           ...scenario,
           id: 'custom_airport',
           name: 'Custom',
-          user_role: `Learner practicing: ${requestBody.custom_topic}`,
-          opening_line: `Let's practice ${requestBody.custom_topic}. Could you start with what you want to say first?`,
-          conversation_goals: [`Practice a realistic conversation about ${requestBody.custom_topic}`],
+          user_role: `Learner practicing: ${customPrompt}`,
+          opening_line: `Let's practice ${customPrompt}. Could you start with what you want to say first?`,
+          conversation_goals: [`Practice a realistic conversation about ${customPrompt}`],
         };
         return jsonResponse({
           session: {
@@ -312,7 +313,7 @@ test('starts a custom scenario from the conversation toolbar', async () => {
     .toBeInTheDocument();
   expect(sessionRequestBodies.at(-1)).toEqual({
     scenario_id: 'custom',
-    custom_topic: 'airport check-in',
+    custom_prompt: 'airport check-in',
   });
 });
 

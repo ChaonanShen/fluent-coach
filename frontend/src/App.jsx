@@ -265,7 +265,7 @@ export default function App() {
     try {
       const payload = { scenario_id: selectedScenarioId };
       if (selectedScenarioId === 'custom') {
-        payload.custom_topic = customScenarioText.trim();
+        payload.custom_prompt = customScenarioText.trim();
       }
       const body = await request('/api/sessions', {
         method: 'POST',
@@ -802,12 +802,13 @@ export default function App() {
                 </option>
               </select>
               {selectedScenarioId === 'custom' ? (
-                <input
+                <textarea
                   aria-label="Custom scenario"
                   disabled={sessionActive}
-                  maxLength={160}
+                  maxLength={2000}
                   onChange={(event) => setCustomScenarioText(event.target.value)}
-                  placeholder="e.g. airport check-in"
+                  placeholder="Hotel check-in with a front desk clerk, B1 level, reservation problem, polite requests"
+                  rows={3}
                   value={customScenarioText}
                 />
               ) : null}

@@ -213,7 +213,8 @@ h3 {
 }
 
 .scenario-select-label select,
-.scenario-select-label input {
+.scenario-select-label input,
+.scenario-select-label textarea {
   background: #ffffff;
   border: 1px solid #cbd4cf;
   border-radius: 6px;
@@ -227,8 +228,16 @@ h3 {
   text-transform: none;
 }
 
-.scenario-select-label input {
+.scenario-select-label input,
+.scenario-select-label textarea {
   grid-column: 2;
+}
+
+.scenario-select-label textarea {
+  line-height: 1.35;
+  min-height: 72px;
+  resize: vertical;
+  text-transform: none;
 }
 
 .session-action {
@@ -587,7 +596,8 @@ h3 {
     grid-template-columns: 1fr;
   }
 
-  .scenario-select-label input {
+  .scenario-select-label input,
+  .scenario-select-label textarea {
     grid-column: auto;
   }
 
