@@ -1090,13 +1090,12 @@ export default function App() {
             </label>
             {selectedScenarioId === 'custom' ? (
               <label className="custom-scenario-label">
-                <span>Custom scenario</span>
                 <textarea
                   aria-label="Custom scenario"
                   disabled={sessionActive}
                   maxLength={2000}
                   onChange={(event) => setCustomScenarioText(event.target.value)}
-                  placeholder="Hotel check-in with a front desk clerk, B1 level, reservation problem, polite requests"
+                  placeholder="Describe the English conversation scenario you want to practice..."
                   rows={3}
                   value={customScenarioText}
                 />

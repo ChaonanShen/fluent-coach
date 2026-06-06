@@ -547,6 +547,8 @@ test('starts a custom scenario from the conversation toolbar', async () => {
     target: { value: 'custom' },
   });
   expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled();
+  expect(screen.queryByText('Custom scenario')).not.toBeInTheDocument();
+  expect(screen.getByPlaceholderText('Describe the English conversation scenario you want to practice...')).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Custom scenario'), {
     target: { value: 'airport check-in' },
   });
@@ -768,6 +770,12 @@ test('selects one mistake book without opening it and deletes the selection', as
 
   expect(screen.getByText('1 selected')).toBeInTheDocument();
   expect(screen.queryByText('am working')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+  expect(screen.getByText('0 selected')).toBeInTheDocument();
+  expect(screen.getByLabelText('Select Job Interview - 2026-06-05 00:00 UTC')).not.toBeChecked();
+  fireEvent.click(screen.getByLabelText('Select Job Interview - 2026-06-05 00:00 UTC'));
+  expect(screen.getByText('1 selected')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Delete selected' }));
 
   await waitFor(() => {
