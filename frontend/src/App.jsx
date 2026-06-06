@@ -27,6 +27,18 @@ function isNearMessageListBottom(list) {
   return list.scrollHeight - list.scrollTop - list.clientHeight <= MESSAGE_LIST_BOTTOM_THRESHOLD_PX;
 }
 
+function useAutoScrollToBottom(dependency) {
+  const listRef = useRef(null);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (!list) {
+      return;
+    }
+    list.scrollTop = list.scrollHeight;
+  }, [dependency]);
+  return listRef;
+}
+
 export default function App() {
   const [scenarios, setScenarios] = useState([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState('');
@@ -1557,23 +1569,37 @@ function ConversationAssessmentPanel({
   const correctionItems = userTurnsWithCorrections(session, turnCorrections, turnAssessmentErrors);
   const pronunciationItems = userTurnsWithPronunciation(session, turnPronunciations, turnAssessmentErrors);
   const timingItems = latestTiming ? timingRows(latestTiming.timings) : [];
+  const correctionListRef = useAutoScrollToBottom(correctionItems.length);
+  const pronunciationListRef = useAutoScrollToBottom(pronunciationItems.length);
   return (
     <aside className="coach-panel assessment-panel" aria-label="Conversation Assessment">
       <h2>Conversation Assessment</h2>
       <section className="assessment-section-block" aria-label="Grammar / Expression Correction">
         <h3>Grammar / Expression Correction</h3>
         {correctionItems.length ? (
-          <div className="assessment-list">
+          <div className="assessment-list assessment-scroll-list" aria-label="Correction history" ref={correctionListRef}>
             {correctionItems.map(({ turn, correction, errors }) => (
               <article className="assessment-item" key={turn.id}>
-                <p className="assessment-turn-text">{turn.text}</p>
-                {correction.issues?.length ? (
+                {correction ? (
                   <>
-                    <p className="corrected">{correction.corrected_text}</p>
-                    <p>{correction.issues[0].explanation_zh}</p>
+                    <div className="correction-pair">
+                      <p>
+                        <span>Original</span>
+                        {turn.text}
+                      </p>
+                      <p className="corrected">
+                        <span>Corrected</span>
+                        {correction.corrected_text}
+                      </p>
+                    </div>
+                    {correction.issues?.length ? (
+                      <p>{correction.issues[0].explanation_zh}</p>
+                    ) : (
+                      <p>No grammar or expression issue.</p>
+                    )}
                   </>
                 ) : (
-                  <p>No grammar or expression issue.</p>
+                  <p>Correction pending.</p>
                 )}
                 <TurnAssessmentErrors errors={errors} turnId={turn.id} />
               </article>
@@ -1581,7 +1607,18 @@ function ConversationAssessmentPanel({
           </div>
         ) : latestCorrection?.issues?.length ? (
           <article className="assessment-item">
-            <p className="corrected">{latestCorrection.corrected_text}</p>
+            <div className="correction-pair">
+              {latestCorrection.user_text ? (
+                <p>
+                  <span>Original</span>
+                  {latestCorrection.user_text}
+                </p>
+              ) : null}
+              <p className="corrected">
+                <span>Corrected</span>
+                {latestCorrection.corrected_text}
+              </p>
+            </div>
             <p>{latestCorrection.issues[0].explanation_zh}</p>
           </article>
         ) : (
@@ -1592,7 +1629,7 @@ function ConversationAssessmentPanel({
       <section className="assessment-section-block" aria-label="Pronunciation">
         <h3>Pronunciation</h3>
         {pronunciationItems.length ? (
-          <div className="assessment-list">
+          <div className="assessment-list assessment-scroll-list" aria-label="Pronunciation history" ref={pronunciationListRef}>
             {pronunciationItems.map(({ turn, pronunciation: turnPronunciation, errors }) => (
               <article className="assessment-item" key={turn.id}>
                 <p className="assessment-turn-text">{turn.text}</p>

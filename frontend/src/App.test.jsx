@@ -588,6 +588,11 @@ test('sends a text turn and shows correction feedback', async () => {
 
   expect(await screen.findByText('Great. Which project is most relevant to this role?')).toBeInTheDocument();
   const assessmentPanel = screen.getByLabelText('Conversation Assessment');
+  const correctionHistory = within(assessmentPanel).getByLabelText('Correction history');
+  expect(correctionHistory).toHaveClass('assessment-scroll-list');
+  expect(within(correctionHistory).getByText('Original')).toBeInTheDocument();
+  expect(within(correctionHistory).getByText('Corrected')).toBeInTheDocument();
+  expect(within(correctionHistory).getByText('I am working in this field since three years.')).toBeInTheDocument();
   expect(within(assessmentPanel).getByText('I have been working in this field for three years.')).toBeInTheDocument();
   expect(within(assessmentPanel).getByText('谈论从过去持续到现在的经历，应使用现在完成进行时。')).toBeInTheDocument();
   expect(within(assessmentPanel).queryByText('Pronunciation pending.')).not.toBeInTheDocument();
@@ -1014,6 +1019,7 @@ test('renders pronunciation analysis from a voice turn', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
 
   const assessmentPanel = await screen.findByLabelText('Conversation Assessment');
+  await waitFor(() => expect(within(assessmentPanel).getByLabelText('Pronunciation history')).toHaveClass('assessment-scroll-list'));
   await waitFor(() => expect(within(assessmentPanel).getByLabelText('Pronunciation scores')).toHaveTextContent('Overall 72'));
   expect(within(assessmentPanel).getByText('SYSTEMS')).toHaveClass('low-word');
 });

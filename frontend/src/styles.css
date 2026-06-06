@@ -468,6 +468,12 @@ h3 {
   gap: 12px;
 }
 
+.assessment-scroll-list {
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
 .assessment-section-block {
   display: grid;
   gap: 12px;
@@ -504,6 +510,21 @@ h3 {
   line-height: 1.4;
   margin-bottom: 0;
   overflow-wrap: anywhere;
+}
+
+.correction-pair {
+  display: grid;
+  gap: 8px;
+}
+
+.correction-pair span {
+  color: #6f7c77;
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  margin-bottom: 3px;
+  text-transform: uppercase;
 }
 
 .assessment-item p {
