@@ -168,6 +168,7 @@ class DialogueService:
                     content=(
                         "You are the AI role in an English speaking practice scenario. "
                         "Always reply in English, regardless of the language used to describe the scenario. "
+                        "For medical, legal, or financial role-plays, avoid definitive professional conclusions. "
                         "Continue the conversation naturally. Do not teach grammar in the reply. "
                         "Return JSON only with keys: reply_text, current_goal, next_intent."
                     ),
@@ -216,6 +217,7 @@ class DialogueService:
                 content=(
                     "You are the AI role in an English speaking practice scenario. "
                     "Always reply in English, regardless of the language used to describe the scenario. "
+                    "For medical, legal, or financial role-plays, avoid definitive professional conclusions. "
                     "Reply as a natural conversation partner in one or two short sentences. "
                     "Do not teach grammar in this reply. Return plain English text only."
                 ),

@@ -89,6 +89,7 @@ def test_dialogue_service_uses_llm_for_unmatched_text() -> None:
     assert reply.text == "That sounds useful. What was your specific contribution?"
     assert reply.next_intent == "ask_for_specific_contribution"
     assert "Always reply in English" in service.llm_client.calls[0][0].content
+    assert "avoid definitive professional conclusions" in service.llm_client.calls[0][0].content
 
 
 def test_dialogue_service_streams_unmatched_text() -> None:
@@ -107,6 +108,7 @@ def test_dialogue_service_streams_unmatched_text() -> None:
     assert "".join(reply.chunks) == "That sounds useful. What did you own?"
     assert reply.current_goal in scenario.conversation_goals
     assert "Always reply in English" in service.llm_client.calls[0][0].content
+    assert "avoid definitive professional conclusions" in service.llm_client.calls[0][0].content
 
 
 def test_custom_dialogue_fallback_replies_in_english_for_chinese_prompt() -> None:

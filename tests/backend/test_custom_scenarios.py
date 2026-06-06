@@ -35,6 +35,9 @@ def test_custom_scenario_builder_matches_chinese_doctor_prompt_in_english() -> N
     assert "Doctor" in scenario.ai_role
     assert "Patient" in scenario.user_role
     assert scenario.opening_line == "Good morning. What symptoms have you been having?"
+    doctor_text = scenario.model_dump_json().lower()
+    assert "diagnose you with" not in doctor_text
+    assert "prescribe" not in doctor_text
     assert not contains_cjk(scenario.model_dump_json())
 
 
