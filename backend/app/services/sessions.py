@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from backend.app.models import Scenario, Session, TurnSpeaker
+from datetime import datetime
+
+from backend.app.models import Scenario, Session, SessionTitleSource, TurnSpeaker
 from backend.app.services.storage import SQLiteLogStore, log_store
 
 
@@ -9,8 +11,20 @@ class SessionStore:
         self._sessions: dict[str, Session] = {}
         self._storage = storage
 
-    def create(self, scenario: Scenario, *, custom_scenario: Scenario | None = None) -> Session:
-        session = Session(scenario_id=scenario.id, custom_scenario=custom_scenario)
+    def create(
+        self,
+        scenario: Scenario,
+        *,
+        custom_scenario: Scenario | None = None,
+        custom_prompt: str | None = None,
+    ) -> Session:
+        session = Session(
+            scenario_id=scenario.id,
+            custom_scenario=custom_scenario,
+            scenario_name_snapshot=scenario.name,
+            custom_prompt=custom_prompt,
+        )
+        session.rename(_fallback_title(scenario.name, session.created_at), source=SessionTitleSource.FALLBACK)
         session.add_turn(speaker=TurnSpeaker.AI, text=scenario.opening_line)
         self._sessions[session.id] = session
         if self._storage is not None:
@@ -43,8 +57,20 @@ class SessionStore:
         if self._storage is not None:
             self._storage.save_session(session)
 
+    def rename(self, session_id: str, title: str) -> Session | None:
+        session = self.get(session_id)
+        if session is None:
+            return None
+        session.rename(title, source=SessionTitleSource.MANUAL)
+        self.save(session)
+        return session
+
     def clear(self) -> None:
         self._sessions.clear()
+
+
+def _fallback_title(scenario_name: str, created_at: datetime) -> str:
+    return f"{scenario_name} - {created_at.strftime('%Y-%m-%d %H:%M UTC')}"
 
 
 session_store = SessionStore()

@@ -27,6 +27,7 @@ from backend.app.api import (
     TextTurnResponse,
     TTSRequest,
     TTSResponse,
+    UpdateSessionTitleRequest,
 )
 from backend.app.core.fixtures import get_fixture_status
 from backend.app.models import (
@@ -37,6 +38,7 @@ from backend.app.models import (
     MistakeItem,
     MistakeType,
     PronunciationAssessment,
+    Session,
     SessionSummary,
     TurnSpeaker,
 )
@@ -83,7 +85,11 @@ def create_session(request: CreateSessionRequest) -> SessionResponse:
         scenario = get_scenario(request.scenario_id)
     if scenario is None:
         raise HTTPException(status_code=404, detail="Unknown scenario")
-    session = session_store.create(scenario, custom_scenario=custom_scenario)
+    session = session_store.create(
+        scenario,
+        custom_scenario=custom_scenario,
+        custom_prompt=request.custom_topic.strip() if request.custom_topic else None,
+    )
     return SessionResponse(
         session=session,
         scenario=scenario,
@@ -91,6 +97,17 @@ def create_session(request: CreateSessionRequest) -> SessionResponse:
         conversation_goals=scenario.conversation_goals,
         target_expressions=scenario.target_expressions,
     )
+
+
+@app.patch("/api/sessions/{session_id}/title", response_model=Session)
+def update_session_title(session_id: str, request: UpdateSessionTitleRequest) -> Session:
+    title = " ".join(request.title.split())
+    if not title:
+        raise HTTPException(status_code=422, detail="Session title is required")
+    session = session_store.rename(session_id, title)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Unknown session")
+    return session
 
 
 @app.post("/api/sessions/{session_id}/end", response_model=SessionResponse)

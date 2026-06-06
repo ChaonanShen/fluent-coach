@@ -22,6 +22,12 @@ class SessionStatus(StrEnum):
     ENDED = "ended"
 
 
+class SessionTitleSource(StrEnum):
+    AUTO = "auto"
+    MANUAL = "manual"
+    FALLBACK = "fallback"
+
+
 class Scenario(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -55,6 +61,10 @@ class Session(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     scenario_id: str = Field(min_length=1)
     custom_scenario: Scenario | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=100)
+    title_source: SessionTitleSource | None = None
+    scenario_name_snapshot: str | None = Field(default=None, min_length=1, max_length=100)
+    custom_prompt: str | None = Field(default=None, min_length=1, max_length=2000)
     status: SessionStatus = SessionStatus.ACTIVE
     created_at: datetime = Field(default_factory=utc_now)
     ended_at: datetime | None = None
@@ -83,3 +93,7 @@ class Session(BaseModel):
     def end(self) -> None:
         self.status = SessionStatus.ENDED
         self.ended_at = utc_now()
+
+    def rename(self, title: str, *, source: SessionTitleSource = SessionTitleSource.MANUAL) -> None:
+        self.title = " ".join(title.split())
+        self.title_source = source

@@ -26,6 +26,12 @@ class CreateSessionRequest(BaseModel):
     custom_topic: str | None = Field(default=None, min_length=3, max_length=160)
 
 
+class UpdateSessionTitleRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    title: str = Field(min_length=1, max_length=100)
+
+
 class SessionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
