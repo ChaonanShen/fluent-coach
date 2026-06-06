@@ -563,18 +563,18 @@ h3 {
 }
 
 .summary-metrics {
-  gap: 6px;
+  gap: 3px;
   margin: 0;
 }
 
 .summary-metrics div {
-  min-height: 26px;
+  min-height: 22px;
 }
 
 .summary-metrics dt,
 .summary-metrics dd {
-  font-size: 0.82rem;
-  line-height: 1.2;
+  font-size: 0.8rem;
+  line-height: 1.1;
 }
 
 .summary-metrics dt {

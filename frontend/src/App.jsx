@@ -1783,22 +1783,12 @@ function SummaryPanel({ summary, summaryState }) {
     <section className="reading-practice-link" aria-label="Summary">
       <h3>Summary</h3>
       <dl className="summary-metrics">
-        <div>
-          <dt>Grammar</dt>
-          <dd>{formatScore(summary.grammar_score)}</dd>
-        </div>
-        <div>
-          <dt>Pronunciation</dt>
-          <dd>{formatScore(summary.pronunciation_score)}</dd>
-        </div>
-        <div>
-          <dt>Fluency</dt>
-          <dd>{formatScore(summary.fluency_score)}</dd>
-        </div>
-        <div>
-          <dt>Vocabulary</dt>
-          <dd>{formatScore(summary.vocabulary_score)}</dd>
-        </div>
+        {detailScoreItems(summary).map((item) => (
+          <div key={item.label}>
+            <dt>{item.label}</dt>
+            <dd>{item.value}</dd>
+          </div>
+        ))}
       </dl>
     </section>
   );
