@@ -26,6 +26,7 @@ from backend.app.api import (
     MistakeListResponse,
     ProgressResponse,
     PronunciationAssessRequest,
+    PronunciationPracticeUploadRequest,
     PronunciationUploadRequest,
     ScenarioListResponse,
     SessionAnalysisResponse,
@@ -223,21 +224,11 @@ def assess_pronunciation(request: PronunciationAssessRequest) -> PronunciationAs
 def assess_uploaded_pronunciation(request: PronunciationUploadRequest) -> PronunciationAssessment:
     _ensure_known_session(request.session_id)
     try:
-        audio_bytes = base64.b64decode(request.audio_base64, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise HTTPException(status_code=400, detail="Invalid audio_base64") from exc
-    if not audio_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded audio is empty")
-
-    stored_audio = save_turn_audio(
-        session_id="pronunciation",
-        audio_bytes=audio_bytes,
-        mime_type=request.mime_type,
-    )
-    try:
-        assessment = pronunciation_provider.assess(
+        assessment = _assess_uploaded_audio(
             reference_text=request.reference_text,
-            audio_file=str(stored_audio.preferred_path.resolve()),
+            audio_base64=request.audio_base64,
+            mime_type=request.mime_type,
+            audio_session_id="pronunciation",
         )
     except RuntimeError as exc:
         error = _provider_analysis_error(
@@ -253,6 +244,29 @@ def assess_uploaded_pronunciation(request: PronunciationUploadRequest) -> Pronun
     log_store.save_pronunciation_assessment(assessment)
     _record_pronunciation_for_session(request.session_id, assessment)
     mistake_service.add_from_pronunciation(assessment, session_id=request.session_id)
+    return assessment
+
+
+@app.post("/api/pronunciation/practice/upload", response_model=PronunciationAssessment)
+def assess_practice_pronunciation(request: PronunciationPracticeUploadRequest) -> PronunciationAssessment:
+    try:
+        assessment = _assess_uploaded_audio(
+            reference_text=request.reference_text,
+            audio_base64=request.audio_base64,
+            mime_type=request.mime_type,
+            audio_session_id="pronunciation-practice",
+        )
+    except RuntimeError as exc:
+        error = _provider_analysis_error(
+            stage=AnalysisStage.PRONUNCIATION,
+            exc=exc,
+            provider_name=_provider_name(pronunciation_provider),
+            fallback_applied=False,
+        )
+        raise _analysis_http_error(error) from exc
+    if assessment is None:
+        raise HTTPException(status_code=404, detail="Pronunciation assessment failed")
+    log_store.save_pronunciation_assessment(assessment)
     return assessment
 
 
@@ -849,6 +863,31 @@ def _analysis_http_error(error: AnalysisError) -> HTTPException:
 def _provider_name(provider: object) -> str | None:
     value = getattr(provider, "provider_name", None)
     return value if isinstance(value, str) and value else None
+
+
+def _assess_uploaded_audio(
+    *,
+    reference_text: str,
+    audio_base64: str,
+    mime_type: str | None,
+    audio_session_id: str,
+) -> PronunciationAssessment | None:
+    try:
+        audio_bytes = base64.b64decode(audio_base64, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Invalid audio_base64") from exc
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded audio is empty")
+
+    stored_audio = save_turn_audio(
+        session_id=audio_session_id,
+        audio_bytes=audio_bytes,
+        mime_type=mime_type,
+    )
+    return pronunciation_provider.assess(
+        reference_text=reference_text,
+        audio_file=str(stored_audio.preferred_path.resolve()),
+    )
 
 
 def _ensure_known_session(session_id: str | None) -> None:
