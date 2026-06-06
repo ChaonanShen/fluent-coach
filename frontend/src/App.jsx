@@ -43,6 +43,9 @@ export default function App() {
   const [mistakeBookState, setMistakeBookState] = useState('idle');
   const [activeMistakeTypeFilter, setActiveMistakeTypeFilter] = useState(null);
   const [pronunciation, setPronunciation] = useState(null);
+  const [practicePronunciation, setPracticePronunciation] = useState(null);
+  const [practiceReferenceText, setPracticeReferenceText] = useState('THEN HE WENT TO THEME PARK');
+  const [assessedPracticeReferenceText, setAssessedPracticeReferenceText] = useState('');
   const [partialText, setPartialText] = useState('');
   const [voiceState, setVoiceState] = useState('idle');
   const [readingState, setReadingState] = useState('idle');
@@ -495,7 +498,8 @@ export default function App() {
       return;
     }
     setError('');
-    setPronunciation(null);
+    setPracticePronunciation(null);
+    setAssessedPracticeReferenceText('');
     setAnalysisErrors([]);
     setStatus('Requesting mic');
     readingCanceledRef.current = false;
@@ -577,17 +581,20 @@ export default function App() {
     const audio = chunks.length === 1 && chunks[0].arrayBuffer
       ? chunks[0]
       : new Blob(chunks, { type: mimeType || 'audio/webm' });
-    const assessment = await request('/api/pronunciation/assess/upload', {
+    const referenceText = practiceReferenceText.trim();
+    if (!referenceText) {
+      throw new Error('Enter text to read first.');
+    }
+    const assessment = await request('/api/pronunciation/practice/upload', {
       method: 'POST',
       body: JSON.stringify({
-        reference_text: 'THEN HE WENT TO THEME PARK',
+        reference_text: referenceText,
         audio_base64: await blobToBase64(audio),
         mime_type: audio.type || mimeType || 'audio/webm',
-        ...(session?.id ? { session_id: session.id } : {}),
       }),
     });
-    setPronunciation(assessment);
-    await refreshMistakes();
+    setPracticePronunciation(assessment);
+    setAssessedPracticeReferenceText(referenceText);
     setReadingState('idle');
     setStatus(sessionEnded ? 'Ended' : session ? 'In session' : 'Ready');
     stopReadingStream();
@@ -1150,32 +1157,27 @@ export default function App() {
           <h2>Coach</h2>
           <section className="coach-block">
             <h3>Pronunciation</h3>
-            <p className="read-reference">THEN HE WENT TO THEME PARK</p>
+            <textarea
+              aria-label="Text to read"
+              className="read-reference-input"
+              disabled={readingState === 'recording' || readingState === 'assessing'}
+              onChange={(event) => setPracticeReferenceText(event.target.value)}
+              placeholder="Word, phrase, or sentence to read"
+              rows={3}
+              value={practiceReferenceText}
+            />
             <button
               className="secondary-action assess-action"
-              disabled={sessionEnded || readingState === 'assessing'}
+              disabled={!practiceReferenceText.trim() || readingState === 'assessing'}
               onClick={readingState === 'recording' ? stopReadingRecording : startReadingRecording}
               type="button"
             >
               {readingState === 'recording' ? 'Stop Reading' : readingState === 'assessing' ? 'Assessing' : 'Record Reading'}
             </button>
-            {pronunciation ? (
-              <div className="pronunciation-result">
-                <div className="score-row" aria-label="Pronunciation scores">
-                  <span>Overall {Math.round(pronunciation.overall)}</span>
-                  <span>Accuracy {Math.round(pronunciation.accuracy)}</span>
-                  <span>Fluency {Math.round(pronunciation.fluency)}</span>
-                </div>
-                <p className="score-label">Low-score words</p>
-                <div className="word-score-list">
-                  {pronunciation.words.map((word) => (
-                    <span className={word.accuracy < 60 ? 'low-word' : ''} key={word.word}>
-                      {word.word}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
+            <PronunciationResult
+              assessment={practicePronunciation || pronunciation}
+              referenceText={practicePronunciation ? assessedPracticeReferenceText : ''}
+            />
           </section>
           {latestCorrection?.issues?.length ? (
             <section className="coach-block">
@@ -1343,6 +1345,30 @@ function SummaryScores({ summary, variant = 'detail' }) {
           {item.label} {item.value}
         </span>
       ))}
+    </div>
+  );
+}
+
+function PronunciationResult({ assessment, referenceText = '' }) {
+  if (!assessment) {
+    return null;
+  }
+  return (
+    <div className="pronunciation-result">
+      {referenceText ? <p className="practice-reference">Read: {referenceText}</p> : null}
+      <div className="score-row" aria-label="Pronunciation scores">
+        <span>Overall {Math.round(assessment.overall)}</span>
+        <span>Accuracy {Math.round(assessment.accuracy)}</span>
+        <span>Fluency {Math.round(assessment.fluency)}</span>
+      </div>
+      <p className="score-label">Low-score words</p>
+      <div className="word-score-list">
+        {assessment.words.map((word) => (
+          <span className={word.accuracy < 60 ? 'low-word' : ''} key={word.word}>
+            {word.word}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

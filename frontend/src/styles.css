@@ -344,15 +344,19 @@ h3 {
   font-weight: 750;
 }
 
-.read-reference {
+.read-reference-input {
   background: #f8faf8;
   border: 1px solid #e3e8e4;
   border-radius: 8px;
   color: #26343b;
+  font: inherit;
   font-weight: 750;
   line-height: 1.35;
   margin-bottom: 10px;
+  min-height: 84px;
   padding: 10px;
+  resize: vertical;
+  width: 100%;
 }
 
 .assess-action {
@@ -365,6 +369,14 @@ h3 {
 
 .pronunciation-result {
   margin-top: 12px;
+}
+
+.practice-reference {
+  color: #63726d;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  margin-bottom: 8px;
+  overflow-wrap: anywhere;
 }
 
 .score-row {
