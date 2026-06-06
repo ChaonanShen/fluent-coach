@@ -29,6 +29,19 @@ class TemplateVirtualUser:
         return next_error_case(scenario_id, index).clean_text
 
 
+SCENARIO_REPLY_HINTS: dict[str, str] = {
+    "interview": "You are the candidate. Answer the interviewer's latest question with a concrete work detail.",
+    "restaurant_ordering": "You are the customer. Continue ordering food or responding to the server naturally.",
+    "meeting": "You are the team member. Give a concise project update, risk, priority, owner, or next step.",
+}
+
+INJECTION_TARGET_HINTS: tuple[str, ...] = (
+    "Include 'have' or a plural noun such as years, questions, risks, priorities, blockers, or steps.",
+    "Include one past-tense verb such as finished, completed, shared, explained, handled, raised, or decided.",
+    "Include an article phrase with a, an, or the before a noun.",
+)
+
+
 class LLMVirtualUser:
     def __init__(self, llm_client: LLMClient, fallback: VirtualUser | None = None) -> None:
         self.llm_client = llm_client
@@ -41,11 +54,17 @@ class LLMVirtualUser:
         history: list[dict[str, str]],
         index: int,
     ) -> str:
+        target_hint = INJECTION_TARGET_HINTS[index % len(INJECTION_TARGET_HINTS)]
+        scenario_hint = SCENARIO_REPLY_HINTS.get(scenario_id, "You are the learner. Continue the role-play naturally.")
         prompt = (
             "Generate one natural English learner reply for this speaking practice scenario. "
             "Return one short sentence only, with correct grammar. "
+            "Do not repeat earlier learner replies. "
+            "Use the conversation history to answer the latest coach/interviewer/server/lead message. "
             "Do not include markdown, explanations, or quotation marks.\n"
             f"scenario_id: {scenario_id}\n"
+            f"role_hint: {scenario_hint}\n"
+            f"grammar_shape_hint: {target_hint}\n"
             f"history: {history[-6:]}"
         )
         try:

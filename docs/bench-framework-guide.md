@@ -449,20 +449,24 @@ KOKORO_VOICE=af_heart \
 KOKORO_LANG_CODE=a \
 python3 scripts/run_conversation_bench.py \
   --mode grammar_tts \
+  --virtual-user llm \
   --scenario interview \
   --turns 10 \
   --output-dir /tmp/grammar-tts-report
 ```
 
-`--virtual-user template` 是默认值，使用固定 clean_text，最稳定、最容易对比回归。
-如果要让用户回复内容也由 LLM 根据上下文生成，可以加：
+`--virtual-user llm` 是 `grammar_tts` 默认值，会让“练习者/面试者/顾客/团队成员”这一侧
+根据历史对话自动生成下一句回复，再由确定性错误注入器制造语法错误。
+
+如果要做完全可复现的回归测试，可以显式切到模板虚拟用户：
 
 ```bash
---virtual-user llm
+--virtual-user template
 ```
 
-但错误注入仍是确定性的，最终真值仍来自 `expected_corrected_text` 和
-`expected_error_types`，不是让 LLM 自己裁判自己。
+模板虚拟用户会循环固定 grammar cases，适合稳定回归，但长轮数下会重复，不适合模拟真实多轮对话。
+无论使用 LLM 还是 template，错误注入仍是确定性的，最终真值仍来自
+`expected_corrected_text` 和 `expected_error_types`，不是让 LLM 自己裁判自己。
 
 查看结果：
 

@@ -95,6 +95,28 @@ def test_inject_errors_derives_case_from_clean_text() -> None:
     ]
 
 
+def test_inject_errors_handles_llm_generated_meeting_sentence() -> None:
+    case = inject_errors(
+        "I completed the API review and identified two risks for the next steps.",
+        scenario_id="meeting",
+        index=0,
+    )
+
+    assert case.injected_text == "I complete API review and identified two risk for the next steps."
+    assert case.expected_error_types == ["plural_noun", "verb_tense", "article"]
+
+
+def test_inject_errors_handles_llm_generated_restaurant_sentence() -> None:
+    case = inject_errors(
+        "I have questions about the ingredients in the salad.",
+        scenario_id="restaurant_ordering",
+        index=0,
+    )
+
+    assert case.injected_text == "I has question about ingredients in the salad."
+    assert case.expected_error_types == ["subject_verb_agreement", "plural_noun", "article"]
+
+
 def test_score_grammar_result_handles_missing_grammar() -> None:
     case = next_error_case("meeting", 0)
 
@@ -130,3 +152,23 @@ def test_llm_virtual_user_uses_clean_llm_sentence() -> None:
     assert user.next_clean_turn(scenario_id="interview", history=[], index=0) == (
         "I recently improved a reporting API for my team."
     )
+
+
+def test_llm_virtual_user_prompt_uses_history_and_non_repeat_instruction() -> None:
+    llm = FakeLLMClient(responses=["I completed the risk review for the checkout flow."])
+    user = LLMVirtualUser(llm)
+
+    result = user.next_clean_turn(
+        scenario_id="meeting",
+        history=[
+            {"speaker": "ai", "text": "What did you finish last week?"},
+            {"speaker": "user", "text": "I finished the API review."},
+        ],
+        index=1,
+    )
+
+    prompt = llm.calls[0][-1].content
+    assert result == "I completed the risk review for the checkout flow."
+    assert "Do not repeat earlier learner replies" in prompt
+    assert "What did you finish last week?" in prompt
+    assert "grammar_shape_hint" in prompt

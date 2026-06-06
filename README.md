@@ -153,6 +153,7 @@ TTS_PROVIDER=kokoro \
 KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
 python3 scripts/run_conversation_bench.py \
   --mode grammar_tts \
+  --virtual-user llm \
   --scenario interview \
   --turns 10 \
   --output-dir /tmp/grammar-tts-report

@@ -35,8 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--virtual-user",
         choices=["template", "llm"],
-        default="template",
-        help="Virtual user source for grammar_tts, default: template.",
+        default="llm",
+        help="Virtual user source for grammar_tts, default: llm. Use template for deterministic regression runs.",
     )
     parser.add_argument(
         "--allow-fake-providers",

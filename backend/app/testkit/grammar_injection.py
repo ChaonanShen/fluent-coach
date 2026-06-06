@@ -32,22 +32,47 @@ def inject_errors(clean_text: str, *, scenario_id: str, index: int) -> GrammarEr
         expected_error_types.append("subject_verb_agreement")
         error_spans.append("has")
 
-    injected, changed = _replace_once(injected, r"\byears\b", "year")
-    if changed:
+    injected, changed, plural_span = _replace_first(
+        injected,
+        [
+            (r"\byears\b", "year"),
+            (r"\bquestions\b", "question"),
+            (r"\brisks\b", "risk"),
+            (r"\bpriorities\b", "priority"),
+            (r"\bblockers\b", "blocker"),
+            (r"\bupdates\b", "update"),
+            (r"\bsteps\b", "step"),
+            (r"\btasks\b", "task"),
+            (r"\bdecisions\b", "decision"),
+            (r"\bingredients\b", "ingredient"),
+            (r"\bonions\b", "onion"),
+            (r"\bitems\b", "item"),
+        ],
+    )
+    if changed and plural_span is not None:
         expected_error_types.append("plural_noun")
-        error_spans.append("year")
+        error_spans.append(plural_span)
 
-    for pattern, replacement in [
+    injected, changed, verb_span = _replace_first(injected, [
         (r"\bwent\b", "go"),
         (r"\bfinished\b", "finish"),
+        (r"\bcompleted\b", "complete"),
         (r"\bshared\b", "share"),
         (r"\bexplained\b", "explain"),
-    ]:
-        injected, changed = _replace_once(injected, pattern, replacement)
-        if changed:
-            expected_error_types.append("verb_tense")
-            error_spans.append(replacement)
-            break
+        (r"\bhandled\b", "handle"),
+        (r"\braised\b", "raise"),
+        (r"\bdecided\b", "decide"),
+        (r"\bconfirmed\b", "confirm"),
+        (r"\bordered\b", "order"),
+        (r"\basked\b", "ask"),
+        (r"\bworked\b", "work"),
+        (r"\breviewed\b", "review"),
+        (r"\bfocused\b", "focus"),
+        (r"\bmanaged\b", "manage"),
+    ])
+    if changed and verb_span is not None:
+        expected_error_types.append("verb_tense")
+        error_spans.append(verb_span)
 
     injected, changed = _remove_first_article(injected)
     if changed:
@@ -149,8 +174,16 @@ def _replace_once(text: str, pattern: str, replacement: str) -> tuple[str, bool]
     return updated, count > 0
 
 
+def _replace_first(text: str, replacements: list[tuple[str, str]]) -> tuple[str, bool, str | None]:
+    for pattern, replacement in replacements:
+        updated, changed = _replace_once(text, pattern, replacement)
+        if changed:
+            return updated, True, replacement
+    return text, False, None
+
+
 def _remove_first_article(text: str) -> tuple[str, str | None]:
-    match = re.search(r"\ba\s+([a-zA-Z]{3,})\b", text)
+    match = re.search(r"\b(?:a|an|the)\s+([a-zA-Z]{3,})\b", text)
     if match is None:
         return text, None
     return text[: match.start()] + match.group(1) + text[match.end() :], match.group(1)
