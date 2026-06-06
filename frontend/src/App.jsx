@@ -1161,8 +1161,13 @@ export default function App() {
                               const practiceTargets = pronunciationPracticeTargets(mistake);
                               return (
                                 <article className="mistake-item" key={mistake.id}>
-                                  <div>
+                                  <div className="mistake-item-header">
                                     <span>{mistake.subtype || mistake.type}</span>
+                                    <button className="delete-button mistake-item-delete" onClick={() => deleteMistake(mistake.id)} type="button">
+                                      Delete
+                                    </button>
+                                  </div>
+                                  <div className="mistake-item-body">
                                     <p>{mistake.wrong}</p>
                                     <strong>{mistake.correct}</strong>
                                     {mistake.explanation_zh ? (
@@ -1217,11 +1222,6 @@ export default function App() {
                                         ))}
                                       </div>
                                     ) : null}
-                                  </div>
-                                  <div className="mistake-actions">
-                                    <button className="delete-button" onClick={() => deleteMistake(mistake.id)} type="button">
-                                      Delete
-                                    </button>
                                   </div>
                                 </article>
                               );

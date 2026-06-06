@@ -691,6 +691,8 @@ test('shows saved mistake details without review actions', async () => {
   expect(screen.getByLabelText('Reading Practice')).toBeInTheDocument();
   fireEvent.click(await screen.findByRole('button', { name: /Open Job Interview/ }));
   expect(await screen.findByText('am working')).toBeInTheDocument();
+  expect(screen.getByText('am working').closest('.mistake-item').querySelector('.mistake-item-header .delete-button'))
+    .toHaveTextContent('Delete');
   expect(screen.getByText('I am working in this field since three years.')).toBeInTheDocument();
   expect(screen.getByText('时态错误。')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /Review/ })).not.toBeInTheDocument();

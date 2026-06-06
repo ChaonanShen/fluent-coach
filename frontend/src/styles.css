@@ -803,8 +803,15 @@ h3 {
   border: 1px solid #e3e8e4;
   border-radius: 8px;
   display: grid;
-  gap: 8px;
+  gap: 6px;
   padding: 10px;
+}
+
+.mistake-item-header {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
 }
 
 .mistake-item span {
@@ -814,6 +821,14 @@ h3 {
   font-weight: 750;
   margin-bottom: 4px;
   text-transform: uppercase;
+}
+
+.mistake-item-header span {
+  margin-bottom: 0;
+}
+
+.mistake-item-body {
+  min-width: 0;
 }
 
 .mistake-item p,
@@ -889,6 +904,10 @@ h3 {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.mistake-item-delete {
+  flex: 0 0 auto;
 }
 
 .mistake-read-action {
