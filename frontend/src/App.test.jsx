@@ -844,8 +844,10 @@ test('reassesses a pronunciation mistake without changing the saved mistake', as
   expect(await screen.findByRole('button', { name: 'Stop word recording' })).toHaveTextContent('');
   fireEvent.click(screen.getByRole('button', { name: 'Stop word recording' }));
 
-  expect(await screen.findByText('Word: systems')).toBeInTheDocument();
-  expect(await screen.findByLabelText('Practice result')).toHaveTextContent('Overall 50');
+  const wordScores = await screen.findByLabelText('Practice result');
+  const wordResult = wordScores.closest('.mistake-practice-result');
+  expect(wordScores).toHaveTextContent('Overall 50');
+  expect(wordResult).not.toHaveTextContent('Word:');
   expect(screen.getByRole('button', { name: 'Clear word practice result' })).toBeInTheDocument();
   expect(screen.getAllByText('systems').length).toBeGreaterThan(0);
   expect(screen.getByRole('button', { name: 'Pronunciation 1' })).toBeInTheDocument();
@@ -859,7 +861,10 @@ test('reassesses a pronunciation mistake without changing the saved mistake', as
   fireEvent.click(screen.getByRole('button', { name: 'Record sentence' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Stop sentence recording' }));
 
-  expect(await screen.findByText('Practice sentence: The team reviewed the backend systems before launch.')).toBeInTheDocument();
+  const sentenceScores = await screen.findByLabelText('Practice result');
+  const sentenceResult = sentenceScores.closest('.mistake-practice-result');
+  expect(sentenceScores).toHaveTextContent('Overall 50');
+  expect(sentenceResult).not.toHaveTextContent('Practice sentence:');
   expect(screen.getByRole('button', { name: 'Clear sentence practice result' })).toBeInTheDocument();
   const nextUploadCalls = global.fetch.mock.calls.filter(([url]) => url === '/api/pronunciation/practice/upload');
   expect(JSON.parse(nextUploadCalls.at(-1)[1].body)).toMatchObject({

@@ -1226,8 +1226,6 @@ export default function App() {
                                                 <PronunciationResult
                                                   ariaLabel="Practice result"
                                                   assessment={mistakePracticeResults[mistake.id][target.type].assessment}
-                                                  referenceLabel={target.resultLabel}
-                                                  referenceText={mistakePracticeResults[mistake.id][target.type].referenceText}
                                                 />
                                               </div>
                                             ) : null}
@@ -1896,7 +1894,6 @@ function pronunciationPracticeTargets(mistake) {
       type: 'word',
       label: 'Word:',
       text: wordTarget,
-      resultLabel: 'Word',
     });
   }
   if (sentenceTarget) {
@@ -1904,7 +1901,6 @@ function pronunciationPracticeTargets(mistake) {
       type: 'sentence',
       label: 'Practice sentence:',
       text: sentenceTarget,
-      resultLabel: 'Practice sentence',
     });
   }
   return targets;
