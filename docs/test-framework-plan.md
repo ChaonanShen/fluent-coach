@@ -19,8 +19,9 @@ ws_driver 每轮采集三类数据  ──►  一份结构化 RunRecord(JSON, �
 独立只读面板(单独 FastAPI app) 读 reports/runs/*.json + 回放音频 → 表格 + 延迟分位图
 ```
 
-> **要点**:系统已用 SQLite 持久化了 session/turn(含 `audio_path`)/grammar/pronunciation
-> ([storage.py](../backend/app/services/storage.py)),`/api/sessions/{id}/analysis` 能拉到 grammar+pronunciation+errors。
+> **要点**:系统已用 SQLite 持久化了 session/turn(含 `audio_path`)以及部分分析结果
+> ([storage.py](../backend/app/services/storage.py));当前 `/api/sessions/{id}/analysis` 读的是进程内
+> `analysis_store`,适合同一进程 bench driver 二次校准 grammar/pronunciation/errors,不适合跨进程补拉历史分析。
 > **唯独"延迟"没落盘**——只在 WS `debug.timing` 事件里飘过。bench 框架的核心价值之一,
 > 就是把"音频+评测+延迟"合并成一份可回放、可对比的 RunRecord。
 
@@ -30,8 +31,8 @@ ws_driver 每轮采集三类数据  ──►  一份结构化 RunRecord(JSON, �
 自动"假用户":给它"场景 + AI 上一句",生成下一句用户台词,自动跑几十轮。两通道:
 - **文本通道**:`/turns/text`,快,但**非流式**,测不到 TTFT/ITL,仅用于对话/语法正确性。
 - **语音通道(时延 bench 主路径)**:用户文字 → 假音频字节 + `expected_text`(离线 FakeASR)
-  或 TTS 合成真音频(真实档)→ 喂进 `WS /ws/sessions/{id}/audio`,跑通
-  transcode + faster-whisper + 腾讯 SOE + LLM 流式的完整链路与真实时延。
+  或 fixture/TTS 真音频(真实档)→ 喂进 `WS /ws/sessions/{id}/audio`,跑通
+  transcode + ASR + LLM 流式 + 语法分析,真实档可显式开启腾讯 SOE 发音评测。
 
 关键技巧:虚拟用户可**植入已知错误**(生成带错台词,同时给出正确版本)→ 手里就有 ground truth,
 不需裁判也能算"语法纠错抓没抓到"。TTS→ASR 还白送 ASR 的 WER ground truth(TTS 嗓音 ≠ 真人口音,
@@ -45,7 +46,7 @@ bench **只采集、不重新埋点**。已在测的段:
 |---|---|
 | 音频落盘/转码 | `audio_write_ms`、`audio_transcode_ms`、`audio_total_ms` |
 | 本地 ASR | `asr_ms`、`end_turn_to_asr_final_ms` |
-| LLM 对话 | `reply_first_delta_ms`(**= TTFT,已测**)、`dialogue_reply_ms`、`end_turn_to_reply_text_ms` |
+| LLM 对话 | 流式时有 `reply_first_delta_ms`(**= TTFT**)、`dialogue_reply_ms`、`end_turn_to_reply_text_ms` |
 | 语法纠错 | grammar 段 `debug.timing`(总时长) |
 | 发音(腾讯 SOE) | pronunciation 段 `debug.timing` |
 
@@ -88,21 +89,24 @@ bench **只采集、不重新埋点**。已在测的段:
     "index": 0,
     "input":  { "audio_path": ".local/audio/.../x.wav", "asr_text": "...", "expected_text": "..." },
     "outputs":{ "reply_text": "...", "grammar": {...}, "pronunciation": {...}, "errors": [...] },
-    "timings_ms": { "audio_transcode": .., "asr": .., "reply_first_delta": .., "reply_itl": ..,
-                    "dialogue_reply": .., "grammar": .., "pronunciation": .., "end_turn_to_reply_text": .. },
+    "timings_ms": { "audio_transcode_ms": .., "asr_ms": .., "reply_first_delta_ms": .., "reply_itl_ms": ..,
+                    "dialogue_reply_ms": .., "grammar_ms": .., "pronunciation_ms": ..,
+                    "end_turn_to_reply_text_ms": .. },
     "wer": 0.0
   }],
   "latency_summary": { "<segment>": { "p50":.., "p90":.., "p95":.., "max":.., "mean":.., "count":.. } }
 }
 ```
-bench 数据**只写 `reports/runs/`,不进产品 SQLite**(保持解耦)。grammar/pronunciation 通过
-`GET /api/sessions/{id}/analysis` 拉取后并入 RunRecord;音频路径来自 WS 回合保存的 `.local/audio/...`。
+RunRecord **只写 `reports/runs/`,不进产品 SQLite**(保持解耦)。bench 跑 WS 时仍会创建产品
+session/turn,因此默认会进入当前 `APP_DB_PATH`;如需完全隔离,脚本/测试必须在 import app 前设置独立
+`APP_DB_PATH`。grammar/pronunciation 可通过同进程 WS 事件或 `GET /api/sessions/{id}/analysis`
+并入 RunRecord;音频路径来自 WS 回合保存的 `.local/audio/...`。
 
 ## 4. 第一阶段实施计划(时延档 + run 记录 + 只读面板)
 
 ### 改动 1(很小的生产改动):WS 流式循环补 ITL
-- 在 [main.py 的 `reply.delta` 循环](../backend/app/main.py)里数 delta 个数、记总流时长,算
-  `reply_itl_ms = (reply_total_stream_ms - reply_first_delta_ms) / max(delta_count - 1, 1)`,
+- 在 [main.py 的 `reply.delta` 循环](../backend/app/main.py)里数 delta 个数、记录首/末 delta 时间,算
+  `reply_itl_ms = (last_delta_at - first_delta_at) / max(delta_count - 1, 1)`,
   连同 `reply_delta_count`、`reply_total_stream_ms` 塞进 `timings`。其余不动。**本档唯一生产改动。**
 
 ### 改动 2(纯新增 testkit / script,零生产侵入)
@@ -110,8 +114,9 @@ bench 数据**只写 `reports/runs/`,不进产品 SQLite**(保持解耦)。gramm
   (`start_turn{expected_text}` → 发非空假音频 → `end_turn` → 读 `asr.final`/`reply.done`/`debug.timing`),
   再 `GET /api/sessions/{id}/analysis` 并入 grammar/pronunciation/errors → 组装 RunRecord。
   - 离线确定性:`ASR_PROVIDER=fake`(transcript=expected_text)+ 给 `dialogue_service` 注入 `FakeLLMClient`
-    走流式 → 所有时延键齐全。`--real`:真实 faster-whisper + deepseek + 腾讯 SOE。
-  - 台词:`scripted` 复用 `dialogue_samples` 的 user 轮(确定性);超出则循环。
+    + 使用**不命中** `dialogue_samples` 的固定台词,保证走流式 → TTFT/ITL 等键齐全。
+  - `--real`:必须先 `load_dotenv()` 再 import app/provider 单例;音频不能再用假 bytes,需使用 fixture wav
+    或后续 TTS 合成真音频,并可显式开启腾讯 SOE。
 - `backend/app/testkit/run_store.py`:RunRecord 读写 `reports/runs/<id>.json`。
 - `backend/app/testkit/report.py`:跨轮算 p50/p90/p95/max/mean → 填 `latency_summary`,并出 `reports/bench-latest.{json,md}` 汇总。
 - `backend/app/testkit/dashboard.py` + `dashboard/index.html`:独立只读面板(见 §2)。
@@ -129,9 +134,9 @@ bench 数据**只写 `reports/runs/`,不进产品 SQLite**(保持解耦)。gramm
 
 ### 验证
 - `make test` 全绿、离线。
-- `python3 scripts/run_conversation_bench.py --scenario interview --turns 10` → `reports/runs/<id>.json` + `reports/bench-latest.md`,各段 p50/p90 有值。
-- `python3 scripts/bench_dashboard.py` → 浏览器看 run 列表、每轮表格(音频回放 + ASR + 回复 + 发音分)+ 延迟分位图。
-- `... --turns 10 --real` → TTFT/ITL/ASR/腾讯发音段为真实数值。
+- `python3 scripts/run_conversation_bench.py --scenario interview --turns 10` → `reports/runs/<id>.json` + `reports/bench-latest.md`,离线段 p50/p90 有值。
+- `python3 scripts/bench_dashboard.py` → 浏览器看 run 列表、每轮表格(音频回放 + ASR + 回复 + 语法;真实/显式发音档含发音分)+ 延迟分位图。
+- `... --turns 10 --real` → 需真实音频输入、`.env`、本地 ASR 模型;TTFT/ITL/ASR/可选腾讯发音段为真实数值。
 
 ### 提交节奏(小步直提 master)
 ① WS ITL(生产)+ 测试 → ② ws_driver + run_store + report + CLI + 测试 → ③ 只读面板 dashboard + 启动脚本 + 测试。

@@ -11,7 +11,7 @@
   - Server→Client 事件:`asr.partial`、`asr.final`、`reply.text`(非流式)/`reply.delta`+`reply.done`(流式)、`debug.timing`(stage ∈ {asr,reply,grammar,pronunciation})、`analysis.pending`、`analysis.result`(含 `stage`/`turn_id`/`result`)、`analysis.error`、`error`。
   - **流式触发条件**(三者全真才流式,见 `dialogue_service.generate_reply_stream` [`dialogue.py:95`](../backend/app/services/dialogue.py#L95)):台词**不命中** `dialogue_samples` fixture **且** `llm_client is not None` **且** client 有 `stream_complete`。否则走非流式 `reply.text`,**无 TTFT/ITL**。
 - **TestClient WS 用法**(镜像 [`tests/backend/test_audio_websocket.py`](../tests/backend/test_audio_websocket.py)):`TestClient(app).websocket_connect(f"/ws/sessions/{sid}/audio")`,`send_json`/`send_bytes`/`receive_json`。建 session:`POST /api/sessions {"scenario_id":...}`。
-- **评测数据拉取**:`GET /api/sessions/{id}/analysis` → `SessionAnalysisResponse{session_id, grammar_results[], pronunciation_results[], errors[]}`(见 `backend/app/api.py`)。grammar/pronunciation 也实时通过 `analysis.result` 事件回传(含 `turn_id`)。
+- **评测数据拉取**:`GET /api/sessions/{id}/analysis` → `SessionAnalysisResponse{session_id, grammar_results[], pronunciation_results[], errors[]}`(见 `backend/app/api.py`)。该接口当前读进程内 `analysis_store`,适合同一进程 bench driver 兜底校准;跨进程历史回放以 RunRecord 为准。grammar/pronunciation 也实时通过 `analysis.result` 事件回传(含 `turn_id`)。
 - **音频落盘**:`save_turn_audio` 写 `.local/audio/<session>/<uuid>.<ext>`,`stored_audio.preferred_path`;`Turn.audio_path` 记录该路径。
 - **音频回合发音评测默认关闭**:`_should_assess_audio_turn_pronunciation()` [`main.py:1053`](../backend/app/main.py#L1053) 在 mock provider 下返回 False。→ **离线默认不跑发音段**;发音延迟仅在 `--real`(腾讯 SOE)或显式 `PRON_ASSESS_AUDIO_TURNS=1` 下采集。
 - **ITL 缺失点**:流式 `else` 分支 [`main.py:569-627`](../backend/app/main.py#L569) 只记了 `reply_first_delta_ms`,没数 delta 个数 / 总流时长。
@@ -29,19 +29,24 @@
 ## 2. C1 — WS 流式补 ITL
 
 ### 2.1 改 `backend/app/main.py` 流式 `else` 分支(约 576-627 行)
-在进入 delta 循环前初始化计数,循环内累加,循环后算 ITL:
+在进入 delta 循环前初始化计数,循环内记录首/末 delta 时间,循环后算 ITL:
 ```python
 reply_text_parts: list[str] = []
 first_delta = True
 delta_count = 0                       # NEW
-stream_started = time.perf_counter()  # NEW（首 delta/总时长基准已有 dialogue_started，可复用，但单独基准更准）
+stream_started = time.perf_counter()  # NEW
+first_delta_at = None                 # NEW
+last_delta_at = None                  # NEW
 try:
     for chunk in stream_reply.chunks:
         if not chunk:
             continue
+        now = time.perf_counter()     # NEW
         if first_delta:
             timings["reply_first_delta_ms"] = _elapsed_ms(dialogue_started)
             first_delta = False
+            first_delta_at = now      # NEW
+        last_delta_at = now           # NEW
         delta_count += 1              # NEW
         reply_text_parts.append(chunk)
         await websocket.send_json({...})  # 不变
@@ -50,9 +55,9 @@ except Exception:
 # 循环后、在 timings["dialogue_reply_ms"] 附近：
 timings["reply_delta_count"] = delta_count                                   # NEW
 timings["reply_total_stream_ms"] = _elapsed_ms(stream_started)               # NEW
-if delta_count > 1 and "reply_first_delta_ms" in timings:                    # NEW
+if delta_count > 1 and first_delta_at is not None and last_delta_at is not None: # NEW
     timings["reply_itl_ms"] = round(
-        (timings["reply_total_stream_ms"] - timings["reply_first_delta_ms"]) / (delta_count - 1), 3
+        ((last_delta_at - first_delta_at) * 1000.0) / (delta_count - 1), 3
     )
 ```
 - 非流式分支(`reply.text`)不加这些键(本就无 token 流)。
@@ -125,12 +130,13 @@ def run_ws_conversation(
      - `analysis.error` → errors.append
      - `error` → 记录并中止该轮
    - **停止条件**:已收到 reply 终态(`reply.done`/`reply.text`)**且**收到一条 grammar 的 `analysis.result`/`analysis.error`(grammar 必有);若发音段开启,再等 pronunciation 终态。设最大读取次数兜底防卡。
-3. 离线模式:函数入口注入 `dialogue_service.llm_client = FakeLLMClient([...])`(用多词响应),保证流式;`ASR_PROVIDER` 由调用方设 `fake`。
+3. 离线模式:函数入口注入 `main.asr_provider = FakeASR()` 和 `main.dialogue_service.llm_client = FakeLLMClient([...])`(用多词响应),保证流式;结束后用 `try/finally` 还原。
 4. 兜底:也可 `GET /api/sessions/{id}/analysis` 二次校准 grammar/pronunciation(防事件竞态)。
 5. `audio_path` 从 session 的最新 user turn 取(`session_store.get(sid).turns[-2].audio_path`),或从 `analysis`/turn 列表关联。
 6. 返回 `list[TurnRecord]`(`generated_at`/`run_id` 由 CLI 脚本 stamp)。
 
-> 说明:driver 不污染产品 DB;它只读 `/api/sessions/{id}/analysis` 与 WS 事件。注入的 FakeLLM 在函数结束后应还原(try/finally)。
+> 说明:RunRecord 不写产品 DB,但 WS 创建的 session/turn 仍会按当前 `APP_DB_PATH` 写 SQLite。
+> 测试需在 import app 前或通过 monkeypatch 隔离 `APP_AUDIO_DIR`/`APP_DB_PATH`;脚本可接受写入默认本地 `.local`。
 
 ### 3.4 `backend/app/testkit/report.py` — 聚合
 ```python
@@ -143,16 +149,19 @@ def render_markdown(run: RunRecord) -> str                     # 汇总表 + 各
 
 ### 3.5 `backend/app/testkit/run_store.py` — RunRecord 读写
 ```python
-RUNS_DIR = Path(os.environ.get("BENCH_RUNS_DIR", "reports/runs"))
+DEFAULT_RUNS_DIR = Path("reports/runs")
+def runs_dir() -> Path: return Path(os.environ.get("BENCH_RUNS_DIR", str(DEFAULT_RUNS_DIR)))
 def save_run(run: RunRecord) -> Path           # reports/runs/<run_id>.json
 def load_run(run_id: str) -> RunRecord
 def list_runs() -> list[dict]                  # [{run_id, scenario_id, mode, generated_at, turn_count}]
 ```
+- `BENCH_RUNS_DIR` 必须运行时读取,不能 import 时固定,否则 dashboard/run_store 测试 monkeypatch 不稳定。
 
 ### 3.6 `scripts/run_conversation_bench.py` — CLI
 - 参数:`--scenario {interview,restaurant_ordering,meeting}`、`--turns N`、`--transcript-source scripted`、`--real`、`--output-dir reports`。
-- 默认(无 `--real`):`os.environ["ASR_PROVIDER"]="fake"`,driver 注入 FakeLLM;`mode="offline_fake"`。
-- `--real`:`load_dotenv()`,不注入 FakeLLM(用 env 配置的真实 client),`mode="real"`;`run_id` 含时间戳(脚本侧 `datetime.now`)。
+- 默认(无 `--real`):在 import app 前设置 `ASR_PROVIDER=fake`、`LLM_PROVIDER=fake`、`PRON_PROVIDER=mock`;driver 再注入 FakeASR/FakeLLM;`mode="offline_fake"`。
+- `--real`:必须先 `load_dotenv()` 再 import `backend.app.main`,不注入 FakeLLM(用 env 配置的真实 client),`mode="real"`;`run_id` 含时间戳(脚本侧 `datetime.now`)。
+- `--real` 不能使用假 bytes;第一阶段可先要求 `--audio-dir/--audio-file` fixture wav 输入,无真实音频则直接报错并提示后续 TTS 真实档。
 - 流程:`run_ws_conversation` → `build_run_record`(stamp generated_at/run_id/providers=`provider_status()`)→ `save_run` → 同时写 `reports/bench-latest.{json,md}`(`render_markdown`)。
 - 打印 run 路径与各段 p50/p90 摘要。
 
@@ -175,9 +184,9 @@ dashboard_app = FastAPI(title="XEngineer Bench Dashboard")
 @dashboard_app.get("/api/runs")                 -> run_store.list_runs()
 @dashboard_app.get("/api/runs/{run_id}")        -> run_store.load_run(run_id).model_dump()
 @dashboard_app.get("/api/runs/{run_id}/turns/{i}/audio")
-    # 读 RunRecord.turns[i].audio_path；校验路径在允许根（.local/audio 或 reports）内防穿越；FileResponse
+    # 读 RunRecord.turns[i].audio_path；校验路径在允许根（.local/audio、APP_AUDIO_DIR 或 reports）内防穿越；FileResponse
 ```
-- 路径白名单校验:`resolve()` 后必须位于 `Path('.local/audio').resolve()` 或 `RUNS_DIR.resolve()` 之下,否则 404。
+- 路径白名单校验:`resolve()` 后必须位于 `Path('.local/audio').resolve()`、`APP_AUDIO_DIR` 或 `runs_dir()` 之下,否则 404。
 
 ### 4.2 `backend/app/testkit/dashboard/index.html` — 单文件静态页(无构建)
 - 原生 JS `fetch('/api/runs')` 列表 → 选中 `fetch('/api/runs/{id}')`。
@@ -204,14 +213,14 @@ uvicorn.run(dashboard_app, host="127.0.0.1", port=int(os.environ.get("BENCH_DASH
 
 ### 离线/确定性保证
 - 新测试均默认 marker;不联网、不依赖 mic、不读真实 key。
-- driver 注入 FakeLLM + `ASR_PROVIDER=fake`;发音段离线默认关闭(不进 RunRecord,面板容忍缺失)。
+- driver 注入 FakeASR/FakeLLM;发音段离线默认关闭(不进 RunRecord,面板容忍缺失)。
 - 脚本侧才用 `datetime.now()`(库 `testkit` 内不调时间随机,保持可测)。
 
 ### 验证清单
 1. `make test` 全绿。
 2. `python3 scripts/run_conversation_bench.py --scenario interview --turns 10` → `reports/runs/<id>.json` + `reports/bench-latest.md`;各段(transcode/asr/TTFT/ITL/dialogue/grammar)p50/p90 有值。
 3. `python3 scripts/bench_dashboard.py` → 浏览器 `http://127.0.0.1:8100/`:run 列表、每轮表格(音频回放 + asr + reply + grammar)、延迟分位图。
-4. `... --turns 10 --real`(需 `.env` + 本地模型 + `PRON_ASSESS_AUDIO_TURNS=1` 看发音)→ TTFT/ITL/asr_ms/pronunciation_ms 为真实数值。
+4. `... --turns 10 --real --audio-dir fixtures/audio/public/...`(需 `.env` + 本地模型 + 真实音频;`PRON_ASSESS_AUDIO_TURNS=1` 看发音)→ TTFT/ITL/asr_ms/pronunciation_ms 为真实数值。
 
 ### 文件清单(新增/改)
 ```
