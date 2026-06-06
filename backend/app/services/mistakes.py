@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from backend.app.models import (
     GrammarCorrection,
     MistakeItem,
@@ -106,7 +108,7 @@ class MistakeService:
                 wrong=issue.target,
                 correct=issue.target,
                 explanation_zh=issue.message_zh,
-                practice_sentence=assessment.reference_text,
+                practice_sentence=_pronunciation_practice_sentence(issue.target),
                 word=issue.target,
                 mastery=0.1,
             )
@@ -152,6 +154,12 @@ class MistakeService:
             mistake = mistake.model_copy(update={"last_seen_at": mistake.created_at})
         self.storage.save_mistake_item(mistake)
         return mistake
+
+
+def _pronunciation_practice_sentence(word: str) -> str:
+    clean_word = re.sub(r"[^A-Za-z'-]+", " ", word).strip()
+    target = clean_word or word.strip() or "this word"
+    return f"Please say {target} clearly in this short sentence."
 
 
 mistake_service = MistakeService()

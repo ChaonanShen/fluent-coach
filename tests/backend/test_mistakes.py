@@ -67,6 +67,9 @@ def test_pronunciation_assessment_generates_pronunciation_mistakes() -> None:
     pronunciation = [mistake for mistake in mistakes if mistake["type"] == "pronunciation"]
     assert pronunciation
     assert {mistake["word"].lower() for mistake in pronunciation} >= {"theme"}
+    theme = next(mistake for mistake in pronunciation if mistake["word"].lower() == "theme")
+    assert theme["practice_sentence"] != response.json()["reference_text"]
+    assert "theme" in theme["practice_sentence"].lower()
 
 
 def test_review_mistake_updates_count_and_mastery() -> None:
