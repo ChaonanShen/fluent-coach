@@ -658,20 +658,7 @@ export default function App() {
       return;
     }
     setError('');
-    setMistakePracticeResults((current) => {
-      const currentTargets = current[mistake.id] || {};
-      const next = {
-        ...current,
-        [mistake.id]: {
-          ...currentTargets,
-        },
-      };
-      delete next[mistake.id][targetType];
-      if (!Object.keys(next[mistake.id]).length) {
-        delete next[mistake.id];
-      }
-      return next;
-    });
+    setMistakePracticeResults((current) => removeMistakePracticeResult(current, mistake.id, targetType));
     mistakeReadingCanceledRef.current = false;
     setMistakeReadingState({ mistakeId: mistake.id, targetType, status: 'requesting' });
     try {
@@ -782,6 +769,10 @@ export default function App() {
     }));
     setMistakeReadingState({ mistakeId: null, targetType: null, status: 'idle' });
     stopMistakeReadingStream();
+  }
+
+  function clearMistakePracticeResult(mistakeId, targetType) {
+    setMistakePracticeResults((current) => removeMistakePracticeResult(current, mistakeId, targetType));
   }
 
   function stopMistakeReadingStream() {
@@ -1193,7 +1184,7 @@ export default function App() {
                                                   title={`Play ${target.type} pronunciation`}
                                                   type="button"
                                                 >
-                                                  ▶
+                                                  <PlayIcon />
                                                 </button>
                                                 <button
                                                   aria-label={mistakeReadingAriaLabel(mistakeReadingState, mistake.id, target.type)}
@@ -1222,12 +1213,23 @@ export default function App() {
                                               </p>
                                             </div>
                                             {mistakePracticeResults[mistake.id]?.[target.type] ? (
-                                              <PronunciationResult
-                                                ariaLabel="Practice result"
-                                                assessment={mistakePracticeResults[mistake.id][target.type].assessment}
-                                                referenceLabel={target.resultLabel}
-                                                referenceText={mistakePracticeResults[mistake.id][target.type].referenceText}
-                                              />
+                                              <div className="mistake-practice-result">
+                                                <button
+                                                  aria-label={`Clear ${target.type} practice result`}
+                                                  className="icon-action clear-practice-result-action"
+                                                  onClick={() => clearMistakePracticeResult(mistake.id, target.type)}
+                                                  title={`Clear ${target.type} practice result`}
+                                                  type="button"
+                                                >
+                                                  <ClearIcon />
+                                                </button>
+                                                <PronunciationResult
+                                                  ariaLabel="Practice result"
+                                                  assessment={mistakePracticeResults[mistake.id][target.type].assessment}
+                                                  referenceLabel={target.resultLabel}
+                                                  referenceText={mistakePracticeResults[mistake.id][target.type].referenceText}
+                                                />
+                                              </div>
                                             ) : null}
                                           </div>
                                         ))}
@@ -1529,6 +1531,22 @@ function replaceTurnId(session, oldId, newId) {
     ...session,
     turns: session.turns.map((existing) => (existing.id === oldId ? { ...existing, id: newId } : existing)),
   };
+}
+
+function removeMistakePracticeResult(results, mistakeId, targetType) {
+  const currentTargets = results[mistakeId] || {};
+  if (!currentTargets[targetType]) {
+    return results;
+  }
+  const nextTargets = { ...currentTargets };
+  delete nextTargets[targetType];
+  const nextResults = { ...results };
+  if (Object.keys(nextTargets).length) {
+    nextResults[mistakeId] = nextTargets;
+  } else {
+    delete nextResults[mistakeId];
+  }
+  return nextResults;
 }
 
 function rekeyById(items, oldId, newId) {
@@ -1917,15 +1935,15 @@ function mistakeReadingAriaLabel(state, mistakeId, targetType) {
 
 function mistakeReadingIcon(state, mistakeId, targetType) {
   if (isCurrentMistakeReading(state, mistakeId, targetType, 'recording')) {
-    return '■';
+    return <StopIcon />;
   }
   if (
     isCurrentMistakeReading(state, mistakeId, targetType, 'assessing')
     || isCurrentMistakeReading(state, mistakeId, targetType, 'requesting')
   ) {
-    return '...';
+    return <PendingIcon />;
   }
-  return '●';
+  return <MicIcon />;
 }
 
 function isOtherMistakeReading(state, mistakeId, targetType) {
@@ -1944,6 +1962,67 @@ function isMistakeReadingDisabled(state, mistakeId, targetType) {
     state.mistakeId === mistakeId
     && state.targetType === targetType
     && !['idle', 'recording'].includes(state.status)
+  );
+}
+
+function PlayIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16">
+      <path d="M5 3.7v8.6L11.7 8 5 3.7z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function MicIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16">
+      <path
+        d="M8 2.2a2 2 0 0 0-2 2v3.4a2 2 0 0 0 4 0V4.2a2 2 0 0 0-2-2z"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.5"
+      />
+      <path
+        d="M3.8 7.2a4.2 4.2 0 0 0 8.4 0M8 11.4v2.4M6.2 13.8h3.6"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
+
+function StopIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16">
+      <rect fill="currentColor" height="7" rx="1" width="7" x="4.5" y="4.5" />
+    </svg>
+  );
+}
+
+function PendingIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16">
+      <circle cx="4.5" cy="8" fill="currentColor" r="1" />
+      <circle cx="8" cy="8" fill="currentColor" r="1" />
+      <circle cx="11.5" cy="8" fill="currentColor" r="1" />
+    </svg>
+  );
+}
+
+function ClearIcon() {
+  return (
+    <svg aria-hidden="true" focusable="false" viewBox="0 0 16 16">
+      <path
+        d="m4.5 4.5 7 7m0-7-7 7"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.7"
+      />
+    </svg>
   );
 }
 

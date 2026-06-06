@@ -900,7 +900,7 @@ h3 {
   align-items: center;
   display: flex;
   flex: 0 0 auto;
-  gap: 6px;
+  gap: 4px;
 }
 
 .icon-action {
@@ -911,13 +911,18 @@ h3 {
   color: #2f4e47;
   cursor: pointer;
   display: inline-flex;
-  font-size: 0.78rem;
   font-weight: 800;
-  height: 34px;
+  height: 26px;
   justify-content: center;
   line-height: 1;
   padding: 0;
-  width: 34px;
+  width: 26px;
+}
+
+.icon-action svg {
+  display: block;
+  height: 14px;
+  width: 14px;
 }
 
 .icon-action:hover {
@@ -934,6 +939,30 @@ h3 {
   background: #fff7f5;
   border-color: #efc8c0;
   color: #8a3a2d;
+}
+
+.mistake-practice-result {
+  margin-top: 8px;
+  position: relative;
+}
+
+.mistake-practice-result .pronunciation-result {
+  padding-right: 28px;
+}
+
+.clear-practice-result-action {
+  background: #fff;
+  height: 24px;
+  position: absolute;
+  right: 4px;
+  top: 4px;
+  width: 24px;
+  z-index: 1;
+}
+
+.clear-practice-result-action svg {
+  height: 12px;
+  width: 12px;
 }
 
 .mistake-practice-target-text {

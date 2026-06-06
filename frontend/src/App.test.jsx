@@ -833,33 +833,40 @@ test('reassesses a pronunciation mistake without changing the saved mistake', as
   expect(screen.getByText('systems').closest('.mistake-item').querySelector('strong')).toBeNull();
   expect(screen.getByRole('button', { name: 'Play word pronunciation' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Play sentence pronunciation' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Record word' })).toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Record sentence' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Record word' })).toHaveTextContent('');
+  expect(screen.getByRole('button', { name: 'Record sentence' })).toHaveTextContent('');
   window.speechSynthesis.speak.mockClear();
   fireEvent.click(screen.getByRole('button', { name: 'Play word pronunciation' }));
   await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalled());
   expect(window.speechSynthesis.speak.mock.calls.at(-1)[0].text).toBe('systems');
   fireEvent.click(screen.getByRole('button', { name: 'Record word' }));
   await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Stop word recording' }));
+  expect(await screen.findByRole('button', { name: 'Stop word recording' })).toHaveTextContent('');
+  fireEvent.click(screen.getByRole('button', { name: 'Stop word recording' }));
 
   expect(await screen.findByText('Word: systems')).toBeInTheDocument();
   expect(await screen.findByLabelText('Practice result')).toHaveTextContent('Overall 50');
+  expect(screen.getByRole('button', { name: 'Clear word practice result' })).toBeInTheDocument();
   expect(screen.getAllByText('systems').length).toBeGreaterThan(0);
   expect(screen.getByRole('button', { name: 'Pronunciation 1' })).toBeInTheDocument();
   const uploadCalls = global.fetch.mock.calls.filter(([url]) => url === '/api/pronunciation/practice/upload');
   expect(JSON.parse(uploadCalls.at(-1)[1].body)).toMatchObject({
     reference_text: 'systems',
   });
+  fireEvent.click(screen.getByRole('button', { name: 'Clear word practice result' }));
+  await waitFor(() => expect(screen.queryByLabelText('Practice result')).not.toBeInTheDocument());
 
   fireEvent.click(screen.getByRole('button', { name: 'Record sentence' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Stop sentence recording' }));
 
   expect(await screen.findByText('Practice sentence: The team reviewed the backend systems before launch.')).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Clear sentence practice result' })).toBeInTheDocument();
   const nextUploadCalls = global.fetch.mock.calls.filter(([url]) => url === '/api/pronunciation/practice/upload');
   expect(JSON.parse(nextUploadCalls.at(-1)[1].body)).toMatchObject({
     reference_text: 'The team reviewed the backend systems before launch.',
   });
+  fireEvent.click(screen.getByRole('button', { name: 'Clear sentence practice result' }));
+  await waitFor(() => expect(screen.queryByLabelText('Practice result')).not.toBeInTheDocument());
 });
 
 test('selects all mistake books and bulk deletes them', async () => {
