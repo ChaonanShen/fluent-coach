@@ -141,9 +141,121 @@ session/turn,因此默认会进入当前 `APP_DB_PATH`;如需完全隔离,脚本
 ### 提交节奏(小步直提 master)
 ① WS ITL(生产)+ 测试 → ② ws_driver + run_store + report + CLI + 测试 → ③ 只读面板 dashboard + 启动脚本 + 测试。
 
-## 5. 后续阶段(不在时延档)
-- 语音真实档:TTS → WS → 真实 faster-whisper / 腾讯 SOE 端到端时延 + WER。
-- 虚拟用户 persona + 已知错误注入 → 语法 precision/recall。
-- 裁判 + rubric + fixture 标定 → 开放维度打分。
+## 5. 第二阶段目标:grammar_tts 全自动 bench
+
+第一阶段已经能自动驱动 WS、记录 RunRecord、展示只读面板。第二阶段要把 bench 从"固定台词/人工音频"
+升级为**真正无人值守的语法错误对话 bench**:
+
+```text
+AI/模板虚拟用户生成一句自然回复(clean_text)
+      │
+确定性错误注入器把 clean_text 改成带语法/表达错误的 injected_text
+      │        同时产出 ground truth: expected_corrected_text + expected_error_types
+      ▼
+本地 Kokoro TTS 把 injected_text 合成为音频 bytes
+      │
+喂给 WS /ws/sessions/{id}/audio
+      │
+真实链路: 音频落盘/转码 → faster-whisper ASR → 对话 LLM 流式回复 → grammar_service 纠错
+      ▼
+RunRecord 记录: clean/injected/asr/reply/grammar/timing/grammar 命中率
+```
+
+### 明确边界
+
+- **本阶段只测语法/表达错误**。TTS 发音通常标准,不适合制造真实发音错误;发音错误检测单独用
+  L2-ARCTIC / SpeechOcean / 真人录音做 pronunciation eval。
+- `grammar_tts` 是真实链路 bench,默认应使用真实 ASR、真实对话 LLM、本地/云端 TTS。单测仍用 mock/fake
+  provider 保持 `make test` 离线。
+- 错误 ground truth 不能靠 LLM 自说自话,必须由**确定性错误注入器**生成,这样才能算 recall/precision。
+
+### 本地 TTS 选型
+
+当前本地模型目录:
+
+```text
+models/tts/Kokoro-82M/
+  kokoro-v1_0.pth
+  voices/af_heart.pt
+  config.json
+```
+
+第二阶段先接 `TTS_PROVIDER=kokoro`,用 Kokoro 作为服务端本地 TTS。它和 faster-whisper 类似:
+
+```text
+faster-whisper: 音频 -> 本地 ASR 模型 -> 文本
+kokoro:         文本 -> 本地 TTS 模型 -> wav 音频
+```
+
+环境变量建议:
+
+```bash
+TTS_PROVIDER=kokoro
+KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M
+KOKORO_VOICE=af_heart
+KOKORO_LANG_CODE=a
+KOKORO_SAMPLE_RATE=24000
+```
+
+### 新增 RunRecord 字段
+
+在现有 `TurnRecord` 上追加可选字段,保持兼容旧 run:
+
+```jsonc
+{
+  "clean_text": "I have three years of experience.",
+  "injected_text": "I has three year experience.",
+  "expected_corrected_text": "I have three years of experience.",
+  "expected_error_types": ["subject_verb_agreement", "plural_noun"],
+  "grammar_metrics": {
+    "expected_error_recall": 1.0,
+    "corrected_text_match": true,
+    "asr_preserved_injected_error": true
+  },
+  "tts": {
+    "provider": "kokoro",
+    "voice": "af_heart",
+    "mime_type": "audio/wav"
+  },
+  "timings_ms": {
+    "tts_ms": 820.4,
+    "audio_transcode_ms": 1.2,
+    "asr_ms": 430.0,
+    "reply_first_delta_ms": 600.0,
+    "reply_itl_ms": 40.0,
+    "grammar_ms": 900.0
+  }
+}
+```
+
+### 典型命令
+
+真实全自动语法 bench:
+
+```bash
+APP_DB_PATH=/tmp/grammar-tts.sqlite \
+APP_AUDIO_DIR=/tmp/grammar-tts-audio \
+ASR_PROVIDER=faster_whisper \
+ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+LLM_PROVIDER=openai_compatible \
+TTS_PROVIDER=kokoro \
+KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+python3 scripts/run_conversation_bench.py \
+  --mode grammar_tts \
+  --scenario interview \
+  --turns 10 \
+  --output-dir reports
+```
+
+查看:
+
+```bash
+python3 scripts/bench_dashboard.py
+```
+
+### 后续仍单独做的事情
+
+- pronunciation eval: L2-ARCTIC / SpeechOcean / 真人录音 → 腾讯 SOE / pronunciation provider → 真值相关性。
 - 面板:多 run 趋势对比、回归基线红线。
 - 并发吞吐压测(C 路并发,时延退化)。
+- LLM 裁判:仅用于自然度/对话推进等开放维度,且必须先用 fixture 标定。

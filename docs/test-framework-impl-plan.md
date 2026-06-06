@@ -241,5 +241,425 @@ uvicorn.run(dashboard_app, host="127.0.0.1", port=int(os.environ.get("BENCH_DASH
 新  tests/backend/test_bench_dashboard.py
 ```
 
-## 6. 后续阶段(不在本计划)
-TTS→WS 真实语音 WER、虚拟用户 persona + 已知错误注入(precision/recall)、裁判 + rubric + fixture 标定、面板多 run 趋势对比与回归红线、并发吞吐压测。
+## 6. 第二阶段 — `grammar_tts` 全自动语法错误 bench
+
+目标:让 bench 不再依赖固定用户台词或人工准备音频,而是自动生成"带语法/表达错误的用户回复",
+用本地 Kokoro TTS 合成音频,再喂回真实 WS 链路。**本阶段只测语法/表达错误**,发音错误检测仍走
+L2-ARCTIC / SpeechOcean / 真人录音的 pronunciation eval。
+
+### 6.0 已核实前提
+
+- 本地 TTS 模型已放在 `models/tts/Kokoro-82M/`,包含:
+  - `kokoro-v1_0.pth`
+  - `voices/af_heart.pt`
+  - `config.json` / `configuration.json`
+- Kokoro README 示例使用:
+  ```python
+  from kokoro import KPipeline
+  pipeline = KPipeline(lang_code="a")
+  generator = pipeline(text, voice="af_heart")
+  for gs, ps, audio in generator:
+      ...
+  ```
+- 当前 `backend/app/services/tts.py` 只有 `browser`、`openai_compatible`、`cloud_disabled`;
+  还没有服务端本地 TTS provider。
+- `run_conversation_bench.py --real` 当前要求 `--audio-file/--audio-dir`;还没有"自动生成用户文本 → TTS 音频"模式。
+
+### 6.1 提交切分
+
+| 提交 | 内容 | 生产改动 |
+|---|---|---|
+| **C4** | 接入 Kokoro 本地 TTS provider + 独立 smoke 脚本 | `tts.py` 新 provider,默认不启用 |
+| **C5** | 新增语法错误注入器 + 虚拟用户数据契约 + 单测 | 纯 `testkit` 新增 |
+| **C6** | `grammar_tts` driver/CLI/RunRecord/报告聚合 | 纯 `testkit` 和 script 改动 |
+| **C7** | dashboard 展示 clean/injected/grammar metrics/TTS 延迟 | 独立 dashboard |
+| **C8** | README/guide 更新 + 真实本地 smoke 验证记录 | 文档 |
+
+---
+
+## 7. C4 — Kokoro 本地 TTS provider
+
+### 7.1 `pyproject.toml`
+
+新增可选依赖组,默认 `make test` 不安装、不依赖:
+
+```toml
+[project.optional-dependencies]
+tts = [
+    "kokoro>=0.9.2,<1",
+    "soundfile>=0.12,<1",
+]
+```
+
+系统依赖:`espeak-ng`。README 写明安装:
+
+```bash
+python3 -m pip install -e ".[tts]"
+sudo apt-get install -y espeak-ng
+```
+
+> 若服务器没有 sudo,记录 conda/系统包替代方案;代码层面只做清晰错误提示。
+
+### 7.2 `backend/app/services/tts.py`
+
+新增 `KokoroTTSProvider`,懒加载依赖,避免默认测试 import 失败:
+
+```python
+class KokoroTTSProvider:
+    provider_name = "kokoro"
+
+    def __init__(self) -> None:
+        self.model_dir = Path(os.environ.get("KOKORO_MODEL_DIR", "models/tts/Kokoro-82M"))
+        self.voice = os.environ.get("KOKORO_VOICE", "af_heart")
+        self.lang_code = os.environ.get("KOKORO_LANG_CODE", "a")
+        self.sample_rate = int(os.environ.get("KOKORO_SAMPLE_RATE", "24000"))
+        self._pipeline = None
+
+    def synthesize(self, text: str) -> TTSResult:
+        # lazy import kokoro + soundfile
+        # pipeline(text, voice=self.voice) -> audio chunks
+        # concatenate chunks -> wav bytes -> base64
+        # return mime_type="audio/wav"
+```
+
+实现要求:
+
+- 空文本直接返回 fallback 或抛可读 `RuntimeError`。
+- 第一次调用初始化 pipeline,后续复用,避免每轮重新加载模型。
+- 优先验证 `KOKORO_MODEL_DIR` 存在;如果 Kokoro 包暂不支持显式本地目录,先用包默认加载机制,
+  但 smoke 脚本必须证明在当前服务器上不会重新下载。
+- `create_tts_provider()` 支持:
+  ```python
+  if provider == "kokoro":
+      return KokoroTTSProvider()
+  ```
+- `provider_status()` 当前只读 env,无需改结构;dashboard/providers 会显示 `tts=kokoro`。
+
+### 7.3 `scripts/test_kokoro_tts.py`
+
+新增手动 smoke 脚本,不进默认 `make test`:
+
+```bash
+TTS_PROVIDER=kokoro \
+KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+python3 scripts/test_kokoro_tts.py \
+  --text "I has three year experience." \
+  --output /tmp/kokoro-smoke.wav
+```
+
+脚本检查:
+
+- 输出文件存在且大于 1KB。
+- mime 是 wav,采样率 24000 或配置值。
+- 打印耗时 `tts_ms`。
+
+### 7.4 测试
+
+- `tests/backend/test_asr_tts_providers.py` 增加 `create_tts_provider` 对 `TTS_PROVIDER=kokoro`
+  的 provider name 测试,用 monkeypatch 替代实际合成,不加载模型。
+- `tests/backend/test_tts_kokoro_provider.py` 用 fake `kokoro`/`soundfile` module monkeypatch,
+  验证 `synthesize()` 返回 base64 wav 和 `mime_type="audio/wav"`。
+- 真实模型 smoke 标记为 `manual` 或单独脚本,不进默认测试。
+
+---
+
+## 8. C5 — 虚拟用户与确定性语法错误注入
+
+### 8.1 `backend/app/testkit/grammar_cases.py`
+
+新增可控错误案例库。每条包含:
+
+```python
+class GrammarErrorCase(BaseModel):
+    scenario_id: str
+    clean_text: str
+    injected_text: str
+    expected_corrected_text: str
+    expected_error_types: list[str]
+    error_spans: list[str] = []
+```
+
+示例:
+
+```text
+clean:    I have three years of experience in backend development.
+injected: I has three year experience in backend development.
+types:    ["subject_verb_agreement", "plural_noun"]
+
+clean:    Yesterday I went to a meeting and explained the risk.
+injected: Yesterday I go to meeting and explain the risk.
+types:    ["verb_tense", "article"]
+```
+
+第一版优先用模板案例,不要靠 LLM 随机造错。原因:只有模板案例才能稳定计算 grammar recall。
+
+### 8.2 `backend/app/testkit/grammar_injection.py`
+
+提供:
+
+```python
+def next_error_case(scenario_id: str, index: int) -> GrammarErrorCase
+def score_grammar_result(case: GrammarErrorCase, grammar: dict | None, asr_text: str) -> dict[str, object]
+```
+
+`score_grammar_result` 第一版指标:
+
+- `expected_error_recall`:grammar issues 中命中的 expected_error_types 比例。
+- `corrected_text_match`:normalized corrected_text 是否等于 expected_corrected_text。
+- `asr_preserved_injected_error`:ASR 文本是否仍包含关键错误 span,用于判断 TTS→ASR 是否把错误吞掉。
+
+命中规则要宽松:
+
+- normalized 文本比较,忽略大小写和多余空格。
+- error_type 可做 alias 映射,例如 `agreement` / `subject_verb_agreement`。
+- corrected_text_match 不作为唯一通过条件,因为 grammar_service 可能给等价改写。
+
+### 8.3 `backend/app/testkit/virtual_user.py`
+
+本阶段虚拟用户分两层:
+
+```python
+class VirtualUser(Protocol):
+    def next_clean_turn(self, *, scenario_id: str, history: list[dict[str, str]], index: int) -> str: ...
+```
+
+实现:
+
+- `TemplateVirtualUser`:默认用于 `make test`,直接从 `grammar_cases` 取 clean_text,确定性。
+- `LLMVirtualUser`:真实 bench 可选,根据 scenario + AI 上一句生成 clean_text;随后仍交给
+  `grammar_injection` 注入错误。若 LLM 生成文本不适合注入,回退到模板案例。
+
+CLI 第一版默认用模板 clean_text,保证可评测。后续再打开:
+
+```bash
+--virtual-user llm
+```
+
+---
+
+## 9. C6 — `grammar_tts` driver / CLI / RunRecord
+
+### 9.1 `backend/app/testkit/models.py`
+
+扩展 `TurnRecord`,全部是可选字段,兼容旧 run:
+
+```python
+clean_text: str | None = None
+injected_text: str | None = None
+expected_corrected_text: str | None = None
+expected_error_types: list[str] = []
+grammar_metrics: dict[str, object] = {}
+tts: dict[str, object] = {}
+```
+
+### 9.2 `backend/app/testkit/tts_audio.py`
+
+新增工具:
+
+```python
+def synthesize_turn_audio(text: str, provider: TTSProvider) -> tuple[bytes, str, dict[str, object], dict[str, float]]
+```
+
+职责:
+
+- 调 `provider.synthesize(text)`。
+- 解码 `audio_base64`。
+- 返回 `(audio_bytes, mime_type, tts_meta, {"tts_ms": ...})`。
+- 如果 provider fallback 或没有音频,抛出清晰错误,不要悄悄用假音频。
+
+### 9.3 `backend/app/testkit/ws_driver.py`
+
+新增模式:
+
+```python
+mode="grammar_tts"
+```
+
+每轮流程:
+
+1. 从 `VirtualUser` 取 clean_text。
+2. 从 `grammar_injection` 取 injected_text + expected ground truth。
+3. 用 `tts_audio.synthesize_turn_audio(injected_text, tts_provider)` 生成音频。
+4. WS 发送:
+   ```python
+   start_turn({"mime_type": mime_type, "expected_text": injected_text})
+   send_bytes(audio_bytes)
+   end_turn
+   ```
+   对真实 ASR 来说 `expected_text` 只用于 partial/ground truth,`FasterWhisperASR` 不会用它作弊。
+5. 收集 `asr.final`、reply、grammar、timings。
+6. 计算:
+   - `wer = word_error_rate(injected_text, asr_text)`
+   - `grammar_metrics = score_grammar_result(case, grammar, asr_text)`
+7. `TurnRecord` 写 clean/injected/expected/tts/timings。
+
+约束:
+
+- `grammar_tts` 默认拒绝 `ASR_PROVIDER=fake` 和 `TTS_PROVIDER=browser/cloud_disabled`。
+- 可加 `--allow-fake-providers` 只给开发调试使用,默认关闭。
+- 如果 `PRON_ASSESS_AUDIO_TURNS` 未设置,保持发音评测默认逻辑;本阶段不要求 pronunciation 有值。
+
+### 9.4 `scripts/run_conversation_bench.py`
+
+参数调整:
+
+```bash
+--mode offline_fake | real_audio | grammar_tts
+--real  # 保留兼容,等价于 --mode real_audio
+--virtual-user template | llm
+--allow-fake-providers
+```
+
+导入顺序:
+
+- 先处理 `--mode` 和 `.env`。
+- `grammar_tts` 必须 `load_dotenv(force=True)` 后再 import app/provider 单例。
+- 创建 TTS provider 时也要在 env 加载后进行。
+
+真实命令:
+
+```bash
+APP_DB_PATH=/tmp/grammar-tts.sqlite \
+APP_AUDIO_DIR=/tmp/grammar-tts-audio \
+ASR_PROVIDER=faster_whisper \
+ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+LLM_PROVIDER=openai_compatible \
+TTS_PROVIDER=kokoro \
+KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+python3 scripts/run_conversation_bench.py \
+  --mode grammar_tts \
+  --scenario interview \
+  --turns 10
+```
+
+### 9.5 `backend/app/testkit/report.py`
+
+Markdown 增加:
+
+- grammar hit summary:
+  - average `expected_error_recall`
+  - corrected_text_match rate
+  - ASR WER against injected_text
+- latency summary 继续只聚合 `*_ms`,包括新 `tts_ms`。
+
+### 9.6 测试
+
+- `tests/backend/test_grammar_injection.py`
+  - case 轮转、expected_error_types 非空。
+  - score 对 mock grammar result 能算 recall。
+- `tests/backend/test_tts_audio.py`
+  - fake TTS provider 返回 base64 wav bytes → `tts_ms` 和 meta 正常。
+  - fallback/no audio 抛 RuntimeError。
+- `tests/backend/test_ws_bench_driver_grammar_tts.py`
+  - 注入 fake TTS provider + FakeASR + FakeLLM,跑 2 轮。
+  - 每轮有 `clean_text`、`injected_text`、`expected_error_types`、`grammar_metrics`、`tts_ms`。
+  - 默认测试不加载 Kokoro 模型、不联网。
+- CLI smoke 可用 `/tmp` output 验证。
+
+---
+
+## 10. C7 — Dashboard 展示 grammar_tts 字段
+
+### 10.1 API
+
+`dashboard.py` 不需要改 API;仍然返回完整 RunRecord JSON。
+
+### 10.2 `dashboard/index.html`
+
+Turns 表新增/调整:
+
+- Expected / ASR 改成:
+  - Clean
+  - Injected
+  - ASR
+  - WER
+- Grammar 列显示:
+  - expected_error_types
+  - grammar issues
+  - expected_error_recall
+  - corrected_text_match
+- Timing 增加 `TTS` pill。
+
+Summary 增加:
+
+- Avg grammar recall
+- Corrected match rate
+- Median TTS
+
+Latency 图把 `tts_ms` 纳入关键指标。
+
+### 10.3 测试
+
+`tests/backend/test_bench_dashboard.py` fixture RunRecord 增加 grammar_tts 字段,确保详情 API 仍返回,
+音频回放仍正常。静态页不做浏览器 E2E,只保证 HTML 可访问。
+
+---
+
+## 11. C8 — 文档与真实 smoke
+
+### 11.1 README / bench guide
+
+更新:
+
+- 本地 Kokoro 安装:
+  ```bash
+  python3 -m pip install -e ".[tts]"
+  sudo apt-get install -y espeak-ng
+  ```
+- `.env` 示例:
+  ```bash
+  TTS_PROVIDER=kokoro
+  KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M
+  KOKORO_VOICE=af_heart
+  ```
+- `grammar_tts` 命令和 dashboard 查看方式。
+- 明确发音错误不在 grammar_tts 中测。
+
+### 11.2 验证清单
+
+默认验证:
+
+```bash
+make test
+python3 scripts/run_conversation_bench.py --scenario interview --turns 2 --output-dir /tmp/bench-test
+```
+
+Kokoro smoke:
+
+```bash
+TTS_PROVIDER=kokoro \
+KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+python3 scripts/test_kokoro_tts.py --output /tmp/kokoro-smoke.wav
+```
+
+真实 grammar_tts smoke:
+
+```bash
+APP_DB_PATH=/tmp/grammar-tts.sqlite \
+APP_AUDIO_DIR=/tmp/grammar-tts-audio \
+ASR_PROVIDER=faster_whisper \
+ASR_MODEL_SIZE=/home/scn/xe2/models/asr/faster-whisper-small.en \
+LLM_PROVIDER=openai_compatible \
+TTS_PROVIDER=kokoro \
+KOKORO_MODEL_DIR=/home/scn/xe2/models/tts/Kokoro-82M \
+python3 scripts/run_conversation_bench.py \
+  --mode grammar_tts \
+  --scenario interview \
+  --turns 3 \
+  --output-dir /tmp/grammar-tts-report
+```
+
+查看:
+
+```bash
+BENCH_RUNS_DIR=/tmp/grammar-tts-report/runs \
+APP_AUDIO_DIR=/tmp/grammar-tts-audio \
+python3 scripts/bench_dashboard.py
+```
+
+成功标准:
+
+- 每轮都有 `clean_text` / `injected_text` / `asr_text` / `reply_text` / `grammar`。
+- `tts_ms`、`asr_ms`、`reply_first_delta_ms`、`grammar_ms` 有值。
+- `grammar_metrics.expected_error_recall` 有值。
+- dashboard 能回放 TTS 生成音频。
