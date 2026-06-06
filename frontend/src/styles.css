@@ -458,6 +458,24 @@ h3 {
   gap: 12px;
 }
 
+.assessment-section-block {
+  display: grid;
+  gap: 12px;
+  padding: 16px 0;
+}
+
+.assessment-section-block:first-of-type {
+  padding-top: 0;
+}
+
+.assessment-section-block + .assessment-section-block {
+  border-top: 1px solid #edf1ee;
+}
+
+.assessment-section-block h3 {
+  margin-bottom: 0;
+}
+
 .assessment-item {
   border-top: 1px solid #edf1ee;
   display: grid;
@@ -478,13 +496,13 @@ h3 {
   overflow-wrap: anywhere;
 }
 
-.assessment-section {
-  display: grid;
-  gap: 6px;
+.assessment-item p {
+  margin-bottom: 0;
 }
 
-.assessment-section h3,
-.assessment-section p {
+.empty-note {
+  color: #63726d;
+  line-height: 1.45;
   margin-bottom: 0;
 }
 

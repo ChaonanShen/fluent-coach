@@ -1559,63 +1559,80 @@ function ConversationAssessmentPanel({
   turnPronunciations,
   turnAssessmentErrors,
 }) {
-  const items = userTurnsWithAssessments(session, turnCorrections, turnPronunciations, turnAssessmentErrors);
+  const correctionItems = userTurnsWithCorrections(session, turnCorrections, turnAssessmentErrors);
+  const pronunciationItems = userTurnsWithPronunciation(session, turnPronunciations, turnAssessmentErrors);
+  const timingItems = latestTiming ? timingRows(latestTiming.timings) : [];
   return (
     <aside className="coach-panel assessment-panel" aria-label="Conversation Assessment">
       <h2>Conversation Assessment</h2>
-      {items.length ? (
-        <div className="assessment-list">
-          {items.map(({ turn, correction, pronunciation: turnPronunciation, errors }) => (
-            <article className="assessment-item" key={turn.id}>
-              <p className="assessment-turn-text">{turn.text}</p>
-              <div className="assessment-section">
-                <h3>Grammar / Expression</h3>
-                {correction ? (
-                  correction.issues?.length ? (
-                    <>
-                      <p className="corrected">{correction.corrected_text}</p>
-                      <p>{correction.issues[0].explanation_zh}</p>
-                    </>
-                  ) : (
-                    <p>No grammar or expression issue.</p>
-                  )
+      <section className="assessment-section-block" aria-label="Grammar / Expression Correction">
+        <h3>Grammar / Expression Correction</h3>
+        {correctionItems.length ? (
+          <div className="assessment-list">
+            {correctionItems.map(({ turn, correction, errors }) => (
+              <article className="assessment-item" key={turn.id}>
+                <p className="assessment-turn-text">{turn.text}</p>
+                {correction.issues?.length ? (
+                  <>
+                    <p className="corrected">{correction.corrected_text}</p>
+                    <p>{correction.issues[0].explanation_zh}</p>
+                  </>
                 ) : (
-                  <p>Assessment pending.</p>
+                  <p>No grammar or expression issue.</p>
                 )}
-              </div>
-              {isVoiceTurn(turn) ? (
-                <div className="assessment-section">
-                  <h3>Pronunciation</h3>
-                  {turnPronunciation ? (
-                    <PronunciationResult assessment={turnPronunciation} ariaLabel="Pronunciation scores" />
-                  ) : (
-                    <p>Pronunciation pending.</p>
-                  )}
-                </div>
-              ) : null}
-              {errors.length ? (
-                <div className="analysis-error-list">
-                  {errors.map((item, index) => (
-                    <article className="analysis-error" key={`${turn.id}-${item.code}-${index}`}>
-                      <span>{item.stage}</span>
-                      <p>{item.user_message_zh || item.code}</p>
-                    </article>
-                  ))}
-                </div>
-              ) : null}
-            </article>
-          ))}
-        </div>
-      ) : (
-        <p>No conversation assessment yet.</p>
-      )}
-      {latestCorrection?.issues?.length && !items.length ? (
-        <section className="coach-block">
-          <h3>Correction</h3>
-          <p className="corrected">{latestCorrection.corrected_text}</p>
-          <p>{latestCorrection.issues[0].explanation_zh}</p>
-        </section>
-      ) : null}
+                <TurnAssessmentErrors errors={errors} turnId={turn.id} />
+              </article>
+            ))}
+          </div>
+        ) : latestCorrection?.issues?.length ? (
+          <article className="assessment-item">
+            <p className="corrected">{latestCorrection.corrected_text}</p>
+            <p>{latestCorrection.issues[0].explanation_zh}</p>
+          </article>
+        ) : (
+          <p className="empty-note">No correction yet.</p>
+        )}
+      </section>
+
+      <section className="assessment-section-block" aria-label="Pronunciation">
+        <h3>Pronunciation</h3>
+        {pronunciationItems.length ? (
+          <div className="assessment-list">
+            {pronunciationItems.map(({ turn, pronunciation: turnPronunciation, errors }) => (
+              <article className="assessment-item" key={turn.id}>
+                <p className="assessment-turn-text">{turn.text}</p>
+                {turnPronunciation ? (
+                  <PronunciationResult assessment={turnPronunciation} ariaLabel="Pronunciation scores" />
+                ) : (
+                  <p>Pronunciation pending.</p>
+                )}
+                <TurnAssessmentErrors errors={errors} turnId={turn.id} />
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="empty-note">No pronunciation result yet.</p>
+        )}
+      </section>
+
+      <section className="assessment-section-block" aria-label="Timing">
+        <h3>Timing</h3>
+        {timingItems.length ? (
+          <div className="timing-footnote timing-section">
+            <ul>
+              {timingItems.map(([label, value]) => (
+                <li key={label}>
+                  <span>{label}</span>
+                  <span>{formatMs(value)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <p className="empty-note">No timing yet.</p>
+        )}
+      </section>
+
       {analysisErrors.length ? (
         <section className="coach-block">
           <h3>Issues</h3>
@@ -1675,20 +1692,23 @@ function ConversationAssessmentPanel({
           Mistake Book ({mistakes.length})
         </button>
       </section>
-      {latestTiming ? (
-        <div className="timing-footnote">
-          <p>Timing:</p>
-          <ul>
-            {timingRows(latestTiming.timings).map(([label, value]) => (
-              <li key={label}>
-                <span>{label}</span>
-                <span>{formatMs(value)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
     </aside>
+  );
+}
+
+function TurnAssessmentErrors({ errors, turnId }) {
+  if (!errors.length) {
+    return null;
+  }
+  return (
+    <div className="analysis-error-list">
+      {errors.map((item, index) => (
+        <article className="analysis-error" key={`${turnId}-${item.code}-${index}`}>
+          <span>{item.stage}</span>
+          <p>{item.user_message_zh || item.code}</p>
+        </article>
+      ))}
+    </div>
   );
 }
 
@@ -1760,16 +1780,28 @@ function PronunciationResult({
   );
 }
 
-function userTurnsWithAssessments(session, turnCorrections, turnPronunciations, turnAssessmentErrors) {
+function userTurnsWithCorrections(session, turnCorrections, turnAssessmentErrors) {
   return (session?.turns || [])
     .filter((turn) => turn.speaker === 'user')
     .map((turn) => ({
       turn,
       correction: turnCorrections[turn.id] || null,
-      pronunciation: turnPronunciations[turn.id] || null,
       errors: turnAssessmentErrors[turn.id] || [],
     }))
-    .filter(({ correction, pronunciation, errors }) => correction || pronunciation || errors.length)
+    .filter(({ correction, errors }) => correction || errors.some((error) => error.stage === 'grammar'))
+    .slice(-5)
+    .reverse();
+}
+
+function userTurnsWithPronunciation(session, turnPronunciations, turnAssessmentErrors) {
+  return (session?.turns || [])
+    .filter((turn) => turn.speaker === 'user' && isVoiceTurn(turn))
+    .map((turn) => ({
+      turn,
+      pronunciation: turnPronunciations[turn.id] || null,
+      errors: (turnAssessmentErrors[turn.id] || []).filter((error) => error.stage === 'pronunciation'),
+    }))
+    .filter(({ pronunciation, errors }) => pronunciation || errors.length)
     .slice(-5)
     .reverse();
 }

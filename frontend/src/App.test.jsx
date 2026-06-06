@@ -532,6 +532,13 @@ test('loads scenarios and starts a session', async () => {
   expect(screen.queryByText('Sessions')).not.toBeInTheDocument();
   expect(screen.queryByRole('heading', { name: 'Conversation' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('Conversation history')).toBeInTheDocument();
+  const assessmentPanel = screen.getByLabelText('Conversation Assessment');
+  expect(within(assessmentPanel).getByRole('heading', { name: 'Grammar / Expression Correction' })).toBeInTheDocument();
+  expect(within(assessmentPanel).getByRole('heading', { name: 'Pronunciation' })).toBeInTheDocument();
+  expect(within(assessmentPanel).getByRole('heading', { name: 'Timing' })).toBeInTheDocument();
+  expect(within(assessmentPanel).getByText('No correction yet.')).toBeInTheDocument();
+  expect(within(assessmentPanel).getByText('No pronunciation result yet.')).toBeInTheDocument();
+  expect(within(assessmentPanel).getByText('No timing yet.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   expect(await screen.findByText(scenario.opening_line)).toBeInTheDocument();
@@ -955,8 +962,7 @@ test('records microphone audio over the session websocket', async () => {
   expect(await screen.findByText('Thanks for sharing that project. What impact did it have?')).toBeInTheDocument();
   expect(within(screen.getByLabelText('Conversation history')).getByText('I have worked on backend systems for three years.'))
     .toBeInTheDocument();
-  expect(screen.queryByRole('heading', { name: 'Timing' })).not.toBeInTheDocument();
-  expect(screen.getByText('Timing:')).toBeInTheDocument();
+  expect(screen.getByRole('heading', { name: 'Timing' })).toBeInTheDocument();
   expect(screen.getByText('ASR')).toBeInTheDocument();
   expect(screen.getByText('123 ms')).toBeInTheDocument();
   expect(await screen.findByText('TTS')).toBeInTheDocument();
