@@ -80,7 +80,32 @@ def test_create_custom_session_keeps_scenario_for_follow_up_calls() -> None:
     assert summary_response.json()["task_completion_rate"] > 0
 
 
-def test_create_custom_session_requires_topic() -> None:
+def test_create_custom_session_accepts_prompt_and_name() -> None:
+    client = TestClient(app)
+    prompt = (
+        "I want to practice checking in at a hotel. The AI should be a front desk clerk. "
+        "Make it B1 level and include a reservation problem."
+    )
+
+    response = client.post(
+        "/api/sessions",
+        json={
+            "scenario_id": "custom",
+            "custom_prompt": prompt,
+            "custom_name": "Hotel check-in",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["scenario"]["name"] == "Hotel check-in"
+    assert body["session"]["custom_prompt"] == prompt
+    assert body["session"]["custom_scenario"]["user_role"] == "Learner practicing: Hotel check-in"
+    assert body["opening_line"].startswith("Let's practice Hotel check-in.")
+    assert "reservation problem" in body["conversation_goals"][0]
+
+
+def test_create_custom_session_requires_prompt_or_topic() -> None:
     client = TestClient(app)
 
     response = client.post("/api/sessions", json={"scenario_id": "custom"})

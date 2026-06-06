@@ -82,10 +82,11 @@ def scenarios() -> ScenarioListResponse:
 @app.post("/api/sessions", response_model=SessionResponse, status_code=201)
 def create_session(request: CreateSessionRequest) -> SessionResponse:
     custom_scenario = None
+    custom_prompt = _custom_prompt_from_request(request)
     if request.scenario_id == "custom":
-        if request.custom_topic is None or not request.custom_topic.strip():
-            raise HTTPException(status_code=422, detail="Custom topic is required")
-        scenario = make_custom_scenario(request.custom_topic)
+        if custom_prompt is None:
+            raise HTTPException(status_code=422, detail="Custom prompt is required")
+        scenario = make_custom_scenario(custom_prompt, name=request.custom_name)
         custom_scenario = scenario
     else:
         scenario = get_scenario(request.scenario_id)
@@ -94,7 +95,7 @@ def create_session(request: CreateSessionRequest) -> SessionResponse:
     session = session_store.create(
         scenario,
         custom_scenario=custom_scenario,
-        custom_prompt=request.custom_topic.strip() if request.custom_topic else None,
+        custom_prompt=custom_prompt,
     )
     return SessionResponse(
         session=session,
@@ -114,6 +115,14 @@ def update_session_title(session_id: str, request: UpdateSessionTitleRequest) ->
     if session is None:
         raise HTTPException(status_code=404, detail="Unknown session")
     return session
+
+
+def _custom_prompt_from_request(request: CreateSessionRequest) -> str | None:
+    raw_prompt = request.custom_prompt if request.custom_prompt is not None else request.custom_topic
+    if raw_prompt is None:
+        return None
+    prompt = " ".join(raw_prompt.split())
+    return prompt or None
 
 
 @app.post("/api/sessions/{session_id}/end", response_model=SessionResponse)

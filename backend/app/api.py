@@ -26,6 +26,8 @@ class CreateSessionRequest(BaseModel):
 
     scenario_id: str = Field(min_length=1)
     custom_topic: str | None = Field(default=None, min_length=3, max_length=160)
+    custom_prompt: str | None = Field(default=None, min_length=3, max_length=2000)
+    custom_name: str | None = Field(default=None, min_length=1, max_length=100)
 
 
 class UpdateSessionTitleRequest(BaseModel):
