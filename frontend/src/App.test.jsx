@@ -522,6 +522,9 @@ test('loads scenarios and starts a session', async () => {
   expect(screen.queryByText('XEngineer')).not.toBeInTheDocument();
   expect(screen.queryByText('Candidate')).not.toBeInTheDocument();
   expect(screen.queryByText('Introduce professional background clearly')).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Reading Practice')).toBeInTheDocument();
+  expect(screen.queryByDisplayValue('THEN HE WENT TO THEME PARK')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Record Reading' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Mistake Book (2)' })).toBeInTheDocument();
   expect(screen.queryByText('am working')).not.toBeInTheDocument();
   expect(screen.queryByText('Progress')).not.toBeInTheDocument();
@@ -845,11 +848,11 @@ test('records read aloud audio and uploads it for assessment', async () => {
   await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
   fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
 
-  expect(screen.getByRole('heading', { name: 'Pronunciation' })).toBeInTheDocument();
-  expect(await screen.findByText('Read: backend systems')).toBeInTheDocument();
-  expect(await screen.findByLabelText('Pronunciation scores')).toHaveTextContent('Overall 50');
-  expect(screen.getByLabelText('Pronunciation scores')).toHaveTextContent('Accuracy 60');
-  expect(screen.getByLabelText('Pronunciation scores')).toHaveTextContent('Fluency 90');
+  expect(screen.getByRole('heading', { name: 'Reading Practice' })).toBeInTheDocument();
+  expect(await screen.findByText('Practice result: backend systems')).toBeInTheDocument();
+  expect(await screen.findByLabelText('Practice result')).toHaveTextContent('Overall 50');
+  expect(screen.getByLabelText('Practice result')).toHaveTextContent('Accuracy 60');
+  expect(screen.getByLabelText('Practice result')).toHaveTextContent('Fluency 90');
   expect(screen.getByText('Low-score words')).toBeInTheDocument();
   expect(screen.getByText('THEME')).toHaveClass('low-word');
   const uploadCall = global.fetch.mock.calls.find(([url]) => url === '/api/pronunciation/practice/upload');
@@ -865,6 +868,9 @@ test('shows provider pronunciation errors inline', async () => {
   const voice = installVoiceMocks();
   render(<App />);
 
+  fireEvent.change(await screen.findByLabelText('Text to read'), {
+    target: { value: 'backend systems' },
+  });
   fireEvent.click(await screen.findByRole('button', { name: 'Record Reading' }));
   await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
   fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
@@ -880,11 +886,14 @@ test('keeps read aloud practice independent from the active session', async () =
   fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
   await screen.findByText(scenario.opening_line);
   const fetchCountBeforePractice = global.fetch.mock.calls.length;
+  fireEvent.change(await screen.findByLabelText('Text to read'), {
+    target: { value: 'backend systems' },
+  });
   fireEvent.click(await screen.findByRole('button', { name: 'Record Reading' }));
   await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
   fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
 
-  expect(await screen.findByLabelText('Pronunciation scores')).toHaveTextContent('Overall 50');
+  expect(await screen.findByLabelText('Practice result')).toHaveTextContent('Overall 50');
   const practiceCalls = global.fetch.mock.calls.filter(([url]) => url === '/api/pronunciation/practice/upload');
   expect(practiceCalls).toHaveLength(1);
   expect(JSON.parse(practiceCalls[0][1].body)).not.toHaveProperty('session_id');
@@ -914,7 +923,7 @@ test('disables turn and recording controls after ending a session', async () => 
   expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Record' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Record Reading' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Record Reading' })).toBeDisabled();
 });
 
 test('records microphone audio over the session websocket', async () => {

@@ -47,7 +47,7 @@ export default function App() {
   const [turnPronunciations, setTurnPronunciations] = useState({});
   const [turnAssessmentErrors, setTurnAssessmentErrors] = useState({});
   const [practicePronunciation, setPracticePronunciation] = useState(null);
-  const [practiceReferenceText, setPracticeReferenceText] = useState('THEN HE WENT TO THEME PARK');
+  const [practiceReferenceText, setPracticeReferenceText] = useState('');
   const [assessedPracticeReferenceText, setAssessedPracticeReferenceText] = useState('');
   const [partialText, setPartialText] = useState('');
   const [voiceState, setVoiceState] = useState('idle');
@@ -1369,32 +1369,16 @@ export default function App() {
           turnPronunciations={turnPronunciations}
         />
 
-        <aside className="coach-panel">
-          <h2>Coach</h2>
-          <section className="coach-block">
-            <h3>Pronunciation</h3>
-            <textarea
-              aria-label="Text to read"
-              className="read-reference-input"
-              disabled={readingState === 'recording' || readingState === 'assessing'}
-              onChange={(event) => setPracticeReferenceText(event.target.value)}
-              placeholder="Word, phrase, or sentence to read"
-              rows={3}
-              value={practiceReferenceText}
-            />
-            <button
-              className="secondary-action assess-action"
-              disabled={!practiceReferenceText.trim() || readingState === 'assessing'}
-              onClick={readingState === 'recording' ? stopReadingRecording : startReadingRecording}
-              type="button"
-            >
-              {readingState === 'recording' ? 'Stop Reading' : readingState === 'assessing' ? 'Assessing' : 'Record Reading'}
-            </button>
-            <PronunciationResult
-              assessment={practicePronunciation || pronunciation}
-              referenceText={practicePronunciation ? assessedPracticeReferenceText : ''}
-            />
-          </section>
+        <aside className="coach-panel reading-practice-panel" aria-label="Reading Practice">
+          <ReadingPracticePanel
+            assessedPracticeReferenceText={assessedPracticeReferenceText}
+            practicePronunciation={practicePronunciation}
+            practiceReferenceText={practiceReferenceText}
+            readingState={readingState}
+            setPracticeReferenceText={setPracticeReferenceText}
+            startReadingRecording={startReadingRecording}
+            stopReadingRecording={stopReadingRecording}
+          />
           {latestCorrection?.issues?.length ? (
             <section className="coach-block">
               <h3>Correction</h3>
@@ -1652,13 +1636,57 @@ function ConversationAssessmentPanel({
   );
 }
 
-function PronunciationResult({ assessment, referenceText = '', ariaLabel = 'Pronunciation scores' }) {
+function ReadingPracticePanel({
+  assessedPracticeReferenceText,
+  practicePronunciation,
+  practiceReferenceText,
+  readingState,
+  setPracticeReferenceText,
+  startReadingRecording,
+  stopReadingRecording,
+}) {
+  return (
+    <section className="reading-practice-content">
+      <h2>Reading Practice</h2>
+      <textarea
+        aria-label="Text to read"
+        className="read-reference-input"
+        disabled={readingState === 'recording' || readingState === 'assessing'}
+        onChange={(event) => setPracticeReferenceText(event.target.value)}
+        placeholder="Enter a word, phrase, or sentence to read"
+        rows={3}
+        value={practiceReferenceText}
+      />
+      <button
+        className="secondary-action assess-action"
+        disabled={!practiceReferenceText.trim() || readingState === 'assessing'}
+        onClick={readingState === 'recording' ? stopReadingRecording : startReadingRecording}
+        type="button"
+      >
+        {readingState === 'recording' ? 'Stop Reading' : readingState === 'assessing' ? 'Assessing' : 'Record Reading'}
+      </button>
+      <PronunciationResult
+        ariaLabel="Practice result"
+        assessment={practicePronunciation}
+        referenceLabel="Practice result"
+        referenceText={assessedPracticeReferenceText}
+      />
+    </section>
+  );
+}
+
+function PronunciationResult({
+  assessment,
+  referenceText = '',
+  ariaLabel = 'Pronunciation scores',
+  referenceLabel = 'Read',
+}) {
   if (!assessment) {
     return null;
   }
   return (
     <div className="pronunciation-result">
-      {referenceText ? <p className="practice-reference">Read: {referenceText}</p> : null}
+      {referenceText ? <p className="practice-reference">{referenceLabel}: {referenceText}</p> : null}
       <div className="score-row" aria-label={ariaLabel}>
         <span>Overall {Math.round(assessment.overall)}</span>
         <span>Accuracy {Math.round(assessment.accuracy)}</span>
