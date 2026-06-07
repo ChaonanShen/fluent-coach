@@ -838,3 +838,79 @@ CSS 改动：
 - 错题本 Overall 与计数 chip 同行、紧凑且有色彩区分。
 - 读单词用单词模式、读句子用句子模式评测：后端请求明确表现为 word→`eval_mode=0`、sentence→`eval_mode=1`；word 重读的 overall 按腾讯单词模式返回语义展示，若腾讯仅返回 accuracy，则 overall 等于 accuracy 是可接受结果。
 - `make test` 通过；涉及 UI 的 PR 不破坏 `make test-e2e`。
+
+---
+
+# 第二轮补丁：e2e、reset 竞态与 custom 边界
+
+基于 PR13-PR17 落地后的代码检查，本补丁轮修复 4 个回归/边界问题。继续按 `README.dev.md` 拆成小 PR：每个 PR 只做一件事，每个代码 PR 都补自动测试，最后 `make test` 与 `make test-e2e` 都必须通过。
+
+## 问题定位
+
+1. e2e smoke 仍按旧流程断言 End 后直接出现 `Start`；现在结束后主入口是 `New conversation`，导致 `make test-e2e` 失败。
+2. `resetForNewConversation()` 已关闭大部分异步链路，但 voice WebSocket 只关闭 `OPEN`，不关闭 `CONNECTING`，且旧 socket 的 `onmessage` / `onclose` 没有 stale guard，reset 后仍可能污染新界面。
+3. New conversation 清了 `practicePronunciation`，但没有清 `practiceReferenceText` / `assessedPracticeReferenceText`，上一轮 Reading Practice 的 transcript 可能残留。
+4. custom 现在复用 Briefing 手写文本作为 `custom_prompt`，但后端 `custom_prompt` 上限是 2000，而 Briefing textarea 上限是 12000。超长 custom 文本会出现 Start 可点但提交后 422。
+
+## PR 拆分
+
+### PR18：同步 e2e smoke 到 New conversation 流程
+
+- **标题**：e2e smoke 适配 New conversation 结束流程。
+- **功能描述**：End 后 smoke 不再期待 `Start` 立即出现，而是验证用户看到 summary 后可以点击 `New conversation` 回到新的初始练习状态。
+- **实现思路**：
+  - `frontend/e2e/smoke.spec.js`：End 后等待 `Summary`，断言 `New conversation` 可见。
+  - 点击 `New conversation` 后，再断言 `Start` 可见、`Your reply` 禁用、Scenario Briefing 重新展开且 Known background 清空。
+- **测试方式**：
+  - `make test-e2e` 通过。
+
+### PR19：reset 后忽略旧 voice WebSocket 回调
+
+- **标题**：New conversation 后忽略旧 voice WebSocket 回调。
+- **功能描述**：点击 New conversation 后，旧语音连接即使稍后 open/message/close，也不能再写入 conversation、assessment 或把状态改回旧会话。
+- **实现思路**：
+  - `frontend/src/App.jsx`：`closeVoiceSocket()` 改为关闭 `CONNECTING` 和 `OPEN`，并同步清空 `voiceWebSocketRef.current`。
+  - 在 `openVoiceSocket()` 创建的 `onopen`、`onmessage`、`onerror`、`onclose` 开头加 stale guard：如果 `voiceWebSocketRef.current !== websocket` 或 `voiceCanceledRef.current`，直接 return。
+  - `onclose` 只允许当前 socket 更新状态，避免 reset 后旧 close 把 status 改回 `In session`。
+- **测试方式**：
+  - `frontend/src/App.test.jsx`：模拟 New conversation 后旧 voice socket 再发 `reply.delta` / `analysis.result` / `close`，断言旧消息不出现、assessment 不恢复、状态仍是新会话初始状态。
+  - `make test-frontend` 通过。
+
+### PR20：New conversation 清空 Reading Practice 文本
+
+- **标题**：New conversation 清空 Reading Practice transcript。
+- **功能描述**：重新开始时，右侧 Reading Practice 的 read transcript 和 practice result 都回到空状态，不保留上一轮朗读练习文本。
+- **实现思路**：
+  - `frontend/src/App.jsx`：`resetForNewConversation()` 增加 `setPracticeReferenceText('')` 与 `setAssessedPracticeReferenceText('')`。
+  - 保留已有 `setPracticePronunciation(null)`。
+- **测试方式**：
+  - `frontend/src/App.test.jsx`：先让 Reading Practice 产生 transcript/result，再 End + New conversation，断言 `Read transcript` textarea 清空且 `Practice result` 消失。
+  - `make test-frontend` 通过。
+
+### PR21：custom prompt 增加 2000 字符前端校验
+
+- **标题**：custom 场景手写 prompt 遵守后端 2000 字符上限。
+- **功能描述**：custom 场景下，用户手写的自定义场景描述超过 2000 字符时不能启动，避免 Start 可点但后端返回 422。PDF 和 known_info 仍按 12000 字符上限处理。
+- **实现思路**：
+  - `frontend/src/App.jsx` 新增 `MAX_CUSTOM_PROMPT_CHARS = 2000`。
+  - `canStartSession` 的 custom 分支同时要求 `knownInfoText.trim().length >= 3` 且 `<= MAX_CUSTOM_PROMPT_CHARS`。
+  - `startSession()` custom 分支增加防御性校验，超长时 `setError(...)`、`setStatus('Ready')` 并不发请求。
+  - 内置场景不受该限制；`known_info_text` 仍使用 `MAX_KNOWN_INFO_CHARS = 12000` 校验。
+- **测试方式**：
+  - `frontend/src/App.test.jsx`：custom 填 2001 字符时 Start 禁用或点击不发 `/api/sessions` 并显示错误；custom 填 2000 字符以内仍正常发送 `custom_prompt`。
+  - `make test-frontend` 通过。
+
+## 推荐执行顺序
+
+1. PR18 修 e2e smoke（当前唯一已知红测）。
+2. PR19 修 reset stale voice WebSocket（竞态风险最高）。
+3. PR20 补齐 Reading Practice reset 状态。
+4. PR21 修 custom 长度边界。
+
+## 完成定义（第二轮补丁）
+
+- `make test-e2e` 不再因为 End 后按钮名变化失败。
+- New conversation 后旧 voice socket 不能污染新界面。
+- New conversation 后 Reading Practice transcript/result 清空。
+- custom 手写场景描述遵守 2000 字符上限，known_info/PDF 仍遵守 12000 字符总上限。
+- 每个 PR 有对应测试；最后 `make test` 与 `make test-e2e` 均通过。
