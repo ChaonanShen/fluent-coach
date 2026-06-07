@@ -1381,14 +1381,6 @@ h3 {
   gap: 5px;
 }
 
-.message-role {
-  color: #6d7a74;
-  font-size: 0.72rem;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-}
-
 .message.ai {
   background: #ffffff;
 }
@@ -1396,10 +1388,6 @@ h3 {
 .message.user {
   background: #e6f2ef;
   border-color: #b9d8cf;
-}
-
-.message.user .message-role {
-  color: #1f6658;
 }
 
 .message.pending {

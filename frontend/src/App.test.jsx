@@ -857,6 +857,27 @@ test('shows local text turn before delayed streamed reply and assessment', async
   expect(screen.queryByText('AI is thinking...')).not.toBeInTheDocument();
 });
 
+test('conversation messages rely on aria labels without visible role chips', async () => {
+  installTextConversationMock();
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  const history = screen.getByLabelText('Conversation history');
+  expect(within(history).getByLabelText('AI message')).toHaveTextContent(scenario.opening_line);
+  expect(history.querySelector('.message-role')).toBeNull();
+
+  fireEvent.change(screen.getByLabelText('Your reply'), {
+    target: { value: 'I am working in this field since three years.' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+  expect(await screen.findByText('Great. Which project is most relevant to this role?')).toBeInTheDocument();
+  expect(within(history).getByLabelText('Your message')).toHaveTextContent('I am working in this field since three years.');
+  expect(within(history).getAllByLabelText('AI message')).toHaveLength(2);
+  expect(history.querySelector('.message-role')).toBeNull();
+});
+
 test('hydrates text assessment if websocket closes after reply before analysis', async () => {
   installTextConversationMock({ disconnectBeforeAnalysis: true });
   render(<App />);
