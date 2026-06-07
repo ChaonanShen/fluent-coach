@@ -1078,7 +1078,11 @@ export default function App() {
     const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const websocket = new WebSocket(`${scheme}://${window.location.host}/ws/sessions/${session.id}/audio`);
     voiceWebSocketRef.current = websocket;
+    const isStaleVoiceSocket = () => voiceWebSocketRef.current !== websocket || voiceCanceledRef.current;
     websocket.onopen = () => {
+      if (isStaleVoiceSocket()) {
+        return;
+      }
       const recorder = new MediaRecorder(stream);
       mediaRecorderRef.current = recorder;
       pendingAudioSendsRef.current = [];
@@ -1105,6 +1109,9 @@ export default function App() {
       setStatus('Recording');
     };
     websocket.onmessage = (event) => {
+      if (isStaleVoiceSocket()) {
+        return;
+      }
       const message = JSON.parse(event.data);
       if (message.type === 'asr.partial') {
         setPartialText(message.text);
@@ -1238,6 +1245,9 @@ export default function App() {
       }
     };
     websocket.onerror = () => {
+      if (isStaleVoiceSocket()) {
+        return;
+      }
       voiceErrorRef.current = true;
       setError('Voice connection failed.');
       setStatus('Error');
@@ -1245,6 +1255,9 @@ export default function App() {
       stopVoiceStream();
     };
     websocket.onclose = () => {
+      if (voiceWebSocketRef.current !== websocket) {
+        return;
+      }
       voiceWebSocketRef.current = null;
       mediaRecorderRef.current = null;
       pendingAudioSendsRef.current = [];
@@ -1322,7 +1335,8 @@ export default function App() {
 
   function closeVoiceSocket() {
     const websocket = voiceWebSocketRef.current;
-    if (websocket && websocket.readyState === WebSocket.OPEN) {
+    voiceWebSocketRef.current = null;
+    if (websocket && [WebSocket.CONNECTING, WebSocket.OPEN].includes(websocket.readyState)) {
       websocket.close();
     }
   }

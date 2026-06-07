@@ -1326,6 +1326,51 @@ test('renders streaming voice reply deltas and finalizes the turn', async () => 
   await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalled());
 });
 
+test('New conversation ignores stale voice websocket callbacks after reset', async () => {
+  const voice = installVoiceMocks();
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  await waitFor(() => expect(voice.sockets).toHaveLength(1));
+  const staleSocket = voice.sockets[0];
+
+  fireEvent.click(screen.getByRole('button', { name: 'End' }));
+  const restart = await screen.findByRole('button', { name: 'New conversation' });
+  fireEvent.click(restart);
+  await waitFor(() => expect(screen.queryByText(scenario.opening_line)).not.toBeInTheDocument());
+
+  staleSocket.onmessage?.({
+    data: JSON.stringify({
+      type: 'asr.final',
+      text: 'This old voice turn should be ignored.',
+      user_turn_id: 'stale_user_turn',
+    }),
+  });
+  staleSocket.onmessage?.({
+    data: JSON.stringify({
+      type: 'reply.delta',
+      text: 'Old AI text',
+    }),
+  });
+  staleSocket.onmessage?.({
+    data: JSON.stringify({
+      type: 'analysis.result',
+      stage: 'grammar',
+      turn_id: 'stale_user_turn',
+      result: grammarCorrection({ user_text: 'This old voice turn should be ignored.' }),
+    }),
+  });
+  staleSocket.onclose?.();
+
+  expect(screen.queryByText('This old voice turn should be ignored.')).not.toBeInTheDocument();
+  expect(screen.queryByText('Old AI text')).not.toBeInTheDocument();
+  expect(within(screen.getByLabelText('Conversation Assessment')).getByText('No assessment yet.')).toBeInTheDocument();
+  expect(screen.getByText('Ready')).toBeInTheDocument();
+});
+
 test('renders pronunciation analysis from a voice turn', async () => {
   const voice = installVoiceMocks({ voicePronunciationResult: true });
   render(<App />);
@@ -1459,6 +1504,7 @@ function setScrollMetrics(element, { clientHeight, scrollHeight }) {
 
 function installVoiceMocks(options = {}) {
   const sentMessages = [];
+  const sockets = [];
   const getUserMedia = vi.fn(async () => {
     if (options.getUserMediaError) {
       throw options.getUserMediaError;
@@ -1508,6 +1554,7 @@ function installVoiceMocks(options = {}) {
     constructor(url) {
       this.url = url;
       this.readyState = FakeWebSocket.CONNECTING;
+      sockets.push(this);
       setTimeout(() => {
         this.readyState = FakeWebSocket.OPEN;
         this.onopen?.();
@@ -1709,7 +1756,7 @@ function installVoiceMocks(options = {}) {
   vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
   vi.stubGlobal('WebSocket', FakeWebSocket);
 
-  return { getUserMedia, sentMessages };
+  return { getUserMedia, sentMessages, sockets };
 }
 
 function installTextConversationMock(options = {}) {
