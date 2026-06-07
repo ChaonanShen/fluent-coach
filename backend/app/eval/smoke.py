@@ -35,7 +35,7 @@ def run_fixture_smoke_report() -> dict[str, Any]:
                 "status": "not_run",
                 "checklist": [
                     "Start a session from the browser UI.",
-                    "Record one voice turn and confirm asr.final plus reply.text appear.",
+                    "Record one voice turn and confirm asr.final plus reply.delta/reply.done appear.",
                     "Record Read Aloud and confirm pronunciation score appears.",
                     "End the session and confirm summary renders.",
                 ],
@@ -43,8 +43,8 @@ def run_fixture_smoke_report() -> dict[str, Any]:
         },
         "latency_ms": {
             "end_turn_to_asr_final": None,
-            "asr_final_to_reply_text": None,
-            "reply_text_to_tts_start": None,
+            "asr_final_to_reply_done": None,
+            "reply_done_to_tts_start": None,
             "pronunciation_upload_to_result": None,
         },
     }
@@ -70,7 +70,7 @@ def run_real_smoke_report() -> dict[str, Any]:
                 "status": "not_run",
                 "checklist": [
                     "Open the browser UI and start a scenario session.",
-                    "Record one voice turn and confirm asr.final plus reply.text appear.",
+                    "Record one voice turn and confirm asr.final plus reply.delta/reply.done appear.",
                     "Record Read Aloud and confirm a provider-backed pronunciation result appears.",
                     "End the session and confirm summary includes stored grammar/pronunciation results.",
                 ],
@@ -78,8 +78,8 @@ def run_real_smoke_report() -> dict[str, Any]:
         },
         "latency_ms": {
             "end_turn_to_asr_final": asr.get("latency_ms"),
-            "asr_final_to_reply_text": llm.get("latency_ms"),
-            "reply_text_to_tts_start": None,
+            "asr_final_to_reply_done": llm.get("latency_ms"),
+            "reply_done_to_tts_start": None,
             "pronunciation_upload_to_result": pronunciation.get("latency_ms"),
         },
     }
@@ -110,8 +110,8 @@ def render_smoke_markdown(report: dict[str, Any]) -> str:
         "## Latency",
         "",
         f"- end_turn -> asr.final: {_format_latency(latency['end_turn_to_asr_final'])}",
-        f"- asr.final -> reply.text: {_format_latency(latency['asr_final_to_reply_text'])}",
-        f"- reply.text -> tts_start: {_format_latency(latency['reply_text_to_tts_start'])}",
+        f"- asr.final -> reply.done: {_format_latency(latency['asr_final_to_reply_done'])}",
+        f"- reply.done -> tts_start: {_format_latency(latency['reply_done_to_tts_start'])}",
         f"- pronunciation upload -> result: {_format_latency(latency['pronunciation_upload_to_result'])}",
         "",
         "## Manual UI Checklist",

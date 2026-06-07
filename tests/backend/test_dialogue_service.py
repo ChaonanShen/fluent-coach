@@ -126,7 +126,7 @@ def test_custom_dialogue_fallback_replies_in_english_for_chinese_prompt() -> Non
     assert not _contains_cjk(reply.text)
 
 
-def test_dialogue_service_does_not_stream_fixture_replies() -> None:
+def test_dialogue_service_streams_fixture_replies() -> None:
     scenario = get_scenario("interview")
     assert scenario is not None
     session = session_store.create(scenario)
@@ -138,7 +138,44 @@ def test_dialogue_service_does_not_stream_fixture_replies() -> None:
         user_text="Sure. I have three years of experience in backend development, mainly building APIs and data services.",
     )
 
-    assert reply is None
+    assert "".join(reply.chunks) == "Great. Which project from that experience is most relevant to this role?"
+    assert reply.next_intent == "continue_fixture_dialogue"
+
+
+def test_dialogue_service_streams_fallback_replies_without_llm() -> None:
+    scenario = get_scenario("meeting")
+    assert scenario is not None
+    session = session_store.create(scenario)
+    service = DialogueService()
+
+    reply = service.generate_reply_stream(
+        session=session,
+        scenario=scenario,
+        user_text="The deployment finished yesterday and the metrics look stable.",
+    )
+
+    assert "".join(reply.chunks) == "Thanks for the update. What is the main risk we should track next?"
+    assert reply.next_intent == "ask_for_specific_example"
+
+
+def test_stream_prompt_does_not_duplicate_current_user_turn() -> None:
+    scenario = get_scenario("interview")
+    assert scenario is not None
+    session = session_store.create(scenario)
+    user_text = "I built an internal platform at my last company."
+    service = DialogueService(FakeLLMClient(responses=["That sounds useful. What did you own?"]))
+    user_turn = service.create_user_turn(session=session, user_text=user_text)
+
+    reply = service.generate_reply_stream(
+        session=session,
+        scenario=scenario,
+        user_text=user_text,
+        exclude_turn_id=user_turn.id,
+    )
+
+    assert "".join(reply.chunks) == "That sounds useful. What did you own?"
+    prompt = service.llm_client.calls[0][1].content
+    assert prompt.count(user_text) == 1
 
 
 def test_text_turn_api_uses_fallback_for_unmatched_text() -> None:

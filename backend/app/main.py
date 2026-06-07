@@ -49,7 +49,6 @@ from backend.app.models import (
     Session,
     SessionSummary,
     Turn,
-    TurnSpeaker,
 )
 from backend.app.services.analysis import analysis_store
 from backend.app.services.asr import asr_provider
@@ -538,110 +537,110 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
                     audio_mime_type = None
                     force_analysis_error = False
                     continue
-                await websocket.send_json({"type": "asr.final", "text": transcript})
+                user_turn = dialogue_service.create_user_turn(
+                    session=session,
+                    user_text=transcript,
+                    user_mode="audio",
+                    user_audio_path=str(stored_audio.preferred_path),
+                )
+                session_store.save(session)
+                await websocket.send_json(
+                    {
+                        "type": "asr.final",
+                        "text": transcript,
+                        "user_turn_id": user_turn.id,
+                    }
+                )
                 timings["end_turn_to_asr_final_ms"] = _elapsed_ms(turn_timing_started)
                 dialogue_started = time.perf_counter()
                 stream_reply = dialogue_service.generate_reply_stream(
                     session=session,
                     scenario=scenario,
                     user_text=transcript,
+                    exclude_turn_id=user_turn.id,
                 )
-                if stream_reply is None:
-                    user_turn, ai_turn, reply = dialogue_service.add_text_turns(
-                        session=session,
-                        scenario=scenario,
-                        user_text=transcript,
-                        user_mode="audio",
-                        user_audio_path=str(stored_audio.preferred_path),
-                    )
-                    timings["dialogue_reply_ms"] = _elapsed_ms(dialogue_started)
-                    session_store.save(session)
+                reply_text_parts: list[str] = []
+                first_delta = True
+                delta_count = 0
+                stream_started = time.perf_counter()
+                first_delta_at: float | None = None
+                last_delta_at: float | None = None
+
+                async def send_reply_chunk(chunk: str) -> None:
+                    nonlocal first_delta, first_delta_at, last_delta_at, delta_count
+                    if not chunk:
+                        return
+                    delta_at = time.perf_counter()
+                    if first_delta:
+                        timings["reply_first_delta_ms"] = _elapsed_ms(dialogue_started)
+                        first_delta = False
+                        first_delta_at = delta_at
+                    last_delta_at = delta_at
+                    delta_count += 1
+                    reply_text_parts.append(chunk)
                     await websocket.send_json(
                         {
-                            "type": "reply.text",
-                            "text": ai_turn.text,
-                            "turn_id": ai_turn.id,
-                            "user_turn_id": user_turn.id,
-                            "current_goal": reply.current_goal,
-                            "next_intent": reply.next_intent,
-                        }
-                    )
-                else:
-                    user_turn = session.add_turn(
-                        speaker=TurnSpeaker.USER,
-                        text=transcript,
-                        mode="audio",
-                        audio_path=str(stored_audio.preferred_path),
-                    )
-                    reply_text_parts: list[str] = []
-                    first_delta = True
-                    delta_count = 0
-                    stream_started = time.perf_counter()
-                    first_delta_at: float | None = None
-                    last_delta_at: float | None = None
-                    try:
-                        for chunk in stream_reply.chunks:
-                            if not chunk:
-                                continue
-                            delta_at = time.perf_counter()
-                            if first_delta:
-                                timings["reply_first_delta_ms"] = _elapsed_ms(dialogue_started)
-                                first_delta = False
-                                first_delta_at = delta_at
-                            last_delta_at = delta_at
-                            delta_count += 1
-                            reply_text_parts.append(chunk)
-                            await websocket.send_json(
-                                {
-                                    "type": "reply.delta",
-                                    "text": chunk,
-                                    "user_turn_id": user_turn.id,
-                                    "current_goal": stream_reply.current_goal,
-                                    "next_intent": stream_reply.next_intent,
-                                }
-                            )
-                    except Exception:
-                        fallback = dialogue_service.generate_reply(
-                            session=session,
-                            scenario=scenario,
-                            user_text=transcript,
-                        )
-                        reply_text_parts = [fallback.text]
-                        stream_reply.current_goal = fallback.current_goal
-                        stream_reply.next_intent = fallback.next_intent
-
-                    timings["reply_delta_count"] = delta_count
-                    timings["reply_total_stream_ms"] = _elapsed_ms(stream_started)
-                    if delta_count > 1 and first_delta_at is not None and last_delta_at is not None:
-                        timings["reply_itl_ms"] = round(
-                            ((last_delta_at - first_delta_at) * 1000.0) / (delta_count - 1),
-                            3,
-                        )
-
-                    reply_text = "".join(reply_text_parts).strip()
-                    if not reply_text:
-                        fallback = dialogue_service.generate_reply(
-                            session=session,
-                            scenario=scenario,
-                            user_text=transcript,
-                        )
-                        reply_text = fallback.text
-                        stream_reply.current_goal = fallback.current_goal
-                        stream_reply.next_intent = fallback.next_intent
-                    ai_turn = session.add_turn(speaker=TurnSpeaker.AI, text=reply_text)
-                    timings["dialogue_reply_ms"] = _elapsed_ms(dialogue_started)
-                    session_store.save(session)
-                    await websocket.send_json(
-                        {
-                            "type": "reply.done",
-                            "text": ai_turn.text,
-                            "turn_id": ai_turn.id,
+                            "type": "reply.delta",
+                            "text": chunk,
                             "user_turn_id": user_turn.id,
                             "current_goal": stream_reply.current_goal,
                             "next_intent": stream_reply.next_intent,
                         }
                     )
+
+                try:
+                    for chunk in stream_reply.chunks:
+                        await send_reply_chunk(chunk)
+                except Exception:
+                    if not reply_text_parts:
+                        fallback = dialogue_service.generate_reply(
+                            session=session,
+                            scenario=scenario,
+                            user_text=transcript,
+                            exclude_turn_id=user_turn.id,
+                        )
+                        stream_reply.current_goal = fallback.current_goal
+                        stream_reply.next_intent = fallback.next_intent
+                        for chunk in dialogue_service.iter_text_chunks(fallback.text):
+                            await send_reply_chunk(chunk)
+
+                reply_text = "".join(reply_text_parts).strip()
+                if not reply_text:
+                    fallback = dialogue_service.generate_reply(
+                        session=session,
+                        scenario=scenario,
+                        user_text=transcript,
+                        exclude_turn_id=user_turn.id,
+                    )
+                    stream_reply.current_goal = fallback.current_goal
+                    stream_reply.next_intent = fallback.next_intent
+                    for chunk in dialogue_service.iter_text_chunks(fallback.text):
+                        await send_reply_chunk(chunk)
+                    reply_text = "".join(reply_text_parts).strip()
+
+                timings["reply_delta_count"] = delta_count
+                timings["reply_total_stream_ms"] = _elapsed_ms(stream_started)
+                if delta_count > 1 and first_delta_at is not None and last_delta_at is not None:
+                    timings["reply_itl_ms"] = round(
+                        ((last_delta_at - first_delta_at) * 1000.0) / (delta_count - 1),
+                        3,
+                    )
+
+                ai_turn = dialogue_service.commit_ai_turn(session=session, reply_text=reply_text)
+                timings["dialogue_reply_ms"] = _elapsed_ms(dialogue_started)
+                session_store.save(session)
+                await websocket.send_json(
+                    {
+                        "type": "reply.done",
+                        "text": ai_turn.text,
+                        "turn_id": ai_turn.id,
+                        "user_turn_id": user_turn.id,
+                        "current_goal": stream_reply.current_goal,
+                        "next_intent": stream_reply.next_intent,
+                    }
+                )
                 timings["end_turn_to_reply_text_ms"] = _elapsed_ms(turn_timing_started)
+                timings["end_turn_to_reply_done_ms"] = timings["end_turn_to_reply_text_ms"]
                 await websocket.send_json(
                     {
                         "type": "debug.timing",

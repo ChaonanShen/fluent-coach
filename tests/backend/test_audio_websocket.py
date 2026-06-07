@@ -23,6 +23,18 @@ def clear_session_store() -> None:
     analysis_store.clear()
 
 
+def _receive_reply_done(websocket) -> tuple[dict, list[str]]:
+    chunks: list[str] = []
+    while True:
+        event = websocket.receive_json()
+        if event["type"] == "reply.delta":
+            chunks.append(event["text"])
+            continue
+        if event["type"] == "reply.done":
+            return event, chunks
+        raise AssertionError(f"Unexpected event before reply.done: {event}")
+
+
 def test_audio_websocket_returns_asr_and_reply_events() -> None:
     client = TestClient(app)
     created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
@@ -39,15 +51,24 @@ def test_audio_websocket_returns_asr_and_reply_events() -> None:
         websocket.send_bytes(b"fake-audio-chunk")
         websocket.send_json({"type": "end_turn"})
         final = websocket.receive_json()
-        reply = websocket.receive_json()
+        persisted_session = session_store.get(session_id)
+        reply, chunks = _receive_reply_done(websocket)
+        reply_timing = websocket.receive_json()
+        pending = websocket.receive_json()
 
     assert partial["type"] == "asr.partial"
     assert partial["text"] == "Sure. I have three"
     assert final["type"] == "asr.final"
     assert final["text"].startswith("Sure. I have three years")
-    assert reply["type"] == "reply.text"
+    assert final["user_turn_id"]
+    assert persisted_session is not None
+    assert any(turn.id == final["user_turn_id"] for turn in persisted_session.turns)
+    assert chunks
+    assert "".join(chunks) == reply["text"]
     assert reply["text"] == "Great. Which project from that experience is most relevant to this role?"
     assert reply["next_intent"] == "continue_fixture_dialogue"
+    assert reply_timing["type"] == "debug.timing"
+    assert pending["type"] == "analysis.pending"
 
 
 def test_audio_websocket_emits_reply_and_grammar_timings() -> None:
@@ -66,11 +87,13 @@ def test_audio_websocket_emits_reply_and_grammar_timings() -> None:
         websocket.send_bytes(b"fake-audio-chunk")
         websocket.send_json({"type": "end_turn"})
         websocket.receive_json()
-        websocket.receive_json()
+        reply, chunks = _receive_reply_done(websocket)
         reply_timing = websocket.receive_json()
         pending = websocket.receive_json()
         grammar_timing = websocket.receive_json()
 
+    assert reply["type"] == "reply.done"
+    assert chunks
     assert reply_timing["type"] == "debug.timing"
     assert reply_timing["stage"] == "reply"
     assert reply_timing["timings"]["audio_total_ms"] >= 0
@@ -78,10 +101,40 @@ def test_audio_websocket_emits_reply_and_grammar_timings() -> None:
     assert reply_timing["timings"]["dialogue_reply_ms"] >= 0
     assert reply_timing["timings"]["end_turn_to_asr_final_ms"] >= 0
     assert reply_timing["timings"]["end_turn_to_reply_text_ms"] >= 0
+    assert reply_timing["timings"]["end_turn_to_reply_done_ms"] >= 0
+    assert reply_timing["timings"]["reply_first_delta_ms"] >= 0
+    assert reply_timing["timings"]["reply_delta_count"] >= 1
     assert pending["type"] == "analysis.pending"
     assert grammar_timing["type"] == "debug.timing"
     assert grammar_timing["stage"] == "grammar"
     assert grammar_timing["timings"]["grammar_ms"] >= 0
+
+
+def test_audio_websocket_reply_event_order_uses_streaming_protocol() -> None:
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
+    session_id = created["session"]["id"]
+
+    with client.websocket_connect(f"/ws/sessions/{session_id}/audio") as websocket:
+        websocket.send_json(
+            {
+                "type": "start_turn",
+                "expected_text": "Sure. I have three years of experience in backend development, mainly building APIs and data services.",
+            }
+        )
+        websocket.receive_json()
+        websocket.send_bytes(b"fake-audio-chunk")
+        websocket.send_json({"type": "end_turn"})
+        events = [websocket.receive_json()]
+        while events[-1]["type"] != "analysis.pending":
+            events.append(websocket.receive_json())
+
+    types = [event["type"] for event in events]
+    assert types[0] == "asr.final"
+    assert "reply.text" not in types
+    assert types.index("asr.final") < types.index("reply.delta")
+    assert types.index("reply.delta") < types.index("reply.done")
+    assert types.index("reply.done") < types.index("analysis.pending")
 
 
 def test_audio_websocket_reply_does_not_wait_for_slow_grammar(monkeypatch) -> None:
@@ -114,14 +167,16 @@ def test_audio_websocket_reply_does_not_wait_for_slow_grammar(monkeypatch) -> No
         started = time.perf_counter()
         websocket.send_json({"type": "end_turn"})
         websocket.receive_json()
-        reply = websocket.receive_json()
-        websocket.receive_json()
+        reply, chunks = _receive_reply_done(websocket)
+        reply_timing = websocket.receive_json()
         pending = websocket.receive_json()
         elapsed_before_pending = time.perf_counter() - started
         grammar_timing = websocket.receive_json()
         analysis = websocket.receive_json()
 
-    assert reply["type"] == "reply.text"
+    assert reply["type"] == "reply.done"
+    assert chunks
+    assert reply_timing["type"] == "debug.timing"
     assert pending["type"] == "analysis.pending"
     assert elapsed_before_pending < 0.25
     assert grammar_timing["type"] == "debug.timing"
@@ -158,6 +213,7 @@ def test_audio_websocket_streams_llm_reply_for_unmatched_text(monkeypatch) -> No
             break
 
     assert final["type"] == "asr.final"
+    assert final["user_turn_id"]
     assert chunks
     assert done["type"] == "reply.done"
     assert done["text"] == "That sounds useful. What did you own?"
@@ -210,12 +266,13 @@ def test_audio_websocket_runs_pronunciation_after_reply(monkeypatch, tmp_path) -
         websocket.send_bytes(b"fake-wav-audio")
         websocket.send_json({"type": "end_turn"})
         websocket.receive_json()
-        reply = websocket.receive_json()
+        reply, chunks = _receive_reply_done(websocket)
         websocket.receive_json()
         pending = websocket.receive_json()
         events = [websocket.receive_json() for _ in range(4)]
 
-    assert reply["type"] == "reply.text"
+    assert reply["type"] == "reply.done"
+    assert chunks
     assert pending["type"] == "analysis.pending"
     assert pending["stages"] == ["grammar", "pronunciation"]
     pronunciation = next(event for event in events if event.get("stage") == "pronunciation" and event["type"] == "analysis.result")
@@ -253,12 +310,13 @@ def test_audio_websocket_pronunciation_error_includes_turn_id(monkeypatch, tmp_p
         websocket.send_bytes(b"fake-wav-audio")
         websocket.send_json({"type": "end_turn"})
         websocket.receive_json()
-        reply = websocket.receive_json()
+        reply, chunks = _receive_reply_done(websocket)
         websocket.receive_json()
         pending = websocket.receive_json()
         events = [websocket.receive_json() for _ in range(4)]
 
-    assert reply["type"] == "reply.text"
+    assert reply["type"] == "reply.done"
+    assert chunks
     assert pending["stages"] == ["grammar", "pronunciation"]
     error = next(event for event in events if event.get("stage") == "pronunciation" and event["type"] == "analysis.error")
     assert error["turn_id"] == reply["user_turn_id"]
@@ -283,13 +341,14 @@ def test_audio_websocket_saves_audio_turn_file(monkeypatch, tmp_path) -> None:
         websocket.send_bytes(b"fake-webm-audio")
         websocket.send_json({"type": "end_turn"})
         websocket.receive_json()
-        reply = websocket.receive_json()
+        reply, chunks = _receive_reply_done(websocket)
 
     session = session_store.get(session_id)
     user_turn = next(turn for turn in session.turns if turn.speaker == "user")
     audio_path = Path(user_turn.audio_path)
 
-    assert reply["type"] == "reply.text"
+    assert reply["type"] == "reply.done"
+    assert chunks
     assert user_turn.mode == "audio"
     assert audio_path.exists()
     assert audio_path.read_bytes() == b"fake-webm-audio"

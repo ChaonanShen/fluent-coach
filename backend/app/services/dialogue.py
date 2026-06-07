@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from functools import lru_cache
 from typing import Any, Literal
 
@@ -44,6 +44,7 @@ class DialogueService:
         session: Session,
         scenario: Scenario,
         user_text: str,
+        exclude_turn_id: str | None = None,
     ) -> DialogueReply:
         fixture_reply = self._match_fixture_reply(
             scenario_id=scenario.id,
@@ -63,6 +64,7 @@ class DialogueService:
                 scenario=scenario,
                 user_text=user_text,
                 current_goal=current_goal,
+                exclude_turn_id=exclude_turn_id,
             )
             if llm_reply is not None:
                 return llm_reply
@@ -82,15 +84,38 @@ class DialogueService:
         user_mode: Literal["text", "audio"] = "text",
         user_audio_path: str | None = None,
     ) -> tuple[Turn, Turn, DialogueReply]:
-        user_turn = session.add_turn(
+        user_turn = self.create_user_turn(
+            session=session,
+            user_text=user_text,
+            user_mode=user_mode,
+            user_audio_path=user_audio_path,
+        )
+        reply = self.generate_reply(
+            session=session,
+            scenario=scenario,
+            user_text=user_text,
+            exclude_turn_id=user_turn.id,
+        )
+        ai_turn = self.commit_ai_turn(session=session, reply_text=reply.text)
+        return user_turn, ai_turn, reply
+
+    def create_user_turn(
+        self,
+        *,
+        session: Session,
+        user_text: str,
+        user_mode: Literal["text", "audio"] = "text",
+        user_audio_path: str | None = None,
+    ) -> Turn:
+        return session.add_turn(
             speaker=TurnSpeaker.USER,
             text=user_text,
             mode=user_mode,
             audio_path=user_audio_path,
         )
-        reply = self.generate_reply(session=session, scenario=scenario, user_text=user_text)
-        ai_turn = session.add_turn(speaker=TurnSpeaker.AI, text=reply.text)
-        return user_turn, ai_turn, reply
+
+    def commit_ai_turn(self, *, session: Session, reply_text: str) -> Turn:
+        return session.add_turn(speaker=TurnSpeaker.AI, text=reply_text)
 
     def generate_reply_stream(
         self,
@@ -98,23 +123,43 @@ class DialogueService:
         session: Session,
         scenario: Scenario,
         user_text: str,
-    ) -> DialogueStreamReply | None:
-        if self._match_fixture_reply(scenario_id=scenario.id, user_text=user_text) is not None:
-            return None
-        if self.llm_client is None or not hasattr(self.llm_client, "stream_complete"):
-            return None
+        exclude_turn_id: str | None = None,
+    ) -> DialogueStreamReply:
         current_goal = self._current_goal(scenario, session)
+        fixture_reply = self._match_fixture_reply(scenario_id=scenario.id, user_text=user_text)
+        if fixture_reply is not None:
+            return DialogueStreamReply(
+                chunks=self.iter_text_chunks(fixture_reply),
+                current_goal=current_goal,
+                next_intent="continue_fixture_dialogue",
+            )
+        if self.llm_client is None or not hasattr(self.llm_client, "stream_complete"):
+            fallback_text = self._fallback_reply(scenario)
+            return DialogueStreamReply(
+                chunks=self.iter_text_chunks(fallback_text),
+                current_goal=current_goal,
+                next_intent="ask_for_specific_example",
+            )
         messages = self._streaming_messages(
             session=session,
             scenario=scenario,
             user_text=user_text,
             current_goal=current_goal,
+            exclude_turn_id=exclude_turn_id,
         )
         return DialogueStreamReply(
             chunks=self.llm_client.stream_complete(messages),
             current_goal=current_goal,
             next_intent="continue_conversation",
         )
+
+    def iter_text_chunks(self, text: str) -> Iterator[str]:
+        words = text.split(" ")
+        for index, word in enumerate(words):
+            if not word:
+                continue
+            suffix = " " if index < len(words) - 1 else ""
+            yield word + suffix
 
     def _match_fixture_reply(self, *, scenario_id: str, user_text: str) -> str | None:
         normalized = _normalize(user_text)
@@ -155,12 +200,10 @@ class DialogueService:
         scenario: Scenario,
         user_text: str,
         current_goal: str,
+        exclude_turn_id: str | None = None,
     ) -> DialogueReply | None:
         caller = StructuredJSONCaller(self.llm_client, stage=AnalysisStage.GRAMMAR)
-        history = [
-            {"speaker": turn.speaker.value, "text": turn.text}
-            for turn in session.turns[-8:]
-        ]
+        history = self._recent_history(session=session, exclude_turn_id=exclude_turn_id)
         result = caller.call(
             [
                 LLMMessage(
@@ -206,11 +249,9 @@ class DialogueService:
         scenario: Scenario,
         user_text: str,
         current_goal: str,
+        exclude_turn_id: str | None = None,
     ) -> list[LLMMessage]:
-        history = [
-            {"speaker": turn.speaker.value, "text": turn.text}
-            for turn in session.turns[-8:]
-        ]
+        history = self._recent_history(session=session, exclude_turn_id=exclude_turn_id)
         return [
             LLMMessage(
                 role="system",
@@ -235,6 +276,20 @@ class DialogueService:
                     f"latest_user_text: {user_text}"
                 ),
             ),
+        ]
+
+    def _recent_history(
+        self,
+        *,
+        session: Session,
+        exclude_turn_id: str | None = None,
+    ) -> list[dict[str, str]]:
+        turns: Iterable[Turn] = session.turns
+        if exclude_turn_id is not None:
+            turns = (turn for turn in turns if turn.id != exclude_turn_id)
+        return [
+            {"speaker": turn.speaker.value, "text": turn.text}
+            for turn in list(turns)[-8:]
         ]
 
 
