@@ -914,3 +914,80 @@ CSS 改动：
 - New conversation 后 Reading Practice transcript/result 清空。
 - custom 手写场景描述遵守 2000 字符上限，known_info/PDF 仍遵守 12000 字符总上限。
 - 每个 PR 有对应测试；最后 `make test` 与 `make test-e2e` 均通过。
+
+---
+
+# 第三轮 UI 紧凑化：对话标签与 Scenario Briefing 入口
+
+本轮只做两个前端 UI 调整，不改后端数据结构和接口。目标是让 practice 界面更紧凑：对话气泡依靠方位和颜色区分角色，不再显示额外 `AI` / `Me` 字样；Scenario Briefing 不再占用单独 header 栏，而是收进 scenario toolbar 右侧按钮里。
+
+## 问题定位
+
+1. conversation 气泡里显示 `AI` / `Me` role chip，但当前气泡已经通过左右方位和颜色明确区分角色，文字标签显得冗余。
+2. Scenario Briefing 当前在 scenario select 下方有单独 header、字数摘要和 `Collapse` / `Edit` 按钮。这个 header 占用垂直空间；用户期望它和 scenario 选择位于同一栏，右侧只有一个 `Scenario Briefing` 按钮，用来展开/收起原来的输入框和 PDF 上传区域。
+
+## PR 拆分
+
+### PR22：移除对话气泡里的 AI / Me 字样
+
+- **标题**：conversation 气泡移除 AI/Me 角色文字。
+- **功能描述**：对话区不再在每条消息里显示 `AI` 或 `Me`；用户仍通过气泡方位、颜色和消息内容区分双方。为可访问性保留消息级 aria label。
+- **实现思路**：
+  - `frontend/src/App.jsx`：删除 message 内部的 `<span className="message-role">...</span>`，保留 `article.message.ai/user` 和 `<p>` 文本。
+  - 给每条 message article 增加 `aria-label`，例如 user 为 `Your message`，AI 为 `AI message`，避免去掉可见标签后无障碍语义变差。
+  - `frontend/src/styles.css`：删除或废弃 `.message-role`、`.message.user .message-role` 相关样式；复查 `.message` / `.message p` 的 padding 和间距，避免去掉 role chip 后气泡内部显得过空。
+- **测试方式**：
+  - `frontend/src/App.test.jsx`：断言 conversation 仍正常渲染消息文本；限定在 message 内部断言不再出现 `.message-role`，不要全局 `queryByText('AI')` / `queryByText('Me')`，因为页面其它区域仍可能出现 AI 文案；message article 仍有对应 aria label。
+  - `make test-frontend` 通过。
+
+### PR23：Scenario Briefing 入口移到 scenario toolbar 右侧
+
+- **标题**：Scenario Briefing 改为 toolbar 右侧展开按钮。
+- **功能描述**：Scenario Briefing 不再显示单独 header 栏；scenario select 同一行右侧显示 `Scenario Briefing` 按钮。点击按钮展开原来的 Known Background、Upload PDF、PDF chip 和错误提示区域，再点击收起。会话进行中仍可打开查看，但输入和上传继续禁用。
+- **实现思路**：
+  - `frontend/src/App.jsx`：
+    - 将 `.conversation-toolbar-fill` 替换为右侧按钮：
+      ```jsx
+      <button
+        className={`secondary-action briefing-toolbar-toggle${scenarioBriefingOpen ? ' active' : ''}`}
+        aria-controls="scenario-briefing-panel"
+        aria-expanded={scenarioBriefingOpen}
+        onClick={() => setScenarioBriefingOpen((current) => !current)}
+        type="button"
+      >
+        Scenario Briefing
+      </button>
+      ```
+    - 保持 `ScenarioBriefingPanel` 在 toolbar 下方渲染；按钮不因 `sessionActive` 禁用，因为用户可能在会话中重新打开查看；但 panel 内 textarea/upload/remove 仍使用 `disabled={sessionActive}`，确保会话中不可改资料。
+    - 不再向 `ScenarioBriefingPanel` 传 `onToggleOpen`，展开/收起控制由 toolbar 按钮承担。
+  - `frontend/src/components/ScenarioBriefingPanel.jsx`：
+    - 删除 `.scenario-briefing-header`、`h2`、字数摘要和 `Collapse` / `Edit` 按钮。
+    - `open === false` 时直接返回 `null`，收起后不占独立一栏。
+    - `open === true` 时只渲染原来的 `.scenario-briefing-body`，外层 section 保留 `aria-label="Scenario Briefing"` 并增加 `id="scenario-briefing-panel"`，保留 scenario meta、Known Background textarea、Upload PDF、PDF chip 和 error。
+  - `frontend/src/styles.css`：
+    - 调整 `.conversation-toolbar` 为左右布局：scenario select 左，`Scenario Briefing` 按钮靠右。
+    - 增加 `.briefing-toolbar-toggle.active` 轻微选中态，表示当前 panel 已展开。
+    - 删除或收窄 `.scenario-briefing-header`、`.briefing-toggle`、`.scenario-briefing.collapsed` 相关样式；同时清理后面主题覆盖区里的同名选择器，避免残留死样式。
+    - 移动端让 toolbar 可换行，避免按钮和 select 挤压；必要时按钮在小屏占满或靠右单独一行。
+- **测试方式**：
+  - `frontend/src/App.test.jsx`：
+    - 默认展开时能看到 `Known background`。
+    - 点击 toolbar 右侧 `Scenario Briefing` button 后，`Known background` 消失，且不再有单独的 briefing header 占位；测试选择器用 `getByRole('button', { name: 'Scenario Briefing' })`，不要和 panel 的 `aria-label="Scenario Briefing"` 混用。
+    - 再点一次 `Scenario Briefing` 后重新展开，已输入文本仍保留。
+    - 会话中点击 `Scenario Briefing` 仍可打开查看，但 textarea/upload 仍禁用。
+    - `Scenario Briefing` button 的 `aria-expanded` 会随展开/收起更新。
+  - `frontend/e2e/smoke.spec.js`：把 `Collapse` / `Edit` 操作改为点击 `Scenario Briefing`；End + New conversation 后继续断言可展开且 Known background 清空。
+  - `make test-frontend` 和 `make test-e2e` 通过。
+
+## 推荐执行顺序
+
+1. PR22 先移除对话气泡 role chip，范围最小。
+2. PR23 再移动 Scenario Briefing 入口，涉及组件结构、样式和 e2e。
+
+## 完成定义（第三轮 UI）
+
+- conversation 气泡内不再显示可见 `AI` / `Me` 字样，消息仍有可访问名称。
+- Scenario select 与 `Scenario Briefing` 按钮在同一 toolbar；收起 briefing 后不再占单独 header 栏。
+- 点击 `Scenario Briefing` 可展开/收起原 known-info 输入框、PDF 上传和 PDF chip。
+- 会话中可打开查看 briefing，但不可修改资料或上传/删除 PDF。
+- `make test-frontend` 与 `make test-e2e` 通过；最终 `make test` 仍通过。
