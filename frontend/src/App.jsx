@@ -48,17 +48,13 @@ function normalizeUiTheme(value) {
 
 function readInitialUiTheme() {
   if (typeof window === 'undefined') {
-    return 'classic';
+    return 'modern';
   }
   const queryTheme = normalizeUiTheme(new URLSearchParams(window.location.search).get('ui'));
   if (queryTheme) {
     return queryTheme;
   }
-  try {
-    return normalizeUiTheme(window.localStorage?.getItem(UI_THEME_STORAGE_KEY)) || 'classic';
-  } catch {
-    return 'classic';
-  }
+  return 'modern';
 }
 
 function persistUiThemePreference(theme) {
@@ -1440,7 +1436,6 @@ export default function App() {
             <h1>Mistake Book</h1>
           </div>
           <div className="topbar-actions">
-            <UiThemeSwitch onChange={changeUiTheme} value={uiTheme} />
             <button
               className="secondary-action topbar-action"
               onClick={() => {
@@ -1707,7 +1702,6 @@ export default function App() {
         </div>
         <div className="topbar-actions">
           <span className="status-pill">{status}</span>
-          <UiThemeSwitch onChange={changeUiTheme} value={uiTheme} />
         </div>
       </header>
 
