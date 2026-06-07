@@ -4,7 +4,7 @@ AI 英语口语陪练是一套面向英语口语场景训练的 Web 应用。用
 
 ## 演示视频
 
-> **演示视频（B 站）**：[https://www.bilibili.com/video/BV1ZsEh6wEBi/](https://www.bilibili.com/video/BV1ZsEh6wEBi/)
+> **演示视频（B 站）**：[https://www.bilibili.com/video/BV1VQE86REma/](https://www.bilibili.com/video/BV1VQE86REma/)
 
 本地演示视频：[video/speak_coach_intro.mp4](video/speak_coach_intro.mp4)
 
