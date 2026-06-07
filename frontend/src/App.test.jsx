@@ -741,7 +741,14 @@ test('custom scenario uses briefing text as prompt and merges PDF into known inf
 });
 
 test('New conversation clears the session, assessment and briefing', async () => {
+  const voice = installVoiceMocks();
   render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Record Reading' }));
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
+  expect(await screen.findByDisplayValue('THEN HE WENT TO THEME PARK')).toBeInTheDocument();
+  expect(await screen.findByLabelText('Practice result')).toHaveTextContent('Overall 50');
 
   fireEvent.change(await screen.findByLabelText('Known background'), {
     target: { value: 'I am preparing for a backend interview.' },
@@ -764,6 +771,8 @@ test('New conversation clears the session, assessment and briefing', async () =>
   expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
   // Briefing reopened and emptied (text + any PDFs gone).
   expect(screen.getByLabelText('Known background')).toHaveValue('');
+  expect(screen.getByLabelText('Read transcript')).toHaveValue('');
+  expect(screen.queryByLabelText('Practice result')).not.toBeInTheDocument();
 });
 
 test('sends a text turn and shows correction feedback', async () => {

@@ -296,6 +296,8 @@ export default function App() {
     setInputText('');
     setPartialText('');
     setPracticePronunciation(null);
+    setPracticeReferenceText('');
+    setAssessedPracticeReferenceText('');
     setMistakePracticeResults({});
     setVoiceState('idle');
     voiceStateRef.current = 'idle';
