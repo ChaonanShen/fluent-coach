@@ -493,7 +493,7 @@ h3 {
 }
 
 .turn-assessment-item {
-  border-top: 1px solid #edf1ee;
+  border-top: 1px solid #d2ddd7;
   display: grid;
   gap: 8px;
   padding: 14px 0;
