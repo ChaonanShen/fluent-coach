@@ -1,7 +1,7 @@
 from pydantic import TypeAdapter, ValidationError
 
 from backend.app.core.fixtures import load_text_fixture
-from backend.app.models import Scenario, Session, SessionStatus, TurnSpeaker
+from backend.app.models import KnownInfoSource, Scenario, Session, SessionStatus, TurnSpeaker
 
 
 def test_scenarios_fixture_parses_as_models() -> None:
@@ -42,6 +42,32 @@ def test_session_end_sets_status_and_timestamp() -> None:
 
     assert session.status == SessionStatus.ENDED
     assert session.ended_at is not None
+
+
+def test_session_can_store_known_info() -> None:
+    session = Session(
+        scenario_id="interview",
+        known_info_text="  Backend engineer with API and product planning experience.  ",
+        known_info_sources=[
+            KnownInfoSource(
+                name="resume.pdf",
+                kind="pdf",
+                text_preview="Backend engineer",
+                char_count=38,
+            )
+        ],
+    )
+
+    assert session.known_info_text == "Backend engineer with API and product planning experience."
+    assert session.known_info_sources[0].name == "resume.pdf"
+    assert session.known_info_sources[0].kind == "pdf"
+
+
+def test_blank_known_info_normalizes_to_none() -> None:
+    session = Session(scenario_id="interview", known_info_text="   ")
+
+    assert session.known_info_text is None
+    assert session.known_info_sources == []
 
 
 def test_turn_rejects_invalid_confidence() -> None:

@@ -43,6 +43,31 @@ def test_create_session_returns_opening_turn_and_goals() -> None:
     assert body["target_expressions"]
 
 
+def test_create_builtin_session_accepts_known_info() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/sessions",
+        json={
+            "scenario_id": "interview",
+            "known_info_text": "Backend engineer with API platform experience.",
+            "known_info_sources": [
+                {
+                    "name": "resume.pdf",
+                    "kind": "pdf",
+                    "text_preview": "Backend engineer",
+                    "char_count": 45,
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["session"]["known_info_text"] == "Backend engineer with API platform experience."
+    assert body["session"]["known_info_sources"][0]["name"] == "resume.pdf"
+
+
 def test_create_session_rejects_unknown_scenario() -> None:
     client = TestClient(app)
 
@@ -106,6 +131,38 @@ def test_create_custom_session_accepts_prompt_and_name() -> None:
     assert body["session"]["custom_scenario"]["user_role"] == "Hotel guest checking in and handling a reservation issue"
     assert body["opening_line"].startswith("Good evening.")
     assert "reservation" in body["conversation_goals"][1]
+
+
+def test_create_custom_session_accepts_known_info() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/sessions",
+        json={
+            "scenario_id": "custom",
+            "custom_prompt": "Practice a product manager interview",
+            "known_info_text": "I led roadmap planning for a developer platform.",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["session"]["custom_prompt"] == "Practice a product manager interview"
+    assert body["session"]["known_info_text"] == "I led roadmap planning for a developer platform."
+
+
+def test_create_session_rejects_too_long_known_info() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/sessions",
+        json={
+            "scenario_id": "interview",
+            "known_info_text": "x" * 12001,
+        },
+    )
+
+    assert response.status_code == 422
 
 
 def test_create_custom_session_from_chinese_prompt_returns_english_scenario() -> None:

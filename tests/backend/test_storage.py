@@ -1,3 +1,5 @@
+import json
+
 from backend.app.models import (
     AnalysisError,
     AnalysisErrorSeverity,
@@ -29,6 +31,36 @@ def test_sqlite_log_store_persists_session_and_turns(tmp_path) -> None:
     assert restored.id == session.id
     assert len(restored.turns) == 2
     assert [turn.text for turn in store.list_turns(session.id)] == ["Hello", "I am ready."]
+
+
+def test_sqlite_log_store_loads_sessions_without_known_info_fields(tmp_path) -> None:
+    store = SQLiteLogStore(tmp_path / "test.sqlite")
+    session = Session(scenario_id="interview")
+    session.add_turn(speaker=TurnSpeaker.AI, text="Hello")
+    payload = session.model_dump(mode="json")
+    payload.pop("known_info_text", None)
+    payload.pop("known_info_sources", None)
+
+    with store._connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO sessions (id, scenario_id, status, created_at, ended_at, payload)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (
+                session.id,
+                session.scenario_id,
+                session.status.value,
+                session.created_at.isoformat(),
+                None,
+                json.dumps(payload),
+            ),
+        )
+
+    restored = store.get_session(session.id)
+    assert restored is not None
+    assert restored.known_info_text is None
+    assert restored.known_info_sources == []
 
 
 def test_sqlite_log_store_persists_analysis_outputs(tmp_path) -> None:

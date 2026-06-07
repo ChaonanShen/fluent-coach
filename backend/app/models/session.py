@@ -5,7 +5,7 @@ from enum import StrEnum
 from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 def utc_now() -> datetime:
@@ -55,6 +55,15 @@ class Turn(BaseModel):
     asr_confidence: float | None = Field(default=None, ge=0.0, le=1.0)
 
 
+class KnownInfoSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+    kind: Literal["text", "pdf"]
+    text_preview: str | None = Field(default=None, max_length=500)
+    char_count: int = Field(default=0, ge=0)
+
+
 class Session(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -65,10 +74,22 @@ class Session(BaseModel):
     title_source: SessionTitleSource | None = None
     scenario_name_snapshot: str | None = Field(default=None, min_length=1, max_length=100)
     custom_prompt: str | None = Field(default=None, min_length=1, max_length=2000)
+    known_info_text: str | None = Field(default=None, max_length=12000)
+    known_info_sources: list[KnownInfoSource] = Field(default_factory=list)
     status: SessionStatus = SessionStatus.ACTIVE
     created_at: datetime = Field(default_factory=utc_now)
     ended_at: datetime | None = None
     turns: list[Turn] = Field(default_factory=list)
+
+    @field_validator("known_info_text", mode="before")
+    @classmethod
+    def normalize_known_info_text(cls, value: object) -> object:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = " ".join(value.split())
+            return normalized or None
+        return value
 
     def add_turn(
         self,

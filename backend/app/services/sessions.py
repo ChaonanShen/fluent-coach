@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from backend.app.models import Scenario, Session, SessionTitleSource, TurnSpeaker
+from backend.app.models import KnownInfoSource, Scenario, Session, SessionTitleSource, TurnSpeaker
 from backend.app.services.storage import SQLiteLogStore, log_store
 
 
@@ -17,12 +17,16 @@ class SessionStore:
         *,
         custom_scenario: Scenario | None = None,
         custom_prompt: str | None = None,
+        known_info_text: str | None = None,
+        known_info_sources: list[KnownInfoSource] | None = None,
     ) -> Session:
         session = Session(
             scenario_id=scenario.id,
             custom_scenario=custom_scenario,
             scenario_name_snapshot=scenario.name,
             custom_prompt=custom_prompt,
+            known_info_text=known_info_text,
+            known_info_sources=known_info_sources or [],
         )
         session.rename(_fallback_title(scenario.name, session.created_at), source=SessionTitleSource.FALLBACK)
         session.add_turn(speaker=TurnSpeaker.AI, text=scenario.opening_line)

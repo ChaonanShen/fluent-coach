@@ -15,7 +15,15 @@ from backend.app.models.analysis import (
     PronunciationWordScore,
     SessionSummary,
 )
-from backend.app.models.session import Scenario, Session, SessionStatus, SessionTitleSource, Turn, TurnSpeaker
+from backend.app.models.session import (
+    KnownInfoSource,
+    Scenario,
+    Session,
+    SessionStatus,
+    SessionTitleSource,
+    Turn,
+    TurnSpeaker,
+)
 
 __all__ = [
     "AnalysisError",
@@ -25,6 +33,7 @@ __all__ = [
     "GrammarCorrection",
     "GrammarIssue",
     "GrammarSeverity",
+    "KnownInfoSource",
     "MistakeItem",
     "MistakeSourceStage",
     "MistakeType",

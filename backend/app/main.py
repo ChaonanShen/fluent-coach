@@ -101,6 +101,8 @@ def create_session(request: CreateSessionRequest) -> SessionResponse:
         scenario,
         custom_scenario=custom_scenario,
         custom_prompt=custom_prompt,
+        known_info_text=request.known_info_text,
+        known_info_sources=request.known_info_sources,
     )
     return SessionResponse(
         session=session,

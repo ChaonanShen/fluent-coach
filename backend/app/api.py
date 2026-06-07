@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from backend.app.models import (
     AnalysisError,
     GrammarCorrection,
+    KnownInfoSource,
     MistakeItem,
     PronunciationAssessment,
     Scenario,
@@ -29,6 +30,8 @@ class CreateSessionRequest(BaseModel):
     custom_topic: str | None = Field(default=None, min_length=3, max_length=160)
     custom_prompt: str | None = Field(default=None, min_length=3, max_length=2000)
     custom_name: str | None = Field(default=None, min_length=1, max_length=100)
+    known_info_text: str | None = Field(default=None, max_length=12000)
+    known_info_sources: list[KnownInfoSource] = Field(default_factory=list)
 
 
 class UpdateSessionTitleRequest(BaseModel):
