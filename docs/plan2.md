@@ -737,3 +737,104 @@ CSS 改动：
 - 有 known info 时，AI opening line 或后续追问能体现已知背景。
 - Practice UI 不再是简单三列白框，主对话和辅助评估有明确视觉主次。
 - 每个 PR 都有对应自动测试；最后 `make test` 和 `make test-e2e` 可通过。
+
+---
+
+# 第二轮：交互修复与发音评测
+
+本轮基于实际试用反馈，修复 4 个问题。PR 按 `README.dev.md` 规范拆分：每个 PR 只做一件事、尽量小、合并后主分支保持可运行，且每个代码 PR 都给出标题 / 功能描述 / 实现思路 / 测试方式。
+
+> 背景修复（已落地，非本轮 PR）：流式回复曾因同步阻塞的 LLM 生成器卡死事件循环，导致 `user.final` / `asr.final` 与首个 `reply.delta` 几乎同时送达（看起来"用户回复和 AI 一起出现、不流式"）。已在 `backend/app/main.py` 新增 `_aiter_offloaded()`，把阻塞迭代搬到工作线程，并把失败兜底 `generate_reply` 用 `asyncio.to_thread` 卸载。实测 `user.final` 从 ~1.67s 提前到 ~0.01s。
+
+## 问题定位
+
+1. custom 场景在 scenario select 右侧多出一个 `customScenarioText` 输入框；该框为空时 `canStartSession` 恒为假，导致 custom 场景 Start 按钮一直灰掉、无法开始。
+2. End 结束对话后，对话区 / 评测区 / Scenario Briefing 内容不会清空，缺少"重新开始"入口。
+3. 错题本列表里 Overall 分数单独占一行（`SummaryScores variant="overall"`），与下方 total/grammar/expression 计数行分离，不够紧凑。
+4. 错题本发音重读：前端有 `targetType`（word/sentence）但未下传后端；后端 `build_tencent_signed_url` 的 `eval_mode` 恒取环境默认 `1`（句子模式），单个单词也按句子模式评测，导致 word 重读的 overall 退化为 ≈ accuracy。
+
+## PR 拆分
+
+### PR13：custom 场景改用 Scenario Briefing 作为唯一输入
+
+- **标题**：custom 场景复用 Scenario Briefing 输入并修复 Start 按钮禁用。
+- **功能描述**：选择 custom 场景时不再单独弹出右侧小输入框；用户在 scenario select 下方的 Scenario Briefing 大框里用文字描述要练的场景，Start 按钮即可点亮并正常开始。Briefing 的手写文本在 custom 下同时作为练习场景描述（`custom_prompt`）和 AI 背景资料的一部分（`known_info_text`）；PDF 只作为补充背景资料，不单独决定 custom 场景是什么。
+- **实现思路**：
+  - `frontend/src/App.jsx` 删除 scenario select 旁的 `custom-scenario-label` textarea 及 `customScenarioText` state，并清理 `selectedScenario` useMemo 对它的引用。
+  - `canStartSession`：custom 分支改为判定 `knownInfoText.trim().length >= 3`。这是刻意要求用户用文字说明自定义练习场景；只上传 PDF 不能启动 custom，因为 PDF 可能只是简历/材料，不一定定义对话场景。
+  - `startSession`：custom 时 `payload.custom_prompt = knownInfoText.trim()`；同时照常发送 `known_info_text` = `combinedKnownInfoText(knownInfoText, knownInfoDocuments)` 与 `known_info_sources`。内置场景行为不变（Briefing 仅作 known_info）。
+  - 后端无需改动（`/api/sessions` 已同时接收 `custom_prompt` 与 `known_info_text`）。
+- **测试方式**：
+  - `frontend/src/App.test.jsx`：选 custom 时不存在第二个输入框；只上传 PDF 但不填文字时 Start 仍禁用；Briefing 填 ≥3 字符后 Start 可点；start payload 中 `custom_prompt` 等于手写 Briefing 文本，`known_info_text` 包含手写文本 + PDF 解析文本。
+  - `make test-frontend` 通过；手动跑 `make dev-backend` + `make dev-frontend`，custom 场景能正常 Start 并对话。
+
+### PR14：新增"重新开始"按钮，清空一轮练习状态
+
+- **标题**：新增 New conversation 按钮，一键清空对话、评测与 Briefing。
+- **功能描述**：对话进行中或结束后，提供"重新开始 / New conversation"按钮；点击后清空对话区、Conversation Assessment、计时/总结，以及 Scenario Briefing 的文本和已上传 PDF，回到可重新填写资料并开始下一场的初始状态。
+- **实现思路**：
+  - `frontend/src/App.jsx` 抽出 `resetForNewConversation()`，并且**先取消/关闭异步链路，再清 UI state**：
+    - 关闭 `voiceWebSocketRef` / `textWebSocketRef`，清空 `streamingReplyRef` / `textStreamingReplyRef` / `pendingVoiceUserTurnIdRef` / `pendingTextUserTurnIdRef`。
+    - 设置 voice / reading / mistake reading 的 canceled refs，停止对应 media stream，清空 recorder chunks，避免旧 `onstop` 或 WS 回调在 reset 后继续写入新界面。
+    - 执行 `setSession(null)`、`resetSessionDerivedState()`、`setKnownInfoText('')`、`setKnownInfoDocuments([])`、`setKnownInfoUploadState('idle')`、`setKnownInfoUploadError('')`、`setInputText('')`、`setScenarioBriefingOpen(true)`、清空当前轮 reading/pronunciation/mistake-reading 临时态。
+    - 如果 `knownInfoFileInputRef.current` 存在，同步清空 input value，避免同一个 PDF 文件无法再次选择。
+  - 在 turn-actions 区，会话已结束（`sessionEnded`）时把主按钮显示为 New conversation（或在 End 旁并列一个），绑定 `resetForNewConversation`。
+  - 不动后端；不删除已落库 session（错题本仍可回看历史）。
+- **测试方式**：
+  - `frontend/src/App.test.jsx`：模拟 End 后点击 New conversation，断言对话 turns 清空、`turnCorrections`/`turnPronunciations`/`summary` 清空、Briefing 文本与 PDF chips 清空。
+  - 增加回归测试：reset 后旧 text WS / voice WS 再发 `reply.delta` 或 `analysis.result` 不会重新污染新界面；已有录音 recorder 的 late `onstop` 不会触发旧轮评测。
+  - `make test-frontend` 通过。
+
+### PR15：错题本 Overall 分数并入计数行
+
+- **标题**：错题本列表 Overall 分数与 total/grammar/expression 同行展示。
+- **功能描述**：错题本列表卡片中，Overall 分数不再单独占一行，而是作为一个高亮 chip 与 total / Grammar / Expression / Pronunciation 计数并排显示，更紧凑；用颜色区分它是分数而非计数。
+- **实现思路**：
+  - `frontend/src/App.jsx` 移除列表项标题下独立的 `<SummaryScores summary={book.summary} variant="overall" />`，改为在 `mistake-book-counts` 行首插入一个 Overall 分数 chip（复用 `overallScore(summary)`）。
+  - `frontend/src/styles.css` 为分数 chip 增加区分色样式（如 `.count-chip--score`）。
+  - 纯展示调整，不改分数计算，不改后端。
+- **测试方式**：
+  - `frontend/src/App.test.jsx`：断言 Overall chip 与计数 chip 在同一行容器内渲染。
+  - `make test-frontend` 通过；手动确认列表观感紧凑。
+
+### PR16：后端发音评测按 word/sentence 选择 eval_mode
+
+- **标题**：发音评测支持按单词/句子模式选择腾讯 SOE eval_mode。
+- **功能描述**：发音练习/重读接口支持区分"读单词"与"读句子"：单词用单词模式、句子用句子模式评测，使两类重读的 overall 分数标准正确，不再让单个单词套用句子模式。
+- **实现思路**：
+  - 落地前先按腾讯 SOE 文档确认 `eval_mode` 取值（预计 `0`=单词、`1`=句子），可用 `scripts/test_tencent_soe.py` 手测核对。
+  - `backend/app/api.py`：`PronunciationPracticeUploadRequest`（及必要时 upload 请求）新增可选 `mode: Literal["word","sentence"] | None`，默认 `None`。
+  - `backend/app/main.py`：`assess_practice_pronunciation` 把 `mode` 透传到 `_assess_uploaded_audio_path(...)`；`_assess_uploaded_audio_path` 的签名也新增可选 `mode` 并继续传给 `pronunciation_provider.assess(...)`，避免 endpoint 收到 mode 但中间 helper 丢参。
+  - `backend/app/services/pronunciation.py`：`TencentSOEProvider.assess` 接受可选 `mode`，内部映射为 `eval_mode`；`build_tencent_signed_url` 接受显式 `eval_mode: str | None`，word→`0`、sentence→`1`，未指定时回退现有 `TENCENT_SOE_EVAL_MODE` 默认（向后兼容）。
+  - `map_result`：传入 `mode` 或 `eval_mode` 以明确结果语义。单词模式下腾讯若不返回 fluency/completeness，置为 `None` 而非 0，避免 UI 误导；overall 使用腾讯单词模式返回的整体分数，若腾讯只返回 accuracy，则 overall 等于 accuracy 是可接受结果，不作为 bug。
+  - mock provider 保持现状，确保默认测试不依赖真实服务。
+- **测试方式**：
+  - `tests/backend/test_pronunciation_service.py` / `test_tencent_soe_provider.py`：断言 practice upload 请求里的 `mode` 会穿过 `_assess_uploaded_audio_path` 到 provider；word 模式生成的签名 URL `eval_mode=0`、sentence 模式 `eval_mode=1`、未指定 mode 时仍使用环境默认；word 模式下腾讯缺失 fluency/completeness 时映射为 `None`。
+  - `make test-backend` 通过；可选用 `python3 scripts/test_tencent_soe.py` 对真实链路手动 smoke。
+
+### PR17：前端错题本重读把 word/sentence 模式下传
+
+- **标题**：错题本重读上传携带 word/sentence 模式。
+- **功能描述**：错题本里点击"读单词 / 读句子"重新评测时，前端把对应模式传给后端，使评测按正确标准进行；UI 展示与 PR16 的分数语义保持一致。
+- **实现思路**：
+  - `frontend/src/App.jsx`：`finishMistakeReadingAssessment` 把 `targetType`（word/sentence）经 `uploadPracticePronunciation` 加入请求体 `mode`。
+  - 本 PR 严格依赖 PR16：当前后端 `PronunciationPracticeUploadRequest` 使用 `extra="forbid"`，如果前端先发 `mode` 而后端未合并 PR16，会直接返回 422。因此执行顺序必须是 PR16 后端先合并，再合并 PR17 前端下传。
+- **测试方式**：
+  - `frontend/src/App.test.jsx`：断言 record word 的上传请求体含 `mode: 'word'`、record sentence 含 `mode: 'sentence'`。
+  - `make test-frontend` 通过；手动重读单词与句子，确认请求分别使用单词/句子模式，分数展示与 PR16 的 overall 语义一致。
+
+## 推荐执行顺序
+
+1. PR13 custom 修复（最阻塞，当前 custom 无法使用）。
+2. PR14 New conversation 清空。
+3. PR15 Overall chip 并排（纯展示）。
+4. PR16 后端 eval_mode（先确认腾讯取值；默认兼容，可独立合并）。
+5. PR17 前端下传 mode（依赖 PR16）。
+
+## 完成定义（第二轮）
+
+- custom 场景无多余输入框，填 Briefing 后可正常 Start 并对话；Briefing 同时进入 `custom_prompt` 与 `known_info_text`。
+- End 后可一键 New conversation，清空对话 / 评测 / Briefing（文本 + PDF）。
+- 错题本 Overall 与计数 chip 同行、紧凑且有色彩区分。
+- 读单词用单词模式、读句子用句子模式评测：后端请求明确表现为 word→`eval_mode=0`、sentence→`eval_mode=1`；word 重读的 overall 按腾讯单词模式返回语义展示，若腾讯仅返回 accuracy，则 overall 等于 accuracy 是可接受结果。
+- `make test` 通过；涉及 UI 的 PR 不破坏 `make test-e2e`。
