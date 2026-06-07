@@ -5,6 +5,7 @@ import json
 import os
 import re
 import time
+from collections.abc import AsyncIterator, Iterator
 from datetime import datetime, timezone
 
 from backend.app.core.env import load_dotenv, provider_status
@@ -744,6 +745,26 @@ async def session_audio(websocket: WebSocket, session_id: str) -> None:
         return
 
 
+async def _aiter_offloaded(iterator: Iterator[str]) -> AsyncIterator[str]:
+    """Drain a blocking sync iterator without freezing the event loop.
+
+    The LLM streaming client (`stream_complete`) is a synchronous httpx
+    generator. Iterating it directly inside the async WebSocket handler would
+    block the event loop for the whole generation + network window, which in
+    turn delays flushing the already-queued `user.final` / `asr.final` frame
+    until the first reply chunk is produced — making the user turn and the AI
+    reply appear together. Pulling each chunk via a worker thread keeps the
+    loop free to flush prior frames and to send each delta as it arrives.
+    """
+    loop = asyncio.get_running_loop()
+    sentinel = object()
+    while True:
+        chunk = await loop.run_in_executor(None, next, iterator, sentinel)
+        if chunk is sentinel:
+            break
+        yield chunk
+
+
 async def _stream_dialogue_reply(
     *,
     websocket: WebSocket,
@@ -790,11 +811,12 @@ async def _stream_dialogue_reply(
         )
 
     try:
-        for chunk in stream_reply.chunks:
+        async for chunk in _aiter_offloaded(stream_reply.chunks):
             await send_reply_chunk(chunk)
     except Exception:
         if not reply_text_parts:
-            fallback = dialogue_service.generate_reply(
+            fallback = await asyncio.to_thread(
+                dialogue_service.generate_reply,
                 session=session,
                 scenario=scenario,
                 user_text=user_text,
@@ -807,7 +829,8 @@ async def _stream_dialogue_reply(
 
     reply_text = "".join(reply_text_parts).strip()
     if not reply_text:
-        fallback = dialogue_service.generate_reply(
+        fallback = await asyncio.to_thread(
+            dialogue_service.generate_reply,
             session=session,
             scenario=scenario,
             user_text=user_text,
