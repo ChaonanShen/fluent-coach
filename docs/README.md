@@ -22,5 +22,5 @@
 
 ## 根目录相关文档
 
-- [../README.md](../README.md)：用户向安装、配置和产品功能总览。
+- [../README.md](../README.md)：用户向安装、配置、产品功能总览和带截图的使用流程说明。
 - [../README.dev.md](../README.dev.md)：开发流程、测试命令、provider 配置和环境隔离约定。

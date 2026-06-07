@@ -26,15 +26,20 @@
 
 ## Bench 与 Dashboard
 
-- `run_conversation_bench.py`：运行后端多轮 WebSocket bench，生成 JSON/Markdown 报告。
+- `run_conversation_bench.py`：运行后端多轮 WebSocket bench，生成 JSON/Markdown 报告。默认是 `offline_fake`；也支持真实音频链路和 `grammar_tts` 全自动语法错误链路。
   ```bash
   python3 scripts/run_conversation_bench.py --scenario interview --turns 10
+  python3 scripts/run_conversation_bench.py --mode grammar_tts --scenario meeting --turns 10
   python3 scripts/run_conversation_bench.py --mode real --audio-file /path/to/audio.wav
+  python3 scripts/run_conversation_bench.py --real --audio-dir /path/to/audio-dir
   ```
-- `bench_dashboard.py`：启动只读 bench dashboard，默认读取 `reports/runs/`。
+  `grammar_tts` 需要先配置真实 ASR、LLM 和 Kokoro TTS；只想验证参数和报告结构时可临时加 `--allow-fake-providers`。
+- `bench_dashboard.py`：启动只读 bench dashboard，默认读取 `reports/runs/`，默认监听 `127.0.0.1:8100`。这个脚本没有命令行参数，使用环境变量切换 runs 目录、端口和监听地址。
   ```bash
   python3 scripts/bench_dashboard.py
+  BENCH_RUNS_DIR=/tmp/bench-report/runs python3 scripts/bench_dashboard.py
   BENCH_DASHBOARD_PORT=8101 python3 scripts/bench_dashboard.py
+  BENCH_DASHBOARD_HOST=0.0.0.0 python3 scripts/bench_dashboard.py
   ```
 
 ## Fixture 维护
