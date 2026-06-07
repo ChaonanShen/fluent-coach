@@ -108,7 +108,7 @@ def test_tencent_result_maps_to_internal_pronunciation_model() -> None:
     )
 
     assert assessment.provider == "tencent_soe"
-    assert assessment.overall == 64.8
+    assert assessment.overall == 75.68
     assert assessment.fluency == 92
     assert assessment.completeness == 100
     assert assessment.words[0].word == "theme"
@@ -146,6 +146,26 @@ def test_build_tencent_signed_url_honours_explicit_eval_mode(monkeypatch) -> Non
     assert signed(None) == ["1"]
 
 
+def test_sentence_mode_overall_uses_accuracy_and_fluency_weighted_score() -> None:
+    result = {
+        "PronAccuracy": 70.0,
+        "PronFluency": 0.8,
+        "PronCompletion": 0.5,
+        "Words": [{"Word": "meeting", "PronAccuracy": 70.0}],
+    }
+    assessment = TencentSOEProvider().map_result(
+        result=result,
+        reference_text="meeting",
+        audio_file=None,
+        eval_mode=EVAL_MODE_SENTENCE,
+    )
+
+    assert assessment.accuracy == 70
+    assert assessment.fluency == 80
+    assert assessment.completeness == 50
+    assert assessment.overall == 74
+
+
 def test_word_mode_result_leaves_fluency_and_completeness_unset() -> None:
     result = {
         "PronAccuracy": 72.0,
@@ -158,7 +178,7 @@ def test_word_mode_result_leaves_fluency_and_completeness_unset() -> None:
         eval_mode=EVAL_MODE_WORD,
     )
     assert assessment.accuracy == 72
-    # SuggestedScore missing -> overall falls back to accuracy (acceptable for a single word).
+    # Word mode only exposes accuracy, so the weighted fallback has no other signal.
     assert assessment.overall == 72
     assert assessment.fluency is None
     assert assessment.completeness is None

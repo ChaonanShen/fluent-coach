@@ -210,11 +210,15 @@ class TencentSOEProvider:
             if is_word_mode and result.get("PronCompletion") is None
             else normalize_tencent_score(result.get("PronCompletion"))
         )
+        overall = tencent_overall_score(
+            accuracy=accuracy,
+            fluency=fluency,
+        )
         return PronunciationAssessment(
             provider=self.provider_name,
             reference_text=reference_text,
             audio_file=audio_file,
-            overall=normalize_tencent_score(result.get("SuggestedScore", accuracy)),
+            overall=overall,
             accuracy=accuracy,
             fluency=fluency,
             completeness=completeness,
@@ -263,6 +267,16 @@ def normalize_tencent_score(raw: object) -> float:
     if 0.0 <= value <= 1.0:
         value *= 100.0
     return max(0.0, min(100.0, value))
+
+
+def tencent_overall_score(
+    *,
+    accuracy: float,
+    fluency: float | None,
+) -> float:
+    if fluency is not None:
+        return round(max(0.0, min(100.0, accuracy * 0.6 + fluency * 0.4)), 3)
+    return accuracy
 
 
 # Tencent SOE eval_mode values (see cloud.tencent.com SOE docs):
