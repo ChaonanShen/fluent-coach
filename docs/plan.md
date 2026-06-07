@@ -3142,3 +3142,162 @@ Mistake Book pronunciation item `Read word` / `Read sentence`：
 - Pronunciation mistake 的 word / sentence target 都有标准发音按钮和 record 按钮。
 - Mistake item Delete 位于右上角。
 - 默认 `make test` 通过。
+
+### 2026-06-07 Follow-up: Conversation Assessment 合并为逐句反馈流
+
+#### 背景
+
+- 当前 `Conversation Assessment` 仍按能力拆成两个独立 section：
+  - `Grammar / Expression Correction`
+  - `Pronunciation`
+- 用户实际阅读时更关心“我刚才这一句说得怎么样”，而不是先到 grammar section 找一句，再到 pronunciation section 找同一句。
+- 目标 UI 是按用户回复逐条堆叠，每个 user turn 是一个小反馈块：
+  1. `Scores`：三个分数，`Overall / Accuracy / Fluency`。
+  2. `Original`：原句；如果该 turn 有 pronunciation assessment，把语音错误/低分词在原句中标红。
+  3. `Corrected`：包括修正后的句子，以及原句里的语法问题、表达问题；仅当 grammar/expression 确实有问题或修正时显示。
+- 正常反馈块只展示上面三类信息，不再展示旧的 section heading、`Low-score words` 标签或独立低分词列表。
+- 语法问题、表达问题属于正常学习反馈，必须保留；只是收进第三项 `Corrected` 里紧凑展示，不再作为一个单独大 section。
+- 列表行为仍像对话窗口：默认看到最近反馈，历史反馈保留在同一个滚动区域里。
+
+#### 后端影响判断
+
+- 预计不需要修改后端。
+- 现有前端已经具备按 turn 绑定的数据：
+  - `session.turns`
+  - `turnCorrections`
+  - `turnPronunciations`
+  - `turnAssessmentErrors`
+- WebSocket analysis result/error 已按 `turn_id` 进入前端状态；本次只改变这些状态的展示方式。
+- 不应为了 UI 合并改 `GrammarCorrection` / `PronunciationAssessment` schema。
+- 如果实现时发现某个真实路径缺 `turn_id`，只补 event payload 或前端 fallback，不改变 provider / storage / summary 逻辑。
+
+#### UI 目标
+
+- `Conversation Assessment` 只保留一个 feedback feed，不再显示 `Grammar / Expression Correction` 和 `Pronunciation` 两个 heading。
+- 每个 feedback item 对应一个用户 turn。
+- item 内部顺序固定：
+  1. `Scores`：`Overall 72 · Accuracy 68 · Fluency 76`。
+  2. `Original`：原句文本，语音错误/低分词内联红色高亮。
+  3. `Corrected`：修正后的句子 + 原句的语法/表达问题；仅当 corrected text 与 original 有实质差异，或 grammar/expression issue 存在时展示。
+- 不展示：
+  - `Grammar / Expression Correction` heading。
+  - `Pronunciation` heading。
+  - `Low-score words` label 或低分词独立列表。
+  - `No grammar or expression issue.` 这类占位文案。
+- 语法/表达问题展示方式：
+  - `Corrected` 区域优先展示 corrected sentence。
+  - 原句中的 grammar/expression issue 在 `Corrected` 区域内用一行紧凑说明展示。
+  - 不要恢复旧的 `Grammar / Expression Correction` section。
+- text turn 没有 pronunciation assessment 时：
+  - 不伪造分数。
+  - 仍展示 `Original` 和必要的 `Corrected`。
+- voice turn pronunciation 还未返回时：
+  - 不展示 `Pronunciation pending.`。
+  - 已有 correction 时先展示 `Original` / `Corrected`。
+  - pronunciation 返回后在同一个 item 顶部补上 score row，并把原句中的低分词标红。
+- provider/system error fallback 只指 ASR、grammar provider、pronunciation provider 等服务失败，不指用户的语法/表达错误。
+- provider/system error fallback 只作为异常兜底展示，不能成为正常反馈块的常规内容。
+- low-score word 阈值沿用现有 `.low-word` 语义，建议继续使用 `accuracy < 60`。
+
+#### 前端实现计划
+
+1. 替换 `ConversationAssessmentPanel` 的数据聚合方式。
+   - 新增 helper：`userTurnsWithAssessments(session, turnCorrections, turnPronunciations, turnAssessmentErrors)`。
+   - 输出结构：
+     - `turn`
+     - `correction`
+     - `pronunciation`
+     - `grammarErrors`
+     - `pronunciationErrors`
+   - 过滤规则：
+     - 有 correction、pronunciation、turn-level error 的 user turn 都进入列表。
+     - voice turn 不因为 pronunciation pending 单独进入列表；必须已有 correction、pronunciation 或 error。
+   - 移除现有 `userTurnsWithCorrections(...).slice(-5).reverse()` 和 `userTurnsWithPronunciation(...).slice(-5).reverse()` 的双列表逻辑。
+
+2. 新增逐句 item 组件。
+   - 建议组件名：`TurnAssessmentItem`。
+   - 内部使用：
+     - `AssessmentScoreRow`
+     - `OriginalWithPronunciationMarks`
+     - `CorrectionBlock`
+     - provider/system error 兜底用的 `TurnAssessmentErrors`，仅服务失败时出现。
+   - `ConversationAssessmentPanel` 只负责渲染一个 `assessment-feed`。
+
+3. 原句内联红字。
+   - 新增 helper：`pronunciationWordMarks(assessment)`。
+   - 以 `assessment.words` 中低分词生成按顺序匹配的 marks。
+   - 新增 helper：`renderOriginalWithPronunciationMarks(text, assessment)`。
+   - 匹配策略：
+     - 保留原句空格和标点。
+     - 对 token 做 lowercase、去掉首尾标点后，与 assessment word 按顺序匹配。
+     - 匹配到低分词时包 `<span className="low-word">...</span>`。
+     - 匹配失败时回退为纯文本，不抛错，不影响整块展示。
+   - 注意同一个词重复出现时必须按顺序匹配，不能全局替换。
+
+4. `Corrected` 条件展示。
+   - 新增 helper：`hasMeaningfulCorrection(correction, originalText)`。
+   - 判断建议：
+     - `correction?.corrected_text` 存在。
+     - normalize whitespace / case 后仍与 `originalText` 不同。
+     - 或 `correction.issues` 中存在 grammar/expression issue。
+   - 如果没有实质修正，不展示 `Corrected` 行。
+   - 如果 corrected text 为空但有 issue，仍在 `Corrected` 区域展示原句的语法/表达问题。
+
+5. 滚动行为。
+   - 单个 `.assessment-feed.assessment-scroll-list` 固定高度或占满 assessment panel 剩余高度。
+   - 列表按时间正序渲染。
+   - 继续使用 `useAutoScrollToBottom(assessmentItems.length)`，新增 item 后默认滚到底部。
+   - 不截断历史；历史通过滚轮查看。
+
+6. 样式调整。
+   - 新增/调整 class：
+     - `.assessment-feed`
+     - `.turn-assessment-item`
+     - `.assessment-score-row`
+     - `.assessment-original`
+     - `.assessment-corrected`
+     - `.assessment-original .low-word`
+   - 保持整体信息密度接近对话窗口，不使用大卡片套大卡片。
+   - 分数行放在 item 顶部，字号小而清晰。
+   - 原句与 corrected 使用明确标签，但不再占用两个 section 标题。
+   - 不同回复 item 之间保留清晰间隔，可使用浅色分割线、顶部 border 或小间距。
+
+7. 保留 Reading Practice / Mistake Book 的现有 pronunciation UI。
+   - `PronunciationResult` 仍用于 Reading Practice 和 mistake item practice result。
+   - 本次不要为了 Conversation Assessment 改动 practice result 的结构，避免扩大影响面。
+
+#### 测试计划
+
+- 更新 `frontend/src/App.test.jsx`：
+  - 初始页面不再断言 `Grammar / Expression Correction` 和 `Pronunciation` 两个 heading。
+  - 断言 `Conversation Assessment` 内存在单一 feedback feed，例如 `aria-label="Assessment feedback"`。
+  - text turn 后：
+    - item 展示 `Original`。
+    - item 展示原句。
+    - 有实质修正时展示 `Corrected`。
+    - 有 grammar/expression issue 时，在 `Corrected` 区域展示原句的语法/表达问题。
+    - 不展示 pronunciation pending。
+    - 不展示 `Grammar / Expression Correction` heading。
+  - voice turn pronunciation result 后：
+    - 同一个 item 内先出现 `Overall / Accuracy / Fluency`。
+    - `Original` 中低分词有 `.low-word`。
+    - 不再出现独立 `Pronunciation history`。
+    - 不再出现 `Low-score words` 文案。
+  - grammar result 和 pronunciation result 分别先后到达时，同一个 turn item 能逐步补齐，不产生两个重复 item。
+  - 多轮后 feedback feed 保留历史 item，并带 `assessment-scroll-list`。
+- 建议运行：
+  - `npm test -- --run`
+  - 如只改前端，可先不跑后端 pytest；合并前仍跑 `make test`。
+
+#### 验收标准
+
+- Conversation Assessment 中 grammar/expression 和 pronunciation 已合并为按 user turn 排列的单一列表。
+- 每个 voice reply item 的展示顺序是：Scores -> Original -> Corrected。
+- Original 原句里的低分词标红，而不是单独放到 `Low-score words` 列表里。
+- `Corrected` 包括修正后的句子和原句的语法/表达问题，且仅在原句确实需要修正或存在语法/表达问题时出现。
+- 正常反馈块不展示 `Low-score words`、`Pronunciation pending` 或两个旧 section heading。
+- 用户的语法问题、表达问题继续展示在 `Corrected` 区域；provider/system error fallback 与语言问题明确区分。
+- 不同回复的 assessment item 之间有清晰间隔或分割线。
+- 历史 assessment 不丢失，用户可通过滚轮查看。
+- Reading Practice、Mistake Book、Summary、Timing、后端 API 和 provider 配置不变。
+- 前端测试通过；合并前默认 `make test` 通过。
