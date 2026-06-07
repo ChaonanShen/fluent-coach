@@ -57,7 +57,6 @@ export default function App() {
   const [customScenarioText, setCustomScenarioText] = useState('');
   const [session, setSession] = useState(null);
   const [inputText, setInputText] = useState('');
-  const [latestCorrection, setLatestCorrection] = useState(null);
   const [mistakes, setMistakes] = useState([]);
   const [mistakeBooks, setMistakeBooks] = useState([]);
   const [selectedMistakeBookIds, setSelectedMistakeBookIds] = useState(new Set());
@@ -66,7 +65,6 @@ export default function App() {
   const [mistakeBookProgress, setMistakeBookProgress] = useState(null);
   const [mistakeBookState, setMistakeBookState] = useState('idle');
   const [activeMistakeTypeFilter, setActiveMistakeTypeFilter] = useState(null);
-  const [pronunciation, setPronunciation] = useState(null);
   const [turnCorrections, setTurnCorrections] = useState({});
   const [turnPronunciations, setTurnPronunciations] = useState({});
   const [turnAssessmentErrors, setTurnAssessmentErrors] = useState({});
@@ -219,8 +217,6 @@ export default function App() {
   }
 
   function resetSessionDerivedState() {
-    setLatestCorrection(null);
-    setPronunciation(null);
     setTurnCorrections({});
     setTurnPronunciations({});
     setTurnAssessmentErrors({});
@@ -249,8 +245,6 @@ export default function App() {
   }
 
   function resetCurrentTurnFeedback() {
-    setLatestCorrection(null);
-    setPronunciation(null);
     setAnalysisErrors([]);
     setLatestTiming(null);
   }
@@ -443,7 +437,6 @@ export default function App() {
           [userTurnId]: turnBody.grammar_result,
         }));
       }
-      setLatestCorrection(turnBody.grammar_result);
       speak(turnBody.ai_turn?.text || turnBody.session.turns.at(-1)?.text, { replyReadyAt: nowMs() }).catch(() => {});
       await refreshMistakes();
       setStatus('In session');
@@ -943,7 +936,6 @@ export default function App() {
               [turnId]: message.result,
             }));
           }
-          setPronunciation(message.result);
         } else {
           if (turnId) {
             setTurnCorrections((current) => ({
@@ -951,7 +943,6 @@ export default function App() {
               [turnId]: message.result,
             }));
           }
-          setLatestCorrection(message.result);
         }
         refreshMistakes().catch(() => {});
       }
@@ -1465,7 +1456,6 @@ export default function App() {
 
         <ConversationAssessmentPanel
           analysisErrors={analysisErrors}
-          latestCorrection={latestCorrection}
           session={session}
           turnAssessmentErrors={turnAssessmentErrors}
           turnCorrections={turnCorrections}
@@ -1611,90 +1601,25 @@ function SummaryScores({ summary, variant = 'detail' }) {
 
 function ConversationAssessmentPanel({
   analysisErrors,
-  latestCorrection,
   session,
   turnCorrections,
   turnPronunciations,
   turnAssessmentErrors,
 }) {
-  const correctionItems = userTurnsWithCorrections(session, turnCorrections, turnAssessmentErrors);
-  const pronunciationItems = userTurnsWithPronunciation(session, turnPronunciations, turnAssessmentErrors);
-  const correctionListRef = useAutoScrollToBottom(correctionItems.length);
-  const pronunciationListRef = useAutoScrollToBottom(pronunciationItems.length);
+  const assessmentItems = userTurnsWithAssessments(session, turnCorrections, turnPronunciations, turnAssessmentErrors);
+  const assessmentListRef = useAutoScrollToBottom(assessmentItems.length);
   return (
     <aside className="coach-panel assessment-panel" aria-label="Conversation Assessment">
       <h2>Conversation Assessment</h2>
-      <section className="assessment-section-block" aria-label="Grammar / Expression Correction">
-        <h3>Grammar / Expression Correction</h3>
-        {correctionItems.length ? (
-          <div className="assessment-list assessment-scroll-list" aria-label="Correction history" ref={correctionListRef}>
-            {correctionItems.map(({ turn, correction, errors }) => (
-              <article className="assessment-item" key={turn.id}>
-                {correction ? (
-                  <>
-                    <div className="correction-pair">
-                      <p>
-                        <span>Original</span>
-                        {turn.text}
-                      </p>
-                      <p className="corrected">
-                        <span>Corrected</span>
-                        {correction.corrected_text}
-                      </p>
-                    </div>
-                    {correction.issues?.length ? (
-                      <p>{correction.issues[0].explanation_zh}</p>
-                    ) : (
-                      <p>No grammar or expression issue.</p>
-                    )}
-                  </>
-                ) : (
-                  <p>Correction pending.</p>
-                )}
-                <TurnAssessmentErrors errors={errors} turnId={turn.id} />
-              </article>
-            ))}
-          </div>
-        ) : latestCorrection?.issues?.length ? (
-          <article className="assessment-item">
-            <div className="correction-pair">
-              {latestCorrection.user_text ? (
-                <p>
-                  <span>Original</span>
-                  {latestCorrection.user_text}
-                </p>
-              ) : null}
-              <p className="corrected">
-                <span>Corrected</span>
-                {latestCorrection.corrected_text}
-              </p>
-            </div>
-            <p>{latestCorrection.issues[0].explanation_zh}</p>
-          </article>
-        ) : (
-          <p className="empty-note">No correction yet.</p>
-        )}
-      </section>
-
-      <section className="assessment-section-block" aria-label="Pronunciation">
-        <h3>Pronunciation</h3>
-        {pronunciationItems.length ? (
-          <div className="assessment-list assessment-scroll-list" aria-label="Pronunciation history" ref={pronunciationListRef}>
-            {pronunciationItems.map(({ turn, pronunciation: turnPronunciation, errors }) => (
-              <article className="assessment-item" key={turn.id}>
-                {turnPronunciation ? (
-                  <PronunciationResult assessment={turnPronunciation} ariaLabel="Pronunciation scores" />
-                ) : (
-                  <p>Pronunciation pending.</p>
-                )}
-                <TurnAssessmentErrors errors={errors} turnId={turn.id} />
-              </article>
-            ))}
-          </div>
-        ) : (
-          <p className="empty-note">No pronunciation result yet.</p>
-        )}
-      </section>
+      {assessmentItems.length ? (
+        <div className="assessment-feed assessment-scroll-list" aria-label="Assessment feedback" ref={assessmentListRef}>
+          {assessmentItems.map((item) => (
+            <TurnAssessmentItem item={item} key={item.turn.id} />
+          ))}
+        </div>
+      ) : (
+        <p className="empty-note">No assessment yet.</p>
+      )}
 
       {analysisErrors.length ? (
         <section className="coach-block">
@@ -1710,6 +1635,57 @@ function ConversationAssessmentPanel({
         </section>
       ) : null}
     </aside>
+  );
+}
+
+function TurnAssessmentItem({ item }) {
+  const { turn, correction, pronunciation, errors } = item;
+  return (
+    <article className="turn-assessment-item">
+      <AssessmentScoreRow assessment={pronunciation} />
+      <div className="assessment-original">
+        <span>Original</span>
+        <p>{renderOriginalWithPronunciationMarks(turn.text, pronunciation)}</p>
+      </div>
+      <CorrectionBlock correction={correction} originalText={turn.text} />
+      <TurnAssessmentErrors errors={errors} turnId={turn.id} />
+    </article>
+  );
+}
+
+function AssessmentScoreRow({ assessment }) {
+  if (!assessment) {
+    return null;
+  }
+  return (
+    <div className="assessment-score-row" aria-label="Assessment scores">
+      <span>Overall {Math.round(assessment.overall)}</span>
+      <span>Accuracy {Math.round(assessment.accuracy)}</span>
+      <span>Fluency {Math.round(assessment.fluency)}</span>
+    </div>
+  );
+}
+
+function CorrectionBlock({ correction, originalText }) {
+  if (!hasMeaningfulCorrection(correction, originalText)) {
+    return null;
+  }
+  const showCorrectedText = Boolean(
+    correction?.corrected_text && normalizedText(correction.corrected_text) !== normalizedText(originalText),
+  );
+  const issues = correction?.issues || [];
+  return (
+    <div className="assessment-corrected">
+      <span>Corrected</span>
+      {showCorrectedText ? <p>{correction.corrected_text}</p> : null}
+      {issues.length ? (
+        <ul className="assessment-issues">
+          {issues.map((issue, index) => (
+            <li key={`${issue.type || 'issue'}-${index}`}>{issue.explanation_zh || issue.message || issue.type}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -1868,34 +1844,71 @@ function PronunciationResult({
   );
 }
 
-function userTurnsWithCorrections(session, turnCorrections, turnAssessmentErrors) {
+function renderOriginalWithPronunciationMarks(text, assessment) {
+  if (!assessment?.words?.length || !text) {
+    return text;
+  }
+  const words = assessment.words.map((word) => ({
+    normalized: normalizedPronunciationWord(word.word),
+    isLowScore: word.accuracy < 60,
+  }));
+  let wordIndex = 0;
+  return text.split(/(\s+)/).map((part, index) => {
+    const normalizedPart = normalizedPronunciationWord(part);
+    if (!normalizedPart) {
+      return part;
+    }
+    let matchedWord = null;
+    for (let index = wordIndex; index < words.length; index += 1) {
+      const candidate = words[index];
+      if (candidate.normalized === normalizedPart) {
+        matchedWord = candidate;
+        wordIndex = index + 1;
+        break;
+      }
+    }
+    if (!matchedWord?.isLowScore) {
+      return part;
+    }
+    return (
+      <span className="low-word" key={`${part}-${index}`}>
+        {part}
+      </span>
+    );
+  });
+}
+
+function normalizedPronunciationWord(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^[^A-Za-z0-9']+|[^A-Za-z0-9']+$/g, '')
+    .toLowerCase();
+}
+
+function hasMeaningfulCorrection(correction, originalText) {
+  if (!correction) {
+    return false;
+  }
+  if (correction.corrected_text && normalizedText(correction.corrected_text) !== normalizedText(originalText)) {
+    return true;
+  }
+  return Boolean(correction.issues?.length);
+}
+
+function normalizedText(value) {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function userTurnsWithAssessments(session, turnCorrections, turnPronunciations, turnAssessmentErrors) {
   return (session?.turns || [])
     .filter((turn) => turn.speaker === 'user')
     .map((turn) => ({
       turn,
       correction: turnCorrections[turn.id] || null,
+      pronunciation: turnPronunciations[turn.id] || null,
       errors: turnAssessmentErrors[turn.id] || [],
     }))
-    .filter(({ correction, errors }) => correction || errors.some((error) => error.stage === 'grammar'))
-    .slice(-5)
-    .reverse();
-}
-
-function userTurnsWithPronunciation(session, turnPronunciations, turnAssessmentErrors) {
-  return (session?.turns || [])
-    .filter((turn) => turn.speaker === 'user' && isVoiceTurn(turn))
-    .map((turn) => ({
-      turn,
-      pronunciation: turnPronunciations[turn.id] || null,
-      errors: (turnAssessmentErrors[turn.id] || []).filter((error) => error.stage === 'pronunciation'),
-    }))
-    .filter(({ pronunciation, errors }) => pronunciation || errors.length)
-    .slice(-5)
-    .reverse();
-}
-
-function isVoiceTurn(turn) {
-  return turn?.mode === 'audio' || turn?.mode === 'voice';
+    .filter(({ correction, pronunciation, errors }) => correction || pronunciation || errors.length);
 }
 
 function pronunciationPracticeTargets(mistake) {

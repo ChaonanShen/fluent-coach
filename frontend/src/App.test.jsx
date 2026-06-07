@@ -542,12 +542,11 @@ test('loads scenarios and starts a session', async () => {
   expect(screen.queryByRole('heading', { name: 'Conversation' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('Conversation history')).toBeInTheDocument();
   const assessmentPanel = screen.getByLabelText('Conversation Assessment');
-  expect(within(assessmentPanel).getByRole('heading', { name: 'Grammar / Expression Correction' })).toBeInTheDocument();
-  expect(within(assessmentPanel).getByRole('heading', { name: 'Pronunciation' })).toBeInTheDocument();
+  expect(within(assessmentPanel).queryByRole('heading', { name: 'Grammar / Expression Correction' })).not.toBeInTheDocument();
+  expect(within(assessmentPanel).queryByRole('heading', { name: 'Pronunciation' })).not.toBeInTheDocument();
   expect(within(assessmentPanel).queryByRole('heading', { name: 'Timing' })).not.toBeInTheDocument();
   expect(within(readingPracticePanel).getByRole('heading', { name: 'Timing' })).toBeInTheDocument();
-  expect(within(assessmentPanel).getByText('No correction yet.')).toBeInTheDocument();
-  expect(within(assessmentPanel).getByText('No pronunciation result yet.')).toBeInTheDocument();
+  expect(within(assessmentPanel).getByText('No assessment yet.')).toBeInTheDocument();
   expect(within(readingPracticePanel).getByText('No timing yet.')).toBeInTheDocument();
   expect(within(assessmentPanel).queryByRole('button', { name: 'Mistake Book (2)' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
@@ -630,14 +629,16 @@ test('sends a text turn and shows correction feedback', async () => {
 
   expect(await screen.findByText('Great. Which project is most relevant to this role?')).toBeInTheDocument();
   const assessmentPanel = screen.getByLabelText('Conversation Assessment');
-  const correctionHistory = within(assessmentPanel).getByLabelText('Correction history');
-  expect(correctionHistory).toHaveClass('assessment-scroll-list');
-  expect(within(correctionHistory).getByText('Original')).toBeInTheDocument();
-  expect(within(correctionHistory).getByText('Corrected')).toBeInTheDocument();
-  expect(within(correctionHistory).getByText('I am working in this field since three years.')).toBeInTheDocument();
+  const assessmentFeedback = within(assessmentPanel).getByLabelText('Assessment feedback');
+  expect(assessmentFeedback).toHaveClass('assessment-scroll-list');
+  expect(within(assessmentFeedback).getByText('Original')).toBeInTheDocument();
+  expect(within(assessmentFeedback).getByText('Corrected')).toBeInTheDocument();
+  expect(within(assessmentFeedback).getByText('I am working in this field since three years.')).toBeInTheDocument();
   expect(within(assessmentPanel).getByText('I have been working in this field for three years.')).toBeInTheDocument();
   expect(within(assessmentPanel).getByText('谈论从过去持续到现在的经历，应使用现在完成进行时。')).toBeInTheDocument();
   expect(within(assessmentPanel).queryByText('Pronunciation pending.')).not.toBeInTheDocument();
+  expect(within(assessmentPanel).queryByRole('heading', { name: 'Grammar / Expression Correction' })).not.toBeInTheDocument();
+  expect(within(assessmentPanel).queryByText('Low-score words')).not.toBeInTheDocument();
   expect(global.fetch).not.toHaveBeenCalledWith('/api/grammar/check', expect.any(Object));
   await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalled());
   const utterance = window.speechSynthesis.speak.mock.calls.at(-1)[0];
@@ -1110,17 +1111,14 @@ test('renders pronunciation analysis from a voice turn', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
 
   const assessmentPanel = await screen.findByLabelText('Conversation Assessment');
-  await waitFor(() => expect(within(assessmentPanel).getByLabelText('Pronunciation history')).toHaveClass('assessment-scroll-list'));
-  await waitFor(() => expect(within(assessmentPanel).getByLabelText('Pronunciation scores')).toHaveTextContent('Overall 72'));
-  expect(within(within(assessmentPanel).getByLabelText('Pronunciation')).queryByText('I have worked on backend systems for three years.'))
-    .not.toBeInTheDocument();
-  const pronunciationResult = within(assessmentPanel).getByLabelText('Pronunciation scores').closest('.pronunciation-result');
-  expect(
-    within(pronunciationResult).getByText('Low-score words')
-      .compareDocumentPosition(within(pronunciationResult).getByLabelText('Pronunciation scores'))
-      & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-  expect(within(assessmentPanel).getByText('SYSTEMS')).toHaveClass('low-word');
+  await waitFor(() => expect(within(assessmentPanel).getByLabelText('Assessment feedback')).toHaveClass('assessment-scroll-list'));
+  const assessmentFeedback = within(assessmentPanel).getByLabelText('Assessment feedback');
+  await waitFor(() => expect(within(assessmentFeedback).getByLabelText('Assessment scores')).toHaveTextContent('Overall 72'));
+  expect(within(assessmentPanel).queryByRole('heading', { name: 'Pronunciation' })).not.toBeInTheDocument();
+  expect(within(assessmentPanel).queryByText('Low-score words')).not.toBeInTheDocument();
+  expect(within(assessmentPanel).queryByText('Pronunciation pending.')).not.toBeInTheDocument();
+  expect(within(assessmentFeedback).getByText('Original')).toBeInTheDocument();
+  expect(within(assessmentFeedback).getByText('systems')).toHaveClass('low-word');
 });
 
 test('shows microphone permission errors clearly', async () => {

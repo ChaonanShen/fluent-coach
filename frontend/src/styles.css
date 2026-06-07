@@ -468,10 +468,105 @@ h3 {
   gap: 12px;
 }
 
+.assessment-feed {
+  display: grid;
+  gap: 0;
+}
+
 .assessment-scroll-list {
   max-height: 280px;
   overflow-y: auto;
   padding-right: 4px;
+}
+
+.assessment-feed.assessment-scroll-list {
+  max-height: min(620px, 62vh);
+}
+
+.turn-assessment-item {
+  border-top: 1px solid #edf1ee;
+  display: grid;
+  gap: 8px;
+  padding: 14px 0;
+}
+
+.turn-assessment-item:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.turn-assessment-item:last-child {
+  padding-bottom: 0;
+}
+
+.assessment-score-row {
+  color: #225446;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  font-weight: 750;
+  gap: 6px 10px;
+}
+
+.assessment-score-row span:not(:last-child)::after {
+  color: #a5b0aa;
+  content: "·";
+  margin-left: 10px;
+}
+
+.assessment-original,
+.assessment-corrected {
+  display: grid;
+  gap: 4px;
+}
+
+.assessment-original > span,
+.assessment-corrected > span {
+  color: #6f7c77;
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.assessment-original p,
+.assessment-corrected p {
+  line-height: 1.38;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.assessment-original p {
+  color: #243139;
+  font-weight: 700;
+}
+
+.assessment-original .low-word {
+  background: #fff1ea;
+  border: 1px solid #e2a785;
+  border-radius: 999px;
+  color: #7c3217;
+  display: inline-block;
+  font-weight: 800;
+  line-height: 1.15;
+  padding: 1px 5px;
+}
+
+.assessment-corrected p {
+  color: #1f5d4b;
+  font-weight: 700;
+}
+
+.assessment-issues {
+  color: #63726d;
+  display: grid;
+  font-size: 0.84rem;
+  gap: 4px;
+  line-height: 1.35;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 }
 
 .assessment-section-block {
