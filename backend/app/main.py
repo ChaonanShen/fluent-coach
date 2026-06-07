@@ -11,7 +11,7 @@ from backend.app.core.env import load_dotenv, provider_status
 
 load_dotenv()
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, File, HTTPException, Query, UploadFile
 from starlette.websockets import WebSocket, WebSocketDisconnect
 
 from backend.app.api import (
@@ -19,6 +19,7 @@ from backend.app.api import (
     DeleteMistakeBooksRequest,
     DeleteResponse,
     GrammarCheckRequest,
+    KnownInfoPdfResponse,
     MistakeBookDetail,
     MistakeBookListResponse,
     MistakeBookRecord,
@@ -43,6 +44,7 @@ from backend.app.models import (
     AnalysisErrorSeverity,
     AnalysisStage,
     GrammarCorrection,
+    KnownInfoSource,
     MistakeItem,
     MistakeType,
     PronunciationAssessment,
@@ -59,6 +61,7 @@ from backend.app.services.dialogue import dialogue_service
 from backend.app.services.grammar import grammar_service
 from backend.app.services.mistakes import mistake_service
 from backend.app.services.opening import opening_service
+from backend.app.services.pdf import MAX_PDF_BYTES, PdfExtractionError, extract_pdf_text
 from backend.app.services.pronunciation import pronunciation_provider
 from backend.app.services.progress import progress_service
 from backend.app.services.scenarios import get_scenario, list_scenarios, resolve_session_scenario
@@ -398,6 +401,28 @@ def get_session_analysis(session_id: str) -> SessionAnalysisResponse:
         pronunciation_results=analysis_store.pronunciation_results(session_id),
         errors=analysis_store.errors(session_id),
     )
+
+
+@app.post("/api/known-info/pdf", response_model=KnownInfoPdfResponse)
+async def upload_known_info_pdf(file: UploadFile = File(...)) -> KnownInfoPdfResponse:
+    filename = os.path.basename(file.filename or "")
+    content_type = (file.content_type or "").lower()
+    if not filename.lower().endswith(".pdf") or (content_type and content_type != "application/pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+    file_bytes = await file.read(MAX_PDF_BYTES + 1)
+    if len(file_bytes) > MAX_PDF_BYTES:
+        raise HTTPException(status_code=413, detail="PDF file must be 10MB or smaller")
+    try:
+        text = extract_pdf_text(file_bytes)
+    except PdfExtractionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    source = KnownInfoSource(
+        name=filename,
+        kind="pdf",
+        text_preview=text[:240],
+        char_count=len(text),
+    )
+    return KnownInfoPdfResponse(source=source, text=text)
 
 
 @app.get("/api/mistakes", response_model=MistakeListResponse)

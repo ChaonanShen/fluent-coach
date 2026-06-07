@@ -167,6 +167,13 @@ class SessionAnalysisResponse(BaseModel):
     errors: list[AnalysisError]
 
 
+class KnownInfoPdfResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source: KnownInfoSource
+    text: str
+
+
 class ProgressPoint(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
