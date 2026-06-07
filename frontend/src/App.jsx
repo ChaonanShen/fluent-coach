@@ -28,6 +28,7 @@ const MESSAGE_LIST_BOTTOM_THRESHOLD_PX = 72;
 const BROWSER_VOICE_READY_TIMEOUT_MS = 500;
 const AI_THINKING_TEXT = 'AI is thinking...';
 const MAX_KNOWN_INFO_CHARS = 12000;
+const MAX_CUSTOM_PROMPT_CHARS = 2000;
 const PREFERRED_ENGLISH_VOICE_NAME_PARTS = [
   'natural',
   'neural',
@@ -177,8 +178,13 @@ export default function App() {
   const sessionActive = Boolean(session && !sessionEnded);
   const sessionActionLabel = sessionActive ? 'End' : 'Start';
   const knownInfoCharCount = combinedKnownInfoText(knownInfoText, knownInfoDocuments).length;
+  const customPromptText = knownInfoText.trim();
   const canStartSession = Boolean(
-    selectedScenarioId && (selectedScenarioId !== 'custom' || knownInfoText.trim().length >= 3),
+    selectedScenarioId
+      && (
+        selectedScenarioId !== 'custom'
+        || (customPromptText.length >= 3 && customPromptText.length <= MAX_CUSTOM_PROMPT_CHARS)
+      ),
   );
 
   useEffect(() => {
@@ -456,7 +462,13 @@ export default function App() {
     try {
       const payload = { scenario_id: selectedScenarioId };
       if (selectedScenarioId === 'custom') {
-        payload.custom_prompt = knownInfoText.trim();
+        const customPrompt = knownInfoText.trim();
+        if (customPrompt.length > MAX_CUSTOM_PROMPT_CHARS) {
+          setError(`Custom scenario description is too long. Keep it under ${MAX_CUSTOM_PROMPT_CHARS.toLocaleString()} characters.`);
+          setStatus('Ready');
+          return;
+        }
+        payload.custom_prompt = customPrompt;
       }
       const combinedKnownInfo = combinedKnownInfoText(knownInfoText, knownInfoDocuments);
       if (combinedKnownInfo.length > MAX_KNOWN_INFO_CHARS) {

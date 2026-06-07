@@ -639,6 +639,33 @@ test('starts a custom scenario from the scenario briefing', async () => {
   });
 });
 
+test('custom scenario prompt respects the backend length limit', async () => {
+  render(<App />);
+
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Scenario' }), {
+    target: { value: 'custom' },
+  });
+
+  fireEvent.change(screen.getByLabelText('Known background'), {
+    target: { value: 'a'.repeat(2001) },
+  });
+  expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled();
+  expect(sessionRequestBodies).toHaveLength(0);
+
+  fireEvent.change(screen.getByLabelText('Known background'), {
+    target: { value: 'a'.repeat(2000) },
+  });
+  expect(screen.getByRole('button', { name: 'Start' })).not.toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+  await waitFor(() => expect(sessionRequestBodies).toHaveLength(1));
+  expect(sessionRequestBodies.at(-1)).toMatchObject({
+    scenario_id: 'custom',
+    known_info_text: 'a'.repeat(2000),
+  });
+  expect(sessionRequestBodies.at(-1).custom_prompt).toHaveLength(2000);
+});
+
 test('shows collapsible scenario briefing for builtin scenarios', async () => {
   render(<App />);
 
