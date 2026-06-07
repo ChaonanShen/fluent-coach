@@ -574,7 +574,6 @@ test('loads scenarios and starts a session', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   expect(await screen.findByText(scenario.opening_line)).toBeInTheDocument();
-  expect(screen.queryByText('AI')).not.toBeInTheDocument();
   await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalled());
   expect(window.speechSynthesis.speak.mock.calls.at(-1)[0].text).toBe(scenario.opening_line);
   expect(screen.getByRole('button', { name: 'End' })).toBeInTheDocument();

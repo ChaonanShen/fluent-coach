@@ -1259,6 +1259,230 @@ h3 {
   max-width: 190px;
 }
 
+.app-shell {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(246, 249, 246, 0.2) 42%),
+    repeating-linear-gradient(90deg, rgba(39, 73, 63, 0.035) 0 1px, transparent 1px 96px),
+    #f4efe5;
+  padding: 20px;
+}
+
+.topbar {
+  background: rgba(255, 252, 247, 0.86);
+  border: 1px solid #e4d9c7;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(41, 50, 44, 0.08);
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  width: 100%;
+}
+
+.topbar h1 {
+  color: #152322;
+  font-size: 1.45rem;
+}
+
+.status-pill {
+  background: #eaf4f2;
+  border-color: #b7d4cf;
+  color: #1f5b53;
+}
+
+.workspace {
+  gap: 14px;
+  grid-template-columns: minmax(540px, 1.42fr) minmax(300px, 0.62fr) minmax(280px, 0.52fr);
+  max-width: 1500px;
+}
+
+.conversation-panel,
+.coach-panel,
+.mistake-book {
+  background: rgba(255, 252, 247, 0.94);
+  border-color: #dfd6c6;
+  box-shadow: 0 16px 40px rgba(35, 42, 38, 0.09);
+}
+
+.conversation-panel {
+  border-left: 4px solid #2c6b5a;
+  padding: 16px;
+}
+
+.coach-panel {
+  background: rgba(255, 255, 252, 0.96);
+}
+
+.conversation-toolbar {
+  background: #fff8ee;
+  border: 1px solid #eadcc6;
+  border-radius: 8px;
+  margin-bottom: 12px;
+  padding: 10px;
+}
+
+.scenario-select-label,
+.custom-scenario-label {
+  color: #53645d;
+}
+
+.scenario-select-label select,
+.custom-scenario-label textarea,
+.turn-form textarea,
+.known-info-label textarea,
+.read-reference-input {
+  background: #fffefb;
+  border-color: #d7cdbc;
+  box-shadow: inset 0 1px 0 rgba(30, 42, 38, 0.03);
+}
+
+.scenario-briefing {
+  background: #f3f7f3;
+  border-color: #cadfd4;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.scenario-briefing.collapsed {
+  background: #eef6f5;
+}
+
+.scenario-briefing h2 {
+  color: #1b3f39;
+}
+
+.briefing-scenario-meta span {
+  background: #ffffff;
+  border-color: #cfe0d8;
+  color: #35534c;
+}
+
+.briefing-document-chip {
+  background: #fffaf0;
+  border-color: #e5cf9f;
+}
+
+.message-list {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(242, 247, 244, 0.86)),
+    repeating-linear-gradient(0deg, rgba(32, 76, 63, 0.035) 0 1px, transparent 1px 48px);
+  border-color: #d4ddd8;
+  gap: 12px;
+  padding: 16px;
+}
+
+.message {
+  border-color: #d9e2dd;
+  box-shadow: 0 8px 18px rgba(28, 40, 36, 0.08);
+  display: grid;
+  gap: 5px;
+}
+
+.message-role {
+  color: #6d7a74;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.message.ai {
+  background: #ffffff;
+}
+
+.message.user {
+  background: #e6f2ef;
+  border-color: #b9d8cf;
+}
+
+.message.user .message-role {
+  color: #1f6658;
+}
+
+.message.pending {
+  background: #fff8e8;
+  border-color: #e7cf92;
+}
+
+.turn-form {
+  background: #fff8ee;
+  border: 1px solid #eadcc6;
+  border-radius: 8px;
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.primary-action {
+  background: #216653;
+  border-color: #216653;
+}
+
+.primary-action:hover:not(:disabled) {
+  background: #174c3e;
+}
+
+.secondary-action {
+  background: #fffdf8;
+  border-color: #d0a75c;
+  color: #7a4a14;
+}
+
+.assessment-panel h2,
+.reading-practice-panel h2,
+.mistake-book h2 {
+  color: #182826;
+}
+
+.turn-assessment-item,
+.analysis-error,
+.mistake-book-record,
+.mistake-item,
+.mistake-practice-result {
+  border-radius: 8px;
+}
+
+.turn-assessment-item {
+  background: #fffdf8;
+  border-color: #e1d8c9;
+}
+
+.assessment-score-row,
+.summary-score-row {
+  background: #edf7f5;
+  border: 1px solid #c9dfda;
+  border-radius: 999px;
+  color: #1f5b53;
+  padding: 4px 8px;
+}
+
+.assessment-corrected p,
+.corrected {
+  color: #1b6b4f;
+}
+
+.reading-practice-link {
+  border-top-color: #e4d9c7;
+}
+
+.mistake-book-workspace {
+  max-width: 1500px;
+}
+
+.mistake-book-record,
+.mistake-item {
+  background: #fffdf8;
+  border-color: #e1d8c9;
+}
+
+.mistake-book-counts span,
+.mistake-book-counts button {
+  background: #eef6f5;
+  border-color: #c9dfda;
+  color: #245a52;
+}
+
+.icon-action {
+  background: #fffdf8;
+  border-color: #d7cdbc;
+}
+
 @media (max-width: 920px) {
   html,
   body,

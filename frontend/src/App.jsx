@@ -1674,6 +1674,7 @@ export default function App() {
           <div className="message-list" aria-label="Conversation history" ref={messageListRef}>
             {turns.map((turn) => (
               <article className={`message ${turn.speaker}${turn.pending ? ' pending' : ''}`} key={turn.id}>
+                <span className="message-role">{turn.speaker === 'user' ? 'Me' : 'AI'}</span>
                 <p>{turn.text}</p>
               </article>
             ))}
