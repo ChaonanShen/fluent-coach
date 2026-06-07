@@ -247,6 +247,124 @@ h3 {
   min-height: 42px;
 }
 
+.scenario-briefing {
+  background: #fbfcfa;
+  border: 1px solid #dfe7e2;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+}
+
+.scenario-briefing-header {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.scenario-briefing h2 {
+  font-size: 1rem;
+  margin-bottom: 3px;
+}
+
+.scenario-briefing-header p {
+  color: #65736c;
+  font-size: 0.86rem;
+  margin-bottom: 0;
+}
+
+.scenario-briefing-body {
+  display: grid;
+  gap: 12px;
+}
+
+.briefing-scenario-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.briefing-scenario-meta span,
+.briefing-upload-row span,
+.briefing-document-chip small {
+  color: #65736c;
+  font-size: 0.84rem;
+}
+
+.briefing-scenario-meta span {
+  background: #eef4f0;
+  border: 1px solid #d7e3db;
+  border-radius: 999px;
+  padding: 4px 9px;
+}
+
+.known-info-label {
+  display: grid;
+  gap: 6px;
+}
+
+.known-info-label span {
+  color: #34423a;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.known-info-label textarea {
+  min-height: 118px;
+  resize: vertical;
+}
+
+.briefing-upload-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hidden-file-input {
+  display: none;
+}
+
+.briefing-document-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.briefing-document-chip {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dbe4df;
+  border-radius: 8px;
+  display: flex;
+  gap: 8px;
+  padding: 7px 9px;
+}
+
+.briefing-document-chip span {
+  font-weight: 700;
+}
+
+.icon-text-action {
+  background: transparent;
+  border: 0;
+  color: #2f6f55;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0;
+}
+
+.icon-text-action:disabled {
+  color: #8e9a94;
+  cursor: not-allowed;
+}
+
+.briefing-error {
+  margin: 0;
+}
+
 .session-action {
   margin-top: 0;
   width: 108px;

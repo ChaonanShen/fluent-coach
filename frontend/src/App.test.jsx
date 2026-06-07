@@ -360,6 +360,17 @@ beforeEach(() => {
         fallback_applied: true,
       });
     }
+    if (url === '/api/known-info/pdf') {
+      return jsonResponse({
+        source: {
+          name: 'resume.pdf',
+          kind: 'pdf',
+          text_preview: 'Resume PDF text',
+          char_count: 'Resume PDF text'.length,
+        },
+        text: 'Resume PDF text',
+      });
+    }
     if (url.startsWith('/api/mistakes/') && options.method === 'DELETE') {
       const mistakeId = url.split('/').at(-1);
       deletedMistakeIds.add(mistakeId);
@@ -397,6 +408,9 @@ beforeEach(() => {
           target_expressions: customScenario.target_expressions,
         });
       }
+      const openingText = requestBody.known_info_text
+        ? 'I reviewed the background you shared. Could you walk me through one project that best matches this role?'
+        : scenario.opening_line;
       return jsonResponse({
         session: {
           id: 'session_1',
@@ -405,10 +419,10 @@ beforeEach(() => {
           status: 'active',
           created_at: '2026-06-05T00:00:00Z',
           ended_at: null,
-          turns: [openingTurn],
+          turns: [{ ...openingTurn, text: openingText }],
         },
         scenario,
-        opening_line: scenario.opening_line,
+        opening_line: openingText,
         conversation_goals: scenario.conversation_goals,
         target_expressions: scenario.target_expressions,
       });
@@ -623,6 +637,102 @@ test('starts a custom scenario from the conversation toolbar', async () => {
   expect(sessionRequestBodies.at(-1)).toEqual({
     scenario_id: 'custom',
     custom_prompt: 'airport check-in',
+  });
+});
+
+test('shows collapsible scenario briefing for builtin scenarios', async () => {
+  render(<App />);
+
+  expect(await screen.findByLabelText('Scenario Briefing')).toBeInTheDocument();
+  expect(screen.getByLabelText('Known background')).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText('Known background'), {
+    target: { value: 'I am preparing for a backend interview.' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
+
+  expect(screen.queryByLabelText('Known background')).not.toBeInTheDocument();
+  expect(screen.getByText('39 chars · 0 PDF')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect(screen.getByDisplayValue('I am preparing for a backend interview.')).toBeInTheDocument();
+});
+
+test('uploads one briefing PDF and includes it in start payload', async () => {
+  render(<App />);
+
+  await screen.findByLabelText('Scenario Briefing');
+  fireEvent.change(screen.getByLabelText('Known background'), {
+    target: { value: 'Typed background' },
+  });
+  const file = new File(['fake pdf'], 'resume.pdf', { type: 'application/pdf' });
+  fireEvent.change(screen.getByLabelText('Upload briefing PDF'), {
+    target: { files: [file] },
+  });
+
+  expect(await screen.findByText('resume.pdf')).toBeInTheDocument();
+  expect(screen.getByText('1 PDF attached')).toBeInTheDocument();
+  expect(screen.getByLabelText('Upload briefing PDF')).toBeDisabled();
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+  await screen.findByText(/I reviewed the background you shared/);
+  expect(sessionRequestBodies.at(-1)).toMatchObject({
+    scenario_id: 'interview',
+    known_info_text: 'Typed background\n\nResume PDF text',
+    known_info_sources: [
+      {
+        name: 'resume.pdf',
+        kind: 'pdf',
+        text_preview: 'Resume PDF text',
+        char_count: 'Resume PDF text'.length,
+      },
+    ],
+  });
+  expect(screen.queryByLabelText('Known background')).not.toBeInTheDocument();
+});
+
+test('removing a briefing PDF removes its text from start payload', async () => {
+  render(<App />);
+
+  await screen.findByLabelText('Scenario Briefing');
+  fireEvent.change(screen.getByLabelText('Known background'), {
+    target: { value: 'Typed background' },
+  });
+  fireEvent.change(screen.getByLabelText('Upload briefing PDF'), {
+    target: { files: [new File(['fake pdf'], 'resume.pdf', { type: 'application/pdf' })] },
+  });
+  expect(await screen.findByText('resume.pdf')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Remove resume.pdf' }));
+  expect(screen.queryByText('resume.pdf')).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+  await screen.findByText(/I reviewed the background you shared/);
+  expect(sessionRequestBodies.at(-1)).toMatchObject({
+    scenario_id: 'interview',
+    known_info_text: 'Typed background',
+  });
+  expect(sessionRequestBodies.at(-1)).not.toHaveProperty('known_info_sources');
+  expect(sessionRequestBodies.at(-1).known_info_text).not.toContain('Resume PDF text');
+});
+
+test('custom scenario sends custom prompt and briefing separately', async () => {
+  render(<App />);
+
+  fireEvent.change(await screen.findByRole('combobox', { name: 'Scenario' }), {
+    target: { value: 'custom' },
+  });
+  fireEvent.change(screen.getByLabelText('Custom scenario'), {
+    target: { value: 'airport check-in' },
+  });
+  fireEvent.change(screen.getByLabelText('Known background'), {
+    target: { value: 'I have two checked bags.' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+  expect(await screen.findByText("Let's practice airport check-in. Could you start with what you want to say first?"))
+    .toBeInTheDocument();
+  expect(sessionRequestBodies.at(-1)).toMatchObject({
+    scenario_id: 'custom',
+    custom_prompt: 'airport check-in',
+    known_info_text: 'I have two checked bags.',
   });
 });
 

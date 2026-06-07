@@ -25,6 +25,7 @@ async function request(path, options = {}) {
 const MESSAGE_LIST_BOTTOM_THRESHOLD_PX = 72;
 const BROWSER_VOICE_READY_TIMEOUT_MS = 500;
 const AI_THINKING_TEXT = 'AI is thinking...';
+const MAX_KNOWN_INFO_CHARS = 12000;
 const PREFERRED_ENGLISH_VOICE_NAME_PARTS = [
   'natural',
   'neural',
@@ -56,6 +57,11 @@ export default function App() {
   const [scenarios, setScenarios] = useState([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState('');
   const [customScenarioText, setCustomScenarioText] = useState('');
+  const [scenarioBriefingOpen, setScenarioBriefingOpen] = useState(true);
+  const [knownInfoText, setKnownInfoText] = useState('');
+  const [knownInfoDocuments, setKnownInfoDocuments] = useState([]);
+  const [knownInfoUploadState, setKnownInfoUploadState] = useState('idle');
+  const [knownInfoUploadError, setKnownInfoUploadError] = useState('');
   const [session, setSession] = useState(null);
   const [inputText, setInputText] = useState('');
   const [mistakes, setMistakes] = useState([]);
@@ -88,6 +94,7 @@ export default function App() {
   const messageListRef = useRef(null);
   const voiceWebSocketRef = useRef(null);
   const textWebSocketRef = useRef(null);
+  const knownInfoFileInputRef = useRef(null);
   const voiceStreamRef = useRef(null);
   const voiceStateRef = useRef('idle');
   const pendingAudioSendsRef = useRef([]);
@@ -168,6 +175,7 @@ export default function App() {
   const sessionEnded = session?.status === 'ended';
   const sessionActive = Boolean(session && !sessionEnded);
   const sessionActionLabel = sessionActive ? 'End' : 'Start';
+  const knownInfoCharCount = combinedKnownInfoText(knownInfoText, knownInfoDocuments).length;
   const canStartSession = Boolean(
     selectedScenarioId && (selectedScenarioId !== 'custom' || customScenarioText.trim().length >= 3),
   );
@@ -401,11 +409,24 @@ export default function App() {
       if (selectedScenarioId === 'custom') {
         payload.custom_prompt = customScenarioText.trim();
       }
+      const combinedKnownInfo = combinedKnownInfoText(knownInfoText, knownInfoDocuments);
+      if (combinedKnownInfo.length > MAX_KNOWN_INFO_CHARS) {
+        setError(`Scenario briefing is too long. Keep it under ${MAX_KNOWN_INFO_CHARS.toLocaleString()} characters.`);
+        setStatus('Ready');
+        return;
+      }
+      if (combinedKnownInfo) {
+        payload.known_info_text = combinedKnownInfo;
+      }
+      if (knownInfoDocuments.length) {
+        payload.known_info_sources = knownInfoDocuments.map((document) => document.source);
+      }
       const body = await request('/api/sessions', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
       setSession(body.session);
+      setScenarioBriefingOpen(false);
       const openingText = body.opening_line || body.session?.turns?.find((turn) => turn.speaker === 'ai')?.text;
       if (openingText) {
         speak(openingText, { replyReadyAt: nowMs() }).catch(() => {});
@@ -416,6 +437,57 @@ export default function App() {
       handleRequestError(err);
       setStatus('Error');
     }
+  }
+
+  async function uploadKnownInfoPdf(file) {
+    if (!file) {
+      return;
+    }
+    if (knownInfoDocuments.length >= 1) {
+      setKnownInfoUploadError('Remove the current PDF before uploading another one.');
+      return;
+    }
+    if (file.type && file.type !== 'application/pdf') {
+      setKnownInfoUploadError('Only PDF files are supported.');
+      return;
+    }
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+      setKnownInfoUploadError('Only PDF files are supported.');
+      return;
+    }
+    setKnownInfoUploadState('uploading');
+    setKnownInfoUploadError('');
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const response = await fetch('/api/known-info/pdf', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.detail || `PDF upload failed: ${response.status}`);
+      }
+      const body = await response.json();
+      setKnownInfoDocuments([{
+        id: `pdf-${Date.now()}`,
+        source: body.source,
+        text: body.text,
+      }]);
+      setKnownInfoUploadState('idle');
+    } catch (err) {
+      setKnownInfoUploadError(err.message || 'PDF upload failed.');
+      setKnownInfoUploadState('idle');
+    } finally {
+      if (knownInfoFileInputRef.current) {
+        knownInfoFileInputRef.current.value = '';
+      }
+    }
+  }
+
+  function removeKnownInfoDocument(documentId) {
+    setKnownInfoDocuments((current) => current.filter((document) => document.id !== documentId));
+    setKnownInfoUploadError('');
   }
 
   async function sendTurn(event) {
@@ -1580,6 +1652,85 @@ export default function App() {
             )}
           </div>
 
+          <section className={`scenario-briefing${scenarioBriefingOpen ? ' open' : ' collapsed'}`} aria-label="Scenario Briefing">
+            <div className="scenario-briefing-header">
+              <div>
+                <h2>Scenario Briefing</h2>
+                <p>
+                  {knownInfoCharCount.toLocaleString()} chars · {knownInfoDocuments.length} PDF
+                </p>
+              </div>
+              <button
+                className="secondary-action briefing-toggle"
+                onClick={() => setScenarioBriefingOpen((current) => !current)}
+                type="button"
+              >
+                {scenarioBriefingOpen ? 'Collapse' : 'Edit'}
+              </button>
+            </div>
+            {scenarioBriefingOpen ? (
+              <div className="scenario-briefing-body">
+                <div className="briefing-scenario-meta">
+                  <span>{selectedScenario?.name || 'Custom'}</span>
+                  <span>{selectedScenario?.ai_role || 'AI role'}</span>
+                  <span>{selectedScenario?.conversation_goals?.length || 0} goals</span>
+                </div>
+                <label className="known-info-label">
+                  <span>Known Background</span>
+                  <textarea
+                    aria-label="Known background"
+                    disabled={sessionActive}
+                    maxLength={MAX_KNOWN_INFO_CHARS}
+                    onChange={(event) => setKnownInfoText(event.target.value)}
+                    placeholder="Add resume highlights, meeting notes, preferences, or any context the AI should know before the conversation."
+                    rows={5}
+                    value={knownInfoText}
+                  />
+                </label>
+                <div className="briefing-upload-row">
+                  <input
+                    accept="application/pdf"
+                    aria-label="Upload briefing PDF"
+                    className="hidden-file-input"
+                    disabled={sessionActive || knownInfoDocuments.length >= 1 || knownInfoUploadState === 'uploading'}
+                    onChange={(event) => uploadKnownInfoPdf(event.target.files?.[0])}
+                    ref={knownInfoFileInputRef}
+                    type="file"
+                  />
+                  <button
+                    className="secondary-action"
+                    disabled={sessionActive || knownInfoDocuments.length >= 1 || knownInfoUploadState === 'uploading'}
+                    onClick={() => knownInfoFileInputRef.current?.click()}
+                    type="button"
+                  >
+                    {knownInfoUploadState === 'uploading' ? 'Uploading' : 'Upload PDF'}
+                  </button>
+                  <span>{knownInfoDocuments.length ? '1 PDF attached' : 'No PDF attached'}</span>
+                </div>
+                {knownInfoDocuments.length ? (
+                  <div className="briefing-document-list">
+                    {knownInfoDocuments.map((document) => (
+                      <div className="briefing-document-chip" key={document.id}>
+                        <span>{document.source.name}</span>
+                        <small>{document.source.char_count.toLocaleString()} chars</small>
+                        <button
+                          aria-label={`Remove ${document.source.name}`}
+                          className="icon-text-action"
+                          disabled={sessionActive}
+                          onClick={() => removeKnownInfoDocument(document.id)}
+                          type="button"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+                {knownInfoUploadError ? <p className="inline-error briefing-error">{knownInfoUploadError}</p> : null}
+              </div>
+            ) : null}
+          </section>
+
           <div className="message-list" aria-label="Conversation history" ref={messageListRef}>
             {turns.map((turn) => (
               <article className={`message ${turn.speaker}${turn.pending ? ' pending' : ''}`} key={turn.id}>
@@ -1702,6 +1853,12 @@ function replaceTurnId(session, oldId, newId) {
     ...session,
     turns: session.turns.map((existing) => (existing.id === oldId ? { ...existing, id: newId } : existing)),
   };
+}
+
+function combinedKnownInfoText(text, documents) {
+  return [text.trim(), ...documents.map((document) => document.text)]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
 function removeMistakePracticeResult(results, mistakeId, targetType) {
