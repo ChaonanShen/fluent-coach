@@ -1,8 +1,11 @@
 from urllib.parse import parse_qs, urlsplit
 
 from backend.app.services.pronunciation import (
+    EVAL_MODE_SENTENCE,
+    EVAL_MODE_WORD,
     TencentSOEProvider,
     build_tencent_signed_url,
+    eval_mode_for_mode,
     infer_voice_format,
     normalize_tencent_score,
     tencent_signed_url_diagnostics,
@@ -111,6 +114,54 @@ def test_tencent_result_maps_to_internal_pronunciation_model() -> None:
     assert assessment.words[0].word == "theme"
     assert assessment.words[0].phonemes[0].phoneme == "TH"
     assert assessment.issues[0].target == "theme"
+
+
+def test_eval_mode_for_mode_maps_word_and_sentence() -> None:
+    assert eval_mode_for_mode("word") == EVAL_MODE_WORD == "0"
+    assert eval_mode_for_mode("sentence") == EVAL_MODE_SENTENCE == "1"
+    assert eval_mode_for_mode(None) is None
+    assert eval_mode_for_mode("paragraph") is None
+
+
+def test_build_tencent_signed_url_honours_explicit_eval_mode(monkeypatch) -> None:
+    monkeypatch.setenv("TENCENT_APP_ID", "123456")
+    monkeypatch.setenv("TENCENT_SECRET_ID", "secret-id")
+    monkeypatch.setenv("TENCENT_SECRET_KEY", "secret-key")
+    monkeypatch.setenv("TENCENT_SOE_EVAL_MODE", "1")
+
+    def signed(eval_mode):
+        url = build_tencent_signed_url(
+            ref_text="hello world",
+            voice_format=1,
+            timestamp=1000,
+            nonce=42,
+            voice_id="voice-1",
+            eval_mode=eval_mode,
+        )
+        return parse_qs(urlsplit(url).query)["eval_mode"]
+
+    assert signed("0") == ["0"]
+    assert signed("1") == ["1"]
+    # Falls back to the environment default when no explicit mode is given.
+    assert signed(None) == ["1"]
+
+
+def test_word_mode_result_leaves_fluency_and_completeness_unset() -> None:
+    result = {
+        "PronAccuracy": 72.0,
+        "Words": [{"Word": "theme", "PronAccuracy": 72.0}],
+    }
+    assessment = TencentSOEProvider().map_result(
+        result=result,
+        reference_text="theme",
+        audio_file=None,
+        eval_mode=EVAL_MODE_WORD,
+    )
+    assert assessment.accuracy == 72
+    # SuggestedScore missing -> overall falls back to accuracy (acceptable for a single word).
+    assert assessment.overall == 72
+    assert assessment.fluency is None
+    assert assessment.completeness is None
 
 
 def test_tencent_score_and_voice_format_helpers(tmp_path) -> None:

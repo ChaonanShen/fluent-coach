@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from backend.app.core.fixtures import load_generated_manifest
 from backend.app.main import app
+from backend.app.models import PronunciationAssessment
 from backend.app.services.analysis import analysis_store
 from backend.app.services.pronunciation import pronunciation_provider
 from backend.app.services.sessions import session_store
@@ -140,6 +141,53 @@ def test_pronunciation_practice_upload_has_no_session_or_mistake_side_effects(
     assert "pronunciation-practice" in audio_path.parts
     assert client.get(f"/api/sessions/{session_id}/analysis").json()["pronunciation_results"] == []
     assert client.get("/api/mistakes").json()["mistakes"] == []
+
+
+def test_pronunciation_practice_upload_threads_mode_to_provider(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("APP_AUDIO_DIR", str(tmp_path))
+    client = TestClient(app)
+    captured: dict[str, object] = {}
+
+    def fake_assess(*, reference_text=None, audio_file=None, fixture_id=None, mode=None):
+        captured["mode"] = mode
+        return PronunciationAssessment(
+            provider="mock",
+            reference_text=reference_text or "theme",
+            audio_file=audio_file,
+            overall=72.0,
+            accuracy=72.0,
+        )
+
+    monkeypatch.setattr("backend.app.main.pronunciation_provider.assess", fake_assess)
+
+    response = client.post(
+        "/api/pronunciation/practice/upload",
+        json={
+            "reference_text": "theme",
+            "audio_base64": base64.b64encode(b"word-audio").decode("ascii"),
+            "mime_type": "audio/webm",
+            "mode": "word",
+        },
+    )
+
+    assert response.status_code == 200
+    # mode must survive the trip endpoint -> _assess_uploaded_audio_path -> provider.assess.
+    assert captured["mode"] == "word"
+    # Word mode has no sentence-level fluency; the model now allows it to be unset.
+    assert response.json()["fluency"] is None
+
+
+def test_pronunciation_practice_upload_rejects_unknown_mode() -> None:
+    client = TestClient(app)
+    response = client.post(
+        "/api/pronunciation/practice/upload",
+        json={
+            "reference_text": "theme",
+            "audio_base64": base64.b64encode(b"audio").decode("ascii"),
+            "mode": "paragraph",
+        },
+    )
+    assert response.status_code == 422
 
 
 def test_pronunciation_practice_upload_transcribes_when_reference_is_missing(

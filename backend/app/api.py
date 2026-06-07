@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -99,6 +100,7 @@ class PronunciationPracticeUploadRequest(BaseModel):
     reference_text: str | None = Field(default=None, min_length=1)
     audio_base64: str = Field(min_length=1)
     mime_type: str | None = Field(default=None, min_length=1)
+    mode: Literal["word", "sentence"] | None = Field(default=None)
 
 
 class MistakeListResponse(BaseModel):

@@ -49,6 +49,7 @@ class MockPronunciationProvider:
         reference_text: str | None = None,
         audio_file: str | None = None,
         fixture_id: str | None = None,
+        mode: str | None = None,
     ) -> PronunciationAssessment | None:
         item = self._find_item(
             reference_text=reference_text,
@@ -120,6 +121,7 @@ class TencentSOEProvider:
         reference_text: str | None = None,
         audio_file: str | None = None,
         fixture_id: str | None = None,
+        mode: str | None = None,
     ) -> PronunciationAssessment | None:
         item = MockPronunciationProvider()._find_item(
             reference_text=reference_text,
@@ -136,15 +138,18 @@ class TencentSOEProvider:
         if not audio_path.exists():
             return None
 
+        eval_mode = eval_mode_for_mode(mode)
         url = build_tencent_signed_url(
             ref_text=reference_text,
             voice_format=infer_voice_format(audio_path),
+            eval_mode=eval_mode,
         )
         result = self._request_assessment(url=url, audio_bytes=audio_path.read_bytes())
         return self.map_result(
             result=result,
             reference_text=reference_text,
             audio_file=audio_file,
+            eval_mode=eval_mode,
         )
 
     def _request_assessment(self, *, url: str, audio_bytes: bytes) -> dict[str, Any]:
@@ -178,6 +183,7 @@ class TencentSOEProvider:
         result: dict[str, Any],
         reference_text: str,
         audio_file: str | None,
+        eval_mode: str | None = None,
     ) -> PronunciationAssessment:
         words = [self._map_word(word) for word in result.get("Words", []) if isinstance(word, dict)]
         issues = [
@@ -191,14 +197,27 @@ class TencentSOEProvider:
             if word.accuracy < 60
         ]
         accuracy = normalize_tencent_score(result.get("PronAccuracy"))
+        # Word mode (eval_mode=0) has no sentence-level fluency/completeness; leave them
+        # unset rather than reporting a misleading 0 when Tencent omits those fields.
+        is_word_mode = eval_mode == EVAL_MODE_WORD
+        fluency = (
+            None
+            if is_word_mode and result.get("PronFluency") is None
+            else normalize_tencent_score(result.get("PronFluency"))
+        )
+        completeness = (
+            None
+            if is_word_mode and result.get("PronCompletion") is None
+            else normalize_tencent_score(result.get("PronCompletion"))
+        )
         return PronunciationAssessment(
             provider=self.provider_name,
             reference_text=reference_text,
             audio_file=audio_file,
             overall=normalize_tencent_score(result.get("SuggestedScore", accuracy)),
             accuracy=accuracy,
-            fluency=normalize_tencent_score(result.get("PronFluency")),
-            completeness=normalize_tencent_score(result.get("PronCompletion")),
+            fluency=fluency,
+            completeness=completeness,
             words=words,
             issues=issues,
         )
@@ -246,6 +265,26 @@ def normalize_tencent_score(raw: object) -> float:
     return max(0.0, min(100.0, value))
 
 
+# Tencent SOE eval_mode values (see cloud.tencent.com SOE docs):
+# 0 = word mode (per-syllable detail, no sentence fluency/completeness),
+# 1 = sentence mode (returns fluency + completeness).
+EVAL_MODE_WORD = "0"
+EVAL_MODE_SENTENCE = "1"
+
+
+def eval_mode_for_mode(mode: str | None) -> str | None:
+    """Map a practice target ("word"/"sentence") to a Tencent SOE eval_mode.
+
+    Returns None when no mode is given so the caller falls back to the
+    TENCENT_SOE_EVAL_MODE environment default (backward compatible).
+    """
+    if mode == "word":
+        return EVAL_MODE_WORD
+    if mode == "sentence":
+        return EVAL_MODE_SENTENCE
+    return None
+
+
 def build_tencent_signed_url(
     *,
     ref_text: str,
@@ -253,6 +292,7 @@ def build_tencent_signed_url(
     timestamp: int | None = None,
     nonce: int | None = None,
     voice_id: str | None = None,
+    eval_mode: str | None = None,
 ) -> str:
     app_id = require_env("TENCENT_APP_ID")
     secret_id = require_env("TENCENT_SECRET_ID")
@@ -267,7 +307,7 @@ def build_tencent_signed_url(
     now = timestamp if timestamp is not None else int(time.time())
 
     params = {
-        "eval_mode": os.environ.get("TENCENT_SOE_EVAL_MODE", "1") or "1",
+        "eval_mode": eval_mode or os.environ.get("TENCENT_SOE_EVAL_MODE", "1") or "1",
         "expired": str(now + int(os.environ.get("TENCENT_SOE_EXPIRE_SECONDS", "86400") or 86400)),
         "nonce": str(nonce if nonce is not None else secrets.randbelow(9_999_999_999) + 1),
         "ref_text": ref_text,

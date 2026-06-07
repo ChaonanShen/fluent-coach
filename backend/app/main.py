@@ -366,6 +366,7 @@ def assess_practice_pronunciation(request: PronunciationPracticeUploadRequest) -
         assessment = _assess_uploaded_audio_path(
             reference_text=reference_text,
             audio_path=stored_audio.preferred_path,
+            mode=request.mode,
         )
     except RuntimeError as exc:
         error = _provider_analysis_error(
@@ -1240,10 +1241,12 @@ def _assess_uploaded_audio_path(
     *,
     reference_text: str,
     audio_path,
+    mode: str | None = None,
 ) -> PronunciationAssessment | None:
     return pronunciation_provider.assess(
         reference_text=reference_text,
         audio_file=str(audio_path.resolve()),
+        mode=mode,
     )
 
 

@@ -108,7 +108,7 @@ class PronunciationAssessment(BaseModel):
     audio_file: str | None = None
     overall: float = Field(ge=0.0, le=100.0)
     accuracy: float = Field(ge=0.0, le=100.0)
-    fluency: float = Field(ge=0.0, le=100.0)
+    fluency: float | None = Field(default=None, ge=0.0, le=100.0)
     prosody: float | None = Field(default=None, ge=0.0, le=100.0)
     completeness: float | None = Field(default=None, ge=0.0, le=100.0)
     words: list[PronunciationWordScore] = Field(default_factory=list)
