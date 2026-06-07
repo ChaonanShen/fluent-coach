@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 
+import ScenarioBriefingPanel from './components/ScenarioBriefingPanel.jsx';
+
 async function request(path, options = {}) {
   const response = await fetch(path, {
     headers: {
@@ -1652,84 +1654,22 @@ export default function App() {
             )}
           </div>
 
-          <section className={`scenario-briefing${scenarioBriefingOpen ? ' open' : ' collapsed'}`} aria-label="Scenario Briefing">
-            <div className="scenario-briefing-header">
-              <div>
-                <h2>Scenario Briefing</h2>
-                <p>
-                  {knownInfoCharCount.toLocaleString()} chars · {knownInfoDocuments.length} PDF
-                </p>
-              </div>
-              <button
-                className="secondary-action briefing-toggle"
-                onClick={() => setScenarioBriefingOpen((current) => !current)}
-                type="button"
-              >
-                {scenarioBriefingOpen ? 'Collapse' : 'Edit'}
-              </button>
-            </div>
-            {scenarioBriefingOpen ? (
-              <div className="scenario-briefing-body">
-                <div className="briefing-scenario-meta">
-                  <span>{selectedScenario?.name || 'Custom'}</span>
-                  <span>{selectedScenario?.ai_role || 'AI role'}</span>
-                  <span>{selectedScenario?.conversation_goals?.length || 0} goals</span>
-                </div>
-                <label className="known-info-label">
-                  <span>Known Background</span>
-                  <textarea
-                    aria-label="Known background"
-                    disabled={sessionActive}
-                    maxLength={MAX_KNOWN_INFO_CHARS}
-                    onChange={(event) => setKnownInfoText(event.target.value)}
-                    placeholder="Add resume highlights, meeting notes, preferences, or any context the AI should know before the conversation."
-                    rows={5}
-                    value={knownInfoText}
-                  />
-                </label>
-                <div className="briefing-upload-row">
-                  <input
-                    accept="application/pdf"
-                    aria-label="Upload briefing PDF"
-                    className="hidden-file-input"
-                    disabled={sessionActive || knownInfoDocuments.length >= 1 || knownInfoUploadState === 'uploading'}
-                    onChange={(event) => uploadKnownInfoPdf(event.target.files?.[0])}
-                    ref={knownInfoFileInputRef}
-                    type="file"
-                  />
-                  <button
-                    className="secondary-action"
-                    disabled={sessionActive || knownInfoDocuments.length >= 1 || knownInfoUploadState === 'uploading'}
-                    onClick={() => knownInfoFileInputRef.current?.click()}
-                    type="button"
-                  >
-                    {knownInfoUploadState === 'uploading' ? 'Uploading' : 'Upload PDF'}
-                  </button>
-                  <span>{knownInfoDocuments.length ? '1 PDF attached' : 'No PDF attached'}</span>
-                </div>
-                {knownInfoDocuments.length ? (
-                  <div className="briefing-document-list">
-                    {knownInfoDocuments.map((document) => (
-                      <div className="briefing-document-chip" key={document.id}>
-                        <span>{document.source.name}</span>
-                        <small>{document.source.char_count.toLocaleString()} chars</small>
-                        <button
-                          aria-label={`Remove ${document.source.name}`}
-                          className="icon-text-action"
-                          disabled={sessionActive}
-                          onClick={() => removeKnownInfoDocument(document.id)}
-                          type="button"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-                {knownInfoUploadError ? <p className="inline-error briefing-error">{knownInfoUploadError}</p> : null}
-              </div>
-            ) : null}
-          </section>
+          <ScenarioBriefingPanel
+            disabled={sessionActive}
+            fileInputRef={knownInfoFileInputRef}
+            knownInfoCharCount={knownInfoCharCount}
+            knownInfoDocuments={knownInfoDocuments}
+            knownInfoText={knownInfoText}
+            maxKnownInfoChars={MAX_KNOWN_INFO_CHARS}
+            onFileSelected={uploadKnownInfoPdf}
+            onKnownInfoTextChange={setKnownInfoText}
+            onRemoveDocument={removeKnownInfoDocument}
+            onToggleOpen={() => setScenarioBriefingOpen((current) => !current)}
+            open={scenarioBriefingOpen}
+            selectedScenario={selectedScenario}
+            uploadError={knownInfoUploadError}
+            uploadState={knownInfoUploadState}
+          />
 
           <div className="message-list" aria-label="Conversation history" ref={messageListRef}>
             {turns.map((turn) => (
