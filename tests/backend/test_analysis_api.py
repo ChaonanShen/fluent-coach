@@ -13,6 +13,16 @@ def clear_state() -> None:
     analysis_store.clear()
 
 
+def _receive_reply_done(websocket) -> dict:
+    while True:
+        event = websocket.receive_json()
+        if event["type"] == "reply.delta":
+            continue
+        if event["type"] == "reply.done":
+            return event
+        raise AssertionError(f"Unexpected event before reply.done: {event}")
+
+
 def test_text_turn_records_analysis_result_for_session() -> None:
     client = TestClient(app)
     created = client.post("/api/sessions", json={"scenario_id": "interview"}).json()
@@ -88,7 +98,7 @@ def test_audio_websocket_sends_analysis_result_event() -> None:
         websocket.send_bytes(b"audio")
         websocket.send_json({"type": "end_turn"})
         websocket.receive_json()
-        reply = websocket.receive_json()
+        reply = _receive_reply_done(websocket)
         reply_timing = websocket.receive_json()
         pending = websocket.receive_json()
         grammar_timing = websocket.receive_json()
@@ -120,7 +130,7 @@ def test_audio_websocket_sends_analysis_error_event() -> None:
         websocket.send_bytes(b"audio")
         websocket.send_json({"type": "end_turn"})
         websocket.receive_json()
-        reply = websocket.receive_json()
+        reply = _receive_reply_done(websocket)
         reply_timing = websocket.receive_json()
         pending = websocket.receive_json()
         grammar_timing = websocket.receive_json()

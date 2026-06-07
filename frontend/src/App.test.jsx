@@ -453,6 +453,14 @@ beforeEach(() => {
         grammar_result: grammarCorrection(),
       });
     }
+    if (url === '/api/sessions/session_1/analysis') {
+      return jsonResponse({
+        session_id: 'session_1',
+        grammar_results: [grammarCorrection()],
+        pronunciation_results: [],
+        errors: [],
+      });
+    }
     if (url === '/api/sessions/session_1/end') {
       return jsonResponse({
         session: {
@@ -559,6 +567,7 @@ test('loads scenarios and starts a session', async () => {
 });
 
 test('keeps browser TTS on one voice after voices load asynchronously', async () => {
+  installTextConversationMock();
   const compactVoice = { name: 'Compact Voice', lang: 'en-US' };
   const googleVoice = { name: 'Google US English', lang: 'en-US' };
   let voicesLoaded = false;
@@ -618,6 +627,7 @@ test('starts a custom scenario from the conversation toolbar', async () => {
 });
 
 test('sends a text turn and shows correction feedback', async () => {
+  const textSocket = installTextConversationMock();
   render(<App />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
@@ -628,6 +638,10 @@ test('sends a text turn and shows correction feedback', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
   expect(await screen.findByText('Great. Which project is most relevant to this role?')).toBeInTheDocument();
+  await waitFor(() => {
+    expect(textSocket.sentMessages.some((payload) => eventType(payload) === 'text_turn')).toBe(true);
+  });
+  expect(global.fetch).not.toHaveBeenCalledWith('/api/sessions/session_1/turns/text', expect.any(Object));
   const assessmentPanel = screen.getByLabelText('Conversation Assessment');
   const assessmentFeedback = within(assessmentPanel).getByLabelText('Assessment feedback');
   expect(assessmentFeedback).toHaveClass('assessment-scroll-list');
@@ -647,7 +661,45 @@ test('sends a text turn and shows correction feedback', async () => {
   expect(utterance.voice.name).toBe('Google US English');
 });
 
+test('shows local text turn before delayed streamed reply and assessment', async () => {
+  installTextConversationMock({ delayedReply: true });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.change(screen.getByLabelText('Your reply'), {
+    target: { value: 'I am working in this field since three years.' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+  expect(await screen.findByText('I am working in this field since three years.')).toBeInTheDocument();
+  expect(screen.getByText('AI is thinking...')).toBeInTheDocument();
+  expect(screen.queryByText('Great. Which project is most relevant to this role?')).not.toBeInTheDocument();
+  expect(within(screen.getByLabelText('Conversation Assessment')).getByText('No assessment yet.')).toBeInTheDocument();
+
+  expect(await screen.findByText('Great. Which project is most relevant to this role?')).toBeInTheDocument();
+  expect(screen.queryByText('AI is thinking...')).not.toBeInTheDocument();
+});
+
+test('hydrates text assessment if websocket closes after reply before analysis', async () => {
+  installTextConversationMock({ disconnectBeforeAnalysis: true });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.change(screen.getByLabelText('Your reply'), {
+    target: { value: 'I am working in this field since three years.' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+  expect(await screen.findByText('Great. Which project is most relevant to this role?')).toBeInTheDocument();
+  const assessmentPanel = screen.getByLabelText('Conversation Assessment');
+  expect(await within(assessmentPanel).findByText('I have been working in this field for three years.')).toBeInTheDocument();
+  expect(global.fetch).toHaveBeenCalledWith('/api/sessions/session_1/analysis', expect.any(Object));
+});
+
 test('keeps the latest message visible when new turns arrive near the bottom', async () => {
+  installTextConversationMock();
   render(<App />);
 
   fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
@@ -746,6 +798,7 @@ test('renders compatibility reply.text without leaving typing placeholder', asyn
 });
 
 test('plays cloud TTS audio when the backend returns audio', async () => {
+  installTextConversationMock();
   cloudTtsEnabled = true;
   render(<App />);
 
@@ -1518,6 +1571,111 @@ function installVoiceMocks(options = {}) {
   vi.stubGlobal('WebSocket', FakeWebSocket);
 
   return { getUserMedia, sentMessages };
+}
+
+function installTextConversationMock(options = {}) {
+  const sentMessages = [];
+
+  class FakeTextWebSocket {
+    static CONNECTING = 0;
+    static OPEN = 1;
+    static CLOSED = 3;
+
+    constructor(url) {
+      this.url = url;
+      this.readyState = FakeTextWebSocket.CONNECTING;
+      setTimeout(() => {
+        this.readyState = FakeTextWebSocket.OPEN;
+        this.onopen?.();
+      }, 0);
+    }
+
+    send(payload) {
+      sentMessages.push(payload);
+      if (eventType(payload) !== 'text_turn') {
+        return;
+      }
+      const text = JSON.parse(payload).text;
+      setTimeout(() => this.sendTextTurn(text), 0);
+    }
+
+    sendTextTurn(text) {
+      this.onmessage?.({
+        data: JSON.stringify({
+          type: 'user.final',
+          text,
+          turn_id: 'turn_user_text_1',
+          user_turn_id: 'turn_user_text_1',
+        }),
+      });
+      const sendReply = () => {
+        const replyText = 'Great. Which project is most relevant to this role?';
+        this.onmessage?.({
+          data: JSON.stringify({ type: 'reply.delta', text: 'Great. ' }),
+        });
+        this.onmessage?.({
+          data: JSON.stringify({ type: 'reply.delta', text: 'Which project is most relevant to this role?' }),
+        });
+        this.onmessage?.({
+          data: JSON.stringify({
+            type: 'reply.done',
+            text: replyText,
+            turn_id: 'turn_ai_text_1',
+            user_turn_id: 'turn_user_text_1',
+          }),
+        });
+        this.onmessage?.({
+          data: JSON.stringify({
+            type: 'debug.timing',
+            stage: 'reply',
+            timings: {
+              text_turn_to_user_final_ms: 1,
+              reply_first_delta_ms: 10,
+              reply_delta_count: 2,
+              text_turn_to_reply_done_ms: 20,
+            },
+          }),
+        });
+        this.onmessage?.({
+          data: JSON.stringify({ type: 'analysis.pending', stages: ['grammar'] }),
+        });
+        if (options.disconnectBeforeAnalysis) {
+          this.close();
+          return;
+        }
+        if (options.delayedAnalysis) {
+          setTimeout(() => this.sendAnalysisResult(), 80);
+          return;
+        }
+        this.sendAnalysisResult();
+      };
+      if (options.delayedReply) {
+        setTimeout(sendReply, 120);
+        return;
+      }
+      sendReply();
+    }
+
+    sendAnalysisResult() {
+      this.onmessage?.({
+        data: JSON.stringify({
+          type: 'analysis.result',
+          stage: 'grammar',
+          turn_id: 'turn_user_text_1',
+          result: grammarCorrection(),
+        }),
+      });
+      this.close();
+    }
+
+    close() {
+      this.readyState = FakeTextWebSocket.CLOSED;
+      this.onclose?.();
+    }
+  }
+
+  vi.stubGlobal('WebSocket', FakeTextWebSocket);
+  return { sentMessages };
 }
 
 function eventType(payload) {
