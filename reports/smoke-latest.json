@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-05T14:12:52.378863+00:00",
+  "generated_at": "2026-06-07T09:38:26.751141+00:00",
   "mode": "fixture_fake",
   "external_services_used": false,
   "checks": {
@@ -36,11 +36,42 @@
       "scenario_id": "interview",
       "turn_count": 5
     },
+    "text_streaming": {
+      "status": "passed",
+      "reply_delta_count": 12,
+      "event_order": [
+        "user.final",
+        "reply.delta",
+        "reply.delta",
+        "reply.delta",
+        "reply.delta",
+        "reply.delta",
+        "reply.delta",
+        "reply.delta",
+        "reply.delta",
+        "reply.delta",
+        "reply.delta",
+        "reply.delta",
+        "reply.delta",
+        "reply.done",
+        "debug.timing",
+        "analysis.pending",
+        "debug.timing",
+        "analysis.result"
+      ]
+    },
+    "known_info_session": {
+      "status": "passed",
+      "known_info_included": true,
+      "opening_line": "I reviewed the background you shared. Could you walk me through one project that best matches this role?"
+    },
     "ui_manual": {
       "status": "not_run",
       "checklist": [
         "Start a session from the browser UI.",
-        "Record one voice turn and confirm asr.final plus reply.text appear.",
+        "Fill Scenario Briefing, collapse it, and confirm the context-aware opening line appears.",
+        "Send one text turn and confirm user.final plus reply.delta/reply.done appear.",
+        "Record one voice turn and confirm asr.final plus reply.delta/reply.done appear.",
         "Record Read Aloud and confirm pronunciation score appears.",
         "End the session and confirm summary renders."
       ]
@@ -48,8 +79,8 @@
   },
   "latency_ms": {
     "end_turn_to_asr_final": null,
-    "asr_final_to_reply_text": null,
-    "reply_text_to_tts_start": null,
+    "asr_final_to_reply_done": null,
+    "reply_done_to_tts_start": null,
     "pronunciation_upload_to_result": null
   }
 }

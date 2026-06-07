@@ -16,11 +16,14 @@ from backend.app.services.pronunciation import MockPronunciationProvider
 
 
 def run_fixture_smoke_report() -> dict[str, Any]:
+    _configure_fixture_providers()
     asr = _smoke_asr()
     asr_l2_arctic = _smoke_l2_arctic_fixture_asr()
     grammar = _smoke_grammar()
     pronunciation = _smoke_pronunciation()
     dialogue = _smoke_dialogue_fixture()
+    text_streaming = _smoke_text_streaming()
+    known_info = _smoke_known_info_session()
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "mode": "fixture_fake",
@@ -31,10 +34,14 @@ def run_fixture_smoke_report() -> dict[str, Any]:
             "grammar": grammar,
             "pronunciation": pronunciation,
             "dialogue_fixture": dialogue,
+            "text_streaming": text_streaming,
+            "known_info_session": known_info,
             "ui_manual": {
                 "status": "not_run",
                 "checklist": [
                     "Start a session from the browser UI.",
+                    "Fill Scenario Briefing, collapse it, and confirm the context-aware opening line appears.",
+                    "Send one text turn and confirm user.final plus reply.delta/reply.done appear.",
                     "Record one voice turn and confirm asr.final plus reply.delta/reply.done appear.",
                     "Record Read Aloud and confirm pronunciation score appears.",
                     "End the session and confirm summary renders.",
@@ -48,6 +55,14 @@ def run_fixture_smoke_report() -> dict[str, Any]:
             "pronunciation_upload_to_result": None,
         },
     }
+
+
+def _configure_fixture_providers() -> None:
+    os.environ["APP_AUTO_LOAD_DOTENV"] = "0"
+    os.environ["LLM_PROVIDER"] = "fake"
+    os.environ["ASR_PROVIDER"] = "fake"
+    os.environ["PRON_PROVIDER"] = "mock"
+    os.environ["TTS_PROVIDER"] = "browser"
 
 
 def run_real_smoke_report() -> dict[str, Any]:
@@ -105,6 +120,8 @@ def render_smoke_markdown(report: dict[str, Any]) -> str:
         *(_check_line("Grammar", checks.get("grammar"))),
         f"- Pronunciation: {checks['pronunciation']['status']} ({checks['pronunciation']['provider']})",
         *(_check_line("Dialogue fixture", checks.get("dialogue_fixture"))),
+        *(_check_line("Text streaming", checks.get("text_streaming"))),
+        *(_check_line("Known info session", checks.get("known_info_session"))),
         f"- UI manual: {checks['ui_manual']['status']}",
         "",
         "## Latency",
@@ -189,6 +206,78 @@ def _smoke_dialogue_fixture() -> dict[str, Any]:
         "fixture_id": sample["id"],
         "scenario_id": sample["scenario_id"],
         "turn_count": len(turns),
+    }
+
+
+def _smoke_text_streaming() -> dict[str, Any]:
+    from fastapi.testclient import TestClient
+
+    from backend.app.main import app
+    from backend.app.services.analysis import analysis_store
+    from backend.app.services.sessions import session_store
+
+    session_store.clear()
+    analysis_store.clear()
+    client = TestClient(app)
+    created = client.post("/api/sessions", json={"scenario_id": "interview"})
+    if created.status_code != 201:
+        return {"status": "failed", "reason": "session_create_failed"}
+    session_id = created.json()["session"]["id"]
+    events: list[dict[str, Any]] = []
+    with client.websocket_connect(f"/ws/sessions/{session_id}/conversation") as websocket:
+        websocket.send_json(
+            {
+                "type": "text_turn",
+                "text": "Sure. I have three years of experience in backend development, mainly building APIs and data services.",
+            }
+        )
+        for _ in range(100):
+            event = websocket.receive_json()
+            events.append(event)
+            if event["type"] in {"analysis.result", "analysis.error"} and event.get("stage") == "grammar":
+                break
+    types = [event["type"] for event in events]
+    passed = (
+        "user.final" in types
+        and "reply.delta" in types
+        and "reply.done" in types
+        and types.index("user.final") < types.index("reply.delta") < types.index("reply.done")
+    )
+    return {
+        "status": "passed" if passed else "failed",
+        "reply_delta_count": types.count("reply.delta"),
+        "event_order": types,
+    }
+
+
+def _smoke_known_info_session() -> dict[str, Any]:
+    from fastapi.testclient import TestClient
+
+    from backend.app.main import app
+    from backend.app.services.sessions import session_store
+
+    session_store.clear()
+    client = TestClient(app)
+    response = client.post(
+        "/api/sessions",
+        json={
+            "scenario_id": "interview",
+            "known_info_text": "Backend engineer with API platform experience.",
+        },
+    )
+    if response.status_code != 201:
+        return {"status": "failed", "reason": "session_create_failed"}
+    body = response.json()
+    opening_line = body["opening_line"]
+    passed = (
+        body["session"]["known_info_text"] == "Backend engineer with API platform experience."
+        and body["session"]["turns"][0]["text"] == opening_line
+        and "background" in opening_line.lower()
+    )
+    return {
+        "status": "passed" if passed else "failed",
+        "known_info_included": body["session"]["known_info_text"] is not None,
+        "opening_line": opening_line,
     }
 
 

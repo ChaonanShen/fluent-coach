@@ -4,8 +4,12 @@ test('starts a session, sends a fixture text turn, and ends with a summary', asy
   await page.goto('/');
 
   await expect(page.getByRole('combobox', { name: 'Scenario' })).toHaveValue('interview');
+  await expect(page.getByLabel('Scenario Briefing')).toBeVisible();
+  await page.getByLabel('Known background').fill('Backend engineer with API platform experience.');
+  await page.getByRole('button', { name: 'Collapse' }).click();
+  await expect(page.getByText(/chars · 0 PDF/)).toBeVisible();
   await page.getByRole('button', { name: 'Start', exact: true }).click();
-  await expect(page.getByText('Could you start by briefly introducing yourself?')).toBeVisible();
+  await expect(page.getByText(/I reviewed the background you shared/)).toBeVisible();
 
   await page.getByLabel('Your reply').fill(
     'Sure. I have three years of experience in backend development, mainly building APIs and data services.',
@@ -14,7 +18,12 @@ test('starts a session, sends a fixture text turn, and ends with a summary', asy
   await expect(aiMessages).toHaveCount(1);
   await page.getByRole('button', { name: 'Send' }).click();
   await expect(aiMessages).toHaveCount(2, { timeout: 30_000 });
-  await expect(aiMessages.nth(1).locator('p')).toContainText(/\S/);
+  await expect(aiMessages.nth(1).locator('p')).toContainText(
+    'Great. Which project from that experience is most relevant to this role?',
+    { timeout: 30_000 },
+  );
+  const hasHorizontalScroll = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+  expect(hasHorizontalScroll).toBe(false);
 
   await page.getByRole('button', { name: 'End', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Summary' })).toBeVisible({ timeout: 30_000 });
