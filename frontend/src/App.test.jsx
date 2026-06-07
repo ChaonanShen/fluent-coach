@@ -1133,6 +1133,7 @@ test('reassesses a pronunciation mistake without changing the saved mistake', as
   const uploadCalls = global.fetch.mock.calls.filter(([url]) => url === '/api/pronunciation/practice/upload');
   expect(JSON.parse(uploadCalls.at(-1)[1].body)).toMatchObject({
     reference_text: 'systems',
+    mode: 'word',
   });
   fireEvent.click(screen.getByRole('button', { name: 'Clear word practice result' }));
   await waitFor(() => expect(screen.queryByLabelText('Practice result')).not.toBeInTheDocument());
@@ -1148,6 +1149,7 @@ test('reassesses a pronunciation mistake without changing the saved mistake', as
   const nextUploadCalls = global.fetch.mock.calls.filter(([url]) => url === '/api/pronunciation/practice/upload');
   expect(JSON.parse(nextUploadCalls.at(-1)[1].body)).toMatchObject({
     reference_text: 'The team reviewed the backend systems before launch.',
+    mode: 'sentence',
   });
   fireEvent.click(screen.getByRole('button', { name: 'Clear sentence practice result' }));
   await waitFor(() => expect(screen.queryByLabelText('Practice result')).not.toBeInTheDocument());

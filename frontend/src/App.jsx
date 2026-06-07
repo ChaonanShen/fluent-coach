@@ -880,13 +880,16 @@ export default function App() {
     stopReadingStream();
   }
 
-  async function uploadPracticePronunciation({ referenceText, audio, mimeType }) {
+  async function uploadPracticePronunciation({ referenceText, audio, mimeType, mode }) {
     const body = {
       audio_base64: await blobToBase64(audio),
       mime_type: mimeType || 'audio/webm',
     };
     if (referenceText?.trim()) {
       body.reference_text = referenceText.trim();
+    }
+    if (mode) {
+      body.mode = mode;
     }
     return request('/api/pronunciation/practice/upload', {
       method: 'POST',
@@ -1011,6 +1014,7 @@ export default function App() {
       referenceText,
       audio,
       mimeType: audio.type || mimeType || 'audio/webm',
+      mode: targetType === 'word' ? 'word' : 'sentence',
     });
     setMistakePracticeResults((current) => ({
       ...current,
@@ -1963,7 +1967,7 @@ function AssessmentScoreRow({ assessment }) {
     <div className="assessment-score-row" aria-label="Assessment scores">
       <span>Overall {Math.round(assessment.overall)}</span>
       <span>Accuracy {Math.round(assessment.accuracy)}</span>
-      <span>Fluency {Math.round(assessment.fluency)}</span>
+      <span>Fluency {formatPronScore(assessment.fluency)}</span>
     </div>
   );
 }
@@ -2140,7 +2144,7 @@ function PronunciationResult({
       <div className="score-row" aria-label={ariaLabel}>
         <span>Overall {Math.round(assessment.overall)}</span>
         <span>Accuracy {Math.round(assessment.accuracy)}</span>
-        <span>Fluency {Math.round(assessment.fluency)}</span>
+        <span>Fluency {formatPronScore(assessment.fluency)}</span>
       </div>
     </div>
   );
@@ -2442,6 +2446,11 @@ function overallScore(summary) {
 
 function formatScore(value) {
   return typeof value === 'number' ? value.toFixed(1) : '-';
+}
+
+// Pronunciation scores may be absent (e.g. fluency in word mode); show a dash instead of 0.
+function formatPronScore(value) {
+  return typeof value === 'number' ? Math.round(value) : '—';
 }
 
 function formatDelta(current, previous) {
