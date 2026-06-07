@@ -2473,7 +2473,7 @@ h3 {
   outline-offset: 2px;
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1360px) {
   .theme-modern {
     display: grid;
     gap: 16px;
@@ -2560,7 +2560,7 @@ h3 {
   }
 }
 
-@media (min-width: 1280px) {
+@media (min-width: 1360px) {
   .theme-modern .topbar {
     background:
       linear-gradient(180deg, rgba(35, 88, 64, 0.96), rgba(26, 64, 48, 0.98)),
