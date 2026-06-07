@@ -291,6 +291,11 @@ h3 {
   justify-self: start;
 }
 
+.message.pending {
+  color: #65736c;
+  font-style: italic;
+}
+
 .turn-form {
   border-top: 1px solid #edf1ee;
   display: grid;

@@ -24,6 +24,7 @@ async function request(path, options = {}) {
 
 const MESSAGE_LIST_BOTTOM_THRESHOLD_PX = 72;
 const BROWSER_VOICE_READY_TIMEOUT_MS = 500;
+const AI_THINKING_TEXT = 'AI is thinking...';
 const PREFERRED_ENGLISH_VOICE_NAME_PARTS = [
   'natural',
   'neural',
@@ -861,6 +862,7 @@ export default function App() {
       if (message.type === 'asr.final') {
         const userTurnId = message.user_turn_id || `local-user-${Date.now()}`;
         pendingVoiceUserTurnIdRef.current = userTurnId;
+        const streamId = ensureStreamingReplyId();
         const userTurn = {
           id: userTurnId,
           session_id: session.id,
@@ -871,15 +873,27 @@ export default function App() {
           audio_path: null,
           asr_confidence: null,
         };
+        const thinkingTurn = {
+          id: streamId,
+          session_id: session.id,
+          speaker: 'ai',
+          text: AI_THINKING_TEXT,
+          created_at: new Date().toISOString(),
+          mode: 'text',
+          audio_path: null,
+          asr_confidence: null,
+          pending: true,
+        };
         flushSync(() => {
           setPartialText(message.text);
-          setSession((current) => appendTurn(current, userTurn));
+          setSession((current) => upsertTurnText(appendTurn(current, userTurn), thinkingTurn));
         });
       }
       if (message.type === 'reply.text') {
         const replyReadyAt = nowMs();
         reconcileVoiceUserTurnId(message.user_turn_id);
-        setSession((current) => appendTurn(current, {
+        const streamId = streamingReplyRef.current?.id;
+        const finalTurn = {
           id: message.turn_id,
           session_id: session.id,
           speaker: 'ai',
@@ -888,24 +902,29 @@ export default function App() {
           mode: 'text',
           audio_path: null,
           asr_confidence: null,
-        }));
+        };
+        setSession((current) => (
+          streamId ? replaceTurnIdAndText(current, streamId, finalTurn) : appendTurn(current, finalTurn)
+        ));
+        streamingReplyRef.current = null;
         speak(message.text, { replyReadyAt }).catch(() => {});
         setVoiceState('idle');
         setStatus('In session');
       }
       if (message.type === 'reply.delta') {
         const streamId = ensureStreamingReplyId();
+        const nextText = (streamingReplyRef.current?.text || '') + message.text;
+        streamingReplyRef.current.text = nextText;
         setSession((current) => upsertTurnText(current, {
           id: streamId,
           session_id: session.id,
           speaker: 'ai',
-          text: (streamingReplyRef.current?.text || '') + message.text,
+          text: nextText,
           created_at: new Date().toISOString(),
           mode: 'text',
           audio_path: null,
           asr_confidence: null,
         }));
-        streamingReplyRef.current.text = (streamingReplyRef.current.text || '') + message.text;
       }
       if (message.type === 'reply.done') {
         const replyReadyAt = nowMs();
@@ -1415,7 +1434,7 @@ export default function App() {
 
           <div className="message-list" aria-label="Conversation history" ref={messageListRef}>
             {turns.map((turn) => (
-              <article className={`message ${turn.speaker}`} key={turn.id}>
+              <article className={`message ${turn.speaker}${turn.pending ? ' pending' : ''}`} key={turn.id}>
                 <p>{turn.text}</p>
               </article>
             ))}

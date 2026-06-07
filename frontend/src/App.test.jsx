@@ -710,6 +710,41 @@ test('keeps ASR partial transcription out of the visible conversation', async ()
   });
 });
 
+test('shows voice ASR text and typing before delayed streamed reply', async () => {
+  const voice = installVoiceMocks({ delayedStreamingReply: true });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+
+  expect(await screen.findByText('I have worked on backend systems for three years.')).toBeInTheDocument();
+  expect(screen.getByText('AI is thinking...')).toBeInTheDocument();
+  expect(screen.queryByText('Thanks for sharing that project. What impact did it have?')).not.toBeInTheDocument();
+  expect(within(screen.getByLabelText('Conversation Assessment')).getByText('No assessment yet.')).toBeInTheDocument();
+
+  expect(await screen.findByText('Thanks for sharing that project. What impact did it have?')).toBeInTheDocument();
+  expect(screen.queryByText('AI is thinking...')).not.toBeInTheDocument();
+});
+
+test('renders compatibility reply.text without leaving typing placeholder', async () => {
+  const voice = installVoiceMocks({ replyTextCompat: true });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+
+  expect(await screen.findByText('Thanks for sharing that project. What impact did it have?')).toBeInTheDocument();
+  expect(screen.queryByText('AI is thinking...')).not.toBeInTheDocument();
+});
+
 test('plays cloud TTS audio when the backend returns audio', async () => {
   cloudTtsEnabled = true;
   render(<App />);
@@ -1321,46 +1356,10 @@ function installVoiceMocks(options = {}) {
               user_turn_id: 'turn_user_voice_1',
             }),
           });
-          if (options.delayedReply) {
-            setTimeout(() => {
-              this.onmessage?.({
-                data: JSON.stringify({
-                  type: 'reply.text',
-                  text: 'Thanks for sharing that project. What impact did it have?',
-                  turn_id: 'turn_ai_voice_1',
-                  user_turn_id: 'turn_user_voice_1',
-                }),
-              });
-              this.onmessage?.({
-                data: JSON.stringify({
-                  type: 'debug.timing',
-                  stage: 'reply',
-                  timings: {
-                    asr_ms: 123,
-                    dialogue_reply_ms: 45,
-                    end_turn_to_reply_text_ms: 190,
-                  },
-                }),
-              });
-              this.sendAnalysisResult();
-            }, 80);
-            return;
-          }
-          if (options.streamingReply) {
-            this.onmessage?.({
-              data: JSON.stringify({ type: 'reply.delta', text: 'That sounds useful. ' }),
-            });
-            this.onmessage?.({
-              data: JSON.stringify({ type: 'reply.delta', text: 'What did you own?' }),
-            });
-            this.onmessage?.({
-              data: JSON.stringify({
-                type: 'reply.done',
-                text: 'That sounds useful. What did you own?',
-                turn_id: 'turn_ai_stream_1',
-                user_turn_id: 'turn_user_voice_1',
-              }),
-            });
+          const replyText = options.streamingReply
+            ? 'That sounds useful. What did you own?'
+            : 'Thanks for sharing that project. What impact did it have?';
+          const sendReplyTiming = () => {
             this.onmessage?.({
               data: JSON.stringify({
                 type: 'debug.timing',
@@ -1369,36 +1368,65 @@ function installVoiceMocks(options = {}) {
                   asr_ms: 123,
                   dialogue_reply_ms: 45,
                   end_turn_to_reply_text_ms: 190,
+                  end_turn_to_reply_done_ms: 190,
                 },
               }),
             });
+          };
+          const sendAnalysisAfterReply = () => {
+            if (options.delayedAnalysis) {
+              setTimeout(() => this.sendAnalysisResult(), 80);
+              return;
+            }
             this.sendAnalysisResult();
+          };
+          const sendTextReply = () => {
+            this.onmessage?.({
+              data: JSON.stringify({
+                type: 'reply.text',
+                text: replyText,
+                turn_id: 'turn_ai_voice_1',
+                user_turn_id: 'turn_user_voice_1',
+              }),
+            });
+            sendReplyTiming();
+            sendAnalysisAfterReply();
+          };
+          const sendStreamingReply = () => {
+            const splitAt = Math.min(
+              replyText.length,
+              Math.max(1, replyText.indexOf(' ') + 1 || 1),
+            );
+            this.onmessage?.({
+              data: JSON.stringify({ type: 'reply.delta', text: replyText.slice(0, splitAt) }),
+            });
+            this.onmessage?.({
+              data: JSON.stringify({ type: 'reply.delta', text: replyText.slice(splitAt) }),
+            });
+            this.onmessage?.({
+              data: JSON.stringify({
+                type: 'reply.done',
+                text: replyText,
+                turn_id: options.streamingReply ? 'turn_ai_stream_1' : 'turn_ai_voice_1',
+                user_turn_id: 'turn_user_voice_1',
+              }),
+            });
+            sendReplyTiming();
+            sendAnalysisAfterReply();
+          };
+          if (options.delayedReply || options.replyTextCompat) {
+            if (options.delayedReply) {
+              setTimeout(sendTextReply, 80);
+              return;
+            }
+            sendTextReply();
             return;
           }
-          this.onmessage?.({
-            data: JSON.stringify({
-              type: 'reply.text',
-              text: 'Thanks for sharing that project. What impact did it have?',
-              turn_id: 'turn_ai_voice_1',
-              user_turn_id: 'turn_user_voice_1',
-            }),
-          });
-          this.onmessage?.({
-            data: JSON.stringify({
-              type: 'debug.timing',
-              stage: 'reply',
-              timings: {
-                asr_ms: 123,
-                dialogue_reply_ms: 45,
-                end_turn_to_reply_text_ms: 190,
-              },
-            }),
-          });
-          if (options.delayedAnalysis) {
-            setTimeout(() => this.sendAnalysisResult(), 80);
+          if (options.delayedStreamingReply) {
+            setTimeout(sendStreamingReply, 120);
             return;
           }
-          this.sendAnalysisResult();
+          sendStreamingReply();
         }, 0);
       }
     }
