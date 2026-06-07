@@ -4,10 +4,12 @@ test('starts a session, sends a fixture text turn, and ends with a summary', asy
   await page.goto('/');
 
   await expect(page.getByRole('combobox', { name: 'Scenario' })).toHaveValue('interview');
-  await expect(page.getByLabel('Scenario Briefing')).toBeVisible();
+  const briefingToggle = page.getByRole('button', { name: 'Scenario Briefing' });
+  await expect(briefingToggle).toHaveAttribute('aria-expanded', 'true');
   await page.getByLabel('Known background').fill('Backend engineer with API platform experience.');
-  await page.getByRole('button', { name: 'Collapse' }).click();
-  await expect(page.getByText(/chars · 0 PDF/)).toBeVisible();
+  await briefingToggle.click();
+  await expect(briefingToggle).toHaveAttribute('aria-expanded', 'false');
+  await expect(page.getByLabel('Known background')).toBeHidden();
   await page.getByRole('button', { name: 'Start', exact: true }).click();
   await expect(page.getByText(/I reviewed the background you shared/)).toBeVisible();
 
@@ -31,6 +33,6 @@ test('starts a session, sends a fixture text turn, and ends with a summary', asy
   await page.getByRole('button', { name: 'New conversation', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Start', exact: true })).toBeVisible();
   await expect(page.getByLabel('Your reply')).toBeDisabled();
-  await expect(page.getByLabel('Scenario Briefing')).toBeVisible();
+  await expect(briefingToggle).toHaveAttribute('aria-expanded', 'true');
   await expect(page.getByLabel('Known background')).toHaveValue('');
 });

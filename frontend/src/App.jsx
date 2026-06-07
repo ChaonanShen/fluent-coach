@@ -177,7 +177,6 @@ export default function App() {
   const sessionEnded = session?.status === 'ended';
   const sessionActive = Boolean(session && !sessionEnded);
   const sessionActionLabel = sessionActive ? 'End' : 'Start';
-  const knownInfoCharCount = combinedKnownInfoText(knownInfoText, knownInfoDocuments).length;
   const customPromptText = knownInfoText.trim();
   const canStartSession = Boolean(
     selectedScenarioId
@@ -1714,20 +1713,26 @@ export default function App() {
                 </option>
               </select>
             </label>
-            <div className="conversation-toolbar-fill" aria-hidden="true" />
+            <button
+              aria-controls="scenario-briefing-panel"
+              aria-expanded={scenarioBriefingOpen}
+              className={`secondary-action briefing-toolbar-toggle${scenarioBriefingOpen ? ' active' : ''}`}
+              onClick={() => setScenarioBriefingOpen((current) => !current)}
+              type="button"
+            >
+              Scenario Briefing
+            </button>
           </div>
 
           <ScenarioBriefingPanel
             disabled={sessionActive}
             fileInputRef={knownInfoFileInputRef}
-            knownInfoCharCount={knownInfoCharCount}
             knownInfoDocuments={knownInfoDocuments}
             knownInfoText={knownInfoText}
             maxKnownInfoChars={MAX_KNOWN_INFO_CHARS}
             onFileSelected={uploadKnownInfoPdf}
             onKnownInfoTextChange={setKnownInfoText}
             onRemoveDocument={removeKnownInfoDocument}
-            onToggleOpen={() => setScenarioBriefingOpen((current) => !current)}
             open={scenarioBriefingOpen}
             selectedScenario={selectedScenario}
             uploadError={knownInfoUploadError}

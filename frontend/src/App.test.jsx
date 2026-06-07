@@ -669,17 +669,49 @@ test('custom scenario prompt respects the backend length limit', async () => {
 test('shows collapsible scenario briefing for builtin scenarios', async () => {
   render(<App />);
 
+  const briefingToggle = screen.getByRole('button', { name: 'Scenario Briefing' });
+  expect(briefingToggle).toHaveAttribute('aria-expanded', 'true');
   expect(await screen.findByLabelText('Scenario Briefing')).toBeInTheDocument();
+  expect(screen.queryByRole('heading', { name: 'Scenario Briefing' })).not.toBeInTheDocument();
   expect(screen.getByLabelText('Known background')).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText('Known background'), {
     target: { value: 'I am preparing for a backend interview.' },
   });
-  fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
+  fireEvent.click(briefingToggle);
 
+  expect(briefingToggle).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByLabelText('Scenario Briefing')).not.toBeInTheDocument();
   expect(screen.queryByLabelText('Known background')).not.toBeInTheDocument();
-  expect(screen.getByText('39 chars · 0 PDF')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+  expect(screen.queryByText('39 chars · 0 PDF')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Collapse' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument();
+  fireEvent.click(briefingToggle);
+
+  expect(briefingToggle).toHaveAttribute('aria-expanded', 'true');
   expect(screen.getByDisplayValue('I am preparing for a backend interview.')).toBeInTheDocument();
+});
+
+test('scenario briefing opens during an active session but remains read only', async () => {
+  render(<App />);
+
+  await waitFor(() => expect(screen.getByRole('combobox', { name: 'Scenario' })).toHaveValue('interview'));
+  const briefingToggle = screen.getByRole('button', { name: 'Scenario Briefing' });
+  expect(briefingToggle).not.toBeDisabled();
+  fireEvent.change(screen.getByLabelText('Known background'), {
+    target: { value: 'I am preparing for a backend interview.' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+  await screen.findByText(/I reviewed the background you shared/);
+  expect(briefingToggle).toHaveAttribute('aria-expanded', 'false');
+  expect(screen.queryByLabelText('Known background')).not.toBeInTheDocument();
+
+  fireEvent.click(briefingToggle);
+
+  expect(briefingToggle).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByLabelText('Known background')).toBeDisabled();
+  expect(screen.getByLabelText('Upload briefing PDF')).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Upload PDF' })).toBeDisabled();
 });
 
 test('uploads one briefing PDF and includes it in start payload', async () => {
