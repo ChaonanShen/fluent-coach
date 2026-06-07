@@ -39,6 +39,47 @@ const PREFERRED_ENGLISH_VOICE_NAME_PARTS = [
   'daniel',
   'karen',
 ];
+const UI_THEME_STORAGE_KEY = 'fluent-coach-ui-theme';
+const UI_THEME_VALUES = new Set(['classic', 'modern']);
+
+function normalizeUiTheme(value) {
+  return UI_THEME_VALUES.has(value) ? value : null;
+}
+
+function readInitialUiTheme() {
+  if (typeof window === 'undefined') {
+    return 'classic';
+  }
+  const queryTheme = normalizeUiTheme(new URLSearchParams(window.location.search).get('ui'));
+  if (queryTheme) {
+    return queryTheme;
+  }
+  try {
+    return normalizeUiTheme(window.localStorage?.getItem(UI_THEME_STORAGE_KEY)) || 'classic';
+  } catch {
+    return 'classic';
+  }
+}
+
+function persistUiThemePreference(theme) {
+  if (typeof window === 'undefined') {
+    return;
+  }
+  try {
+    window.localStorage?.setItem(UI_THEME_STORAGE_KEY, theme);
+  } catch {
+    // Some privacy modes block localStorage; the in-memory theme still works.
+  }
+}
+
+function writeUiThemeToUrl(theme) {
+  if (typeof window === 'undefined' || typeof window.history?.replaceState !== 'function') {
+    return;
+  }
+  const url = new URL(window.location.href);
+  url.searchParams.set('ui', theme);
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+}
 
 function isNearMessageListBottom(list) {
   return list.scrollHeight - list.scrollTop - list.clientHeight <= MESSAGE_LIST_BOTTOM_THRESHOLD_PX;
@@ -57,6 +98,7 @@ function useAutoScrollToBottom(dependency) {
 }
 
 export default function App() {
+  const [uiTheme, setUiTheme] = useState(readInitialUiTheme);
   const [scenarios, setScenarios] = useState([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState('');
   const [scenarioBriefingOpen, setScenarioBriefingOpen] = useState(true);
@@ -116,6 +158,19 @@ export default function App() {
   const mistakeReadingStreamRef = useRef(null);
   const mistakeReadingChunksRef = useRef([]);
   const mistakeReadingCanceledRef = useRef(false);
+  const appShellClassName = `app-shell theme-${uiTheme}`;
+
+  useEffect(() => {
+    persistUiThemePreference(uiTheme);
+  }, [uiTheme]);
+
+  function changeUiTheme(nextTheme) {
+    if (!normalizeUiTheme(nextTheme)) {
+      return;
+    }
+    setUiTheme(nextTheme);
+    writeUiThemeToUrl(nextTheme);
+  }
 
   useEffect(() => {
     voiceStateRef.current = voiceState;
@@ -1379,21 +1434,24 @@ export default function App() {
 
   if (mainView === 'mistakes') {
     return (
-      <main className="app-shell">
+      <main className={appShellClassName}>
         <header className="topbar">
           <div>
             <h1>Mistake Book</h1>
           </div>
-          <button
-            className="secondary-action topbar-action"
-            onClick={() => {
-              setMainView('practice');
-              closeMistakeBookDetail();
-            }}
-            type="button"
-          >
-            Back to Practice
-          </button>
+          <div className="topbar-actions">
+            <UiThemeSwitch onChange={changeUiTheme} value={uiTheme} />
+            <button
+              className="secondary-action topbar-action"
+              onClick={() => {
+                setMainView('practice');
+                closeMistakeBookDetail();
+              }}
+              type="button"
+            >
+              Back to Practice
+            </button>
+          </div>
         </header>
 
         {error ? <p className="inline-error">{error}</p> : null}
@@ -1642,12 +1700,15 @@ export default function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={appShellClassName}>
       <header className="topbar">
         <div>
           <h1>Speaking Coach</h1>
         </div>
-        <span className="status-pill">{status}</span>
+        <div className="topbar-actions">
+          <span className="status-pill">{status}</span>
+          <UiThemeSwitch onChange={changeUiTheme} value={uiTheme} />
+        </div>
       </header>
 
       {error ? <p className="inline-error">{error}</p> : null}
@@ -1773,6 +1834,29 @@ export default function App() {
         </aside>
       </section>
     </main>
+  );
+}
+
+function UiThemeSwitch({ onChange, value }) {
+  return (
+    <div className="ui-theme-switch" aria-label="UI style" role="group">
+      <button
+        aria-pressed={value === 'classic'}
+        className={value === 'classic' ? 'active' : ''}
+        onClick={() => onChange('classic')}
+        type="button"
+      >
+        Classic
+      </button>
+      <button
+        aria-pressed={value === 'modern'}
+        className={value === 'modern' ? 'active' : ''}
+        onClick={() => onChange('modern')}
+        type="button"
+      >
+        Modern
+      </button>
+    </div>
   );
 }
 
