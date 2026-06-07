@@ -740,6 +740,32 @@ test('custom scenario uses briefing text as prompt and merges PDF into known inf
   expect(sessionRequestBodies.at(-1).known_info_sources).toHaveLength(1);
 });
 
+test('New conversation clears the session, assessment and briefing', async () => {
+  render(<App />);
+
+  fireEvent.change(await screen.findByLabelText('Known background'), {
+    target: { value: 'I am preparing for a backend interview.' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Start' }));
+  // Briefing is set, so the mock returns a context-aware opening line.
+  await screen.findByText('I reviewed the background you shared. Could you walk me through one project that best matches this role?');
+
+  fireEvent.click(screen.getByRole('button', { name: 'End' }));
+  const restart = await screen.findByRole('button', { name: 'New conversation' });
+  // History stays visible after End, until the user restarts.
+  expect(screen.getByText(scenario.opening_line)).toBeInTheDocument();
+
+  fireEvent.click(restart);
+
+  await waitFor(() => {
+    expect(screen.queryByText(scenario.opening_line)).not.toBeInTheDocument();
+  });
+  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
+  // Briefing reopened and emptied (text + any PDFs gone).
+  expect(screen.getByLabelText('Known background')).toHaveValue('');
+});
+
 test('sends a text turn and shows correction feedback', async () => {
   const textSocket = installTextConversationMock();
   render(<App />);
@@ -1237,7 +1263,7 @@ test('disables turn and recording controls after ending a session', async () => 
   expect(screen.queryByText('Tasks')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Your reply')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'New conversation' })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Record' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Record Reading' })).toBeEnabled();
 });
