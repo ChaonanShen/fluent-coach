@@ -5,6 +5,7 @@
 
 ## 产品与系统说明
 
+- [demo-video-script.md](demo-video-script.md)：演示视频录制讲稿，覆盖 Job Interview、自定义医生问诊、Reading Practice 和错题本演示。
 - [user-facing-system-guide.md](user-facing-system-guide.md)：用户视角系统说明，解释场景选择、对话流程、评估面板、错题本和评分标签。
 - [competitor-research.md](competitor-research.md)：英语口语陪练竞品调研，用于产品功能取舍、报告表达和后续路线规划。
 - [plan.md](plan.md)：历史实现计划和 PR 拆分记录，用作项目背景和决策历史，不作为当前用户使用指南。
