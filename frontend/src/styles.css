@@ -474,8 +474,10 @@ h3 {
 }
 
 .assessment-feed {
+  align-content: start;
   display: grid;
   gap: 0;
+  grid-auto-rows: max-content;
 }
 
 .assessment-scroll-list {
