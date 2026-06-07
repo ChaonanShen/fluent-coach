@@ -29,10 +29,7 @@ test('starts a session, sends a fixture text turn, and ends with a summary', asy
 
   await page.getByRole('button', { name: 'End', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Summary' })).toBeVisible({ timeout: 30_000 });
-  await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeHidden();
   await expect(page.getByRole('button', { name: 'Start', exact: true })).toBeVisible();
   await expect(page.getByLabel('Your reply')).toBeDisabled();
-  await expect(briefingToggle).toHaveAttribute('aria-expanded', 'true');
-  await expect(page.getByLabel('Known background')).toHaveValue('');
 });

@@ -268,54 +268,6 @@ export default function App() {
     setLatestTiming(null);
   }
 
-  function resetForNewConversation() {
-    // 1) Tear down in-flight async paths BEFORE clearing UI state, so a late
-    // recorder onstop or WebSocket callback cannot write into the fresh view.
-    voiceCanceledRef.current = true;
-    readingCanceledRef.current = true;
-    mistakeReadingCanceledRef.current = true;
-    closeVoiceSocket();
-    closeTextSocket();
-    stopVoiceStream();
-    stopReadingStream();
-    stopMistakeReadingStream();
-    voiceWebSocketRef.current = null;
-    mediaRecorderRef.current = null;
-    readingRecorderRef.current = null;
-    readingChunksRef.current = [];
-    mistakeReadingRecorderRef.current = null;
-    mistakeReadingChunksRef.current = [];
-    streamingReplyRef.current = null;
-    textStreamingReplyRef.current = null;
-    pendingVoiceUserTurnIdRef.current = null;
-    pendingTextUserTurnIdRef.current = null;
-    pendingAudioSendsRef.current = [];
-
-    // 2) Clear UI state back to a fresh pre-session view.
-    setSession(null);
-    resetSessionDerivedState();
-    setKnownInfoText('');
-    setKnownInfoDocuments([]);
-    setKnownInfoUploadState('idle');
-    setKnownInfoUploadError('');
-    setInputText('');
-    setPartialText('');
-    setPracticePronunciation(null);
-    setPracticeReferenceText('');
-    setAssessedPracticeReferenceText('');
-    setMistakePracticeResults({});
-    setVoiceState('idle');
-    voiceStateRef.current = 'idle';
-    setReadingState('idle');
-    setMistakeReadingState({ mistakeId: null, targetType: null, status: 'idle' });
-    setScenarioBriefingOpen(true);
-    setError('');
-    setStatus('Ready');
-    if (knownInfoFileInputRef.current) {
-      knownInfoFileInputRef.current.value = '';
-    }
-  }
-
   async function openMistakeBook(sessionId) {
     setError('');
     setSelectedMistakeBookId(sessionId);
@@ -710,6 +662,18 @@ export default function App() {
     if (!session) {
       return;
     }
+    voiceCanceledRef.current = true;
+    voiceStateRef.current = 'idle';
+    closeVoiceSocket();
+    closeTextSocket();
+    stopVoiceStream();
+    mediaRecorderRef.current = null;
+    pendingAudioSendsRef.current = [];
+    streamingReplyRef.current = null;
+    textStreamingReplyRef.current = null;
+    pendingVoiceUserTurnIdRef.current = null;
+    pendingTextUserTurnIdRef.current = null;
+    setVoiceState('idle');
     setError('');
     setStatus('Ending');
     setSummaryState('loading');
@@ -1761,24 +1725,14 @@ export default function App() {
               value={inputText}
             />
             <div className="turn-actions">
-              {sessionEnded ? (
-                <button
-                  className="primary-action session-action"
-                  onClick={resetForNewConversation}
-                  type="button"
-                >
-                  New conversation
-                </button>
-              ) : (
-                <button
-                  className={sessionActive ? 'secondary-action session-action' : 'primary-action session-action'}
-                  disabled={!canStartSession || status === 'Starting' || status === 'Ending'}
-                  onClick={sessionActive ? endSession : startSession}
-                  type="button"
-                >
-                  {sessionActionLabel}
-                </button>
-              )}
+              <button
+                className={sessionActive ? 'secondary-action session-action' : 'primary-action session-action'}
+                disabled={!canStartSession || status === 'Starting' || status === 'Ending'}
+                onClick={sessionActive ? endSession : startSession}
+                type="button"
+              >
+                {sessionActionLabel}
+              </button>
               <button className="primary-action send-action" disabled={!session || !inputText.trim() || sessionEnded} type="submit">
                 Send
               </button>

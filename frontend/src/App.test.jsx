@@ -799,39 +799,30 @@ test('custom scenario uses briefing text as prompt and merges PDF into known inf
   expect(sessionRequestBodies.at(-1).known_info_sources).toHaveLength(1);
 });
 
-test('New conversation clears the session, assessment and briefing', async () => {
-  const voice = installVoiceMocks();
+test('ending a session returns to Start without a separate New conversation step', async () => {
   render(<App />);
-
-  fireEvent.click(await screen.findByRole('button', { name: 'Record Reading' }));
-  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Stop Reading' }));
-  expect(await screen.findByDisplayValue('THEN HE WENT TO THEME PARK')).toBeInTheDocument();
-  expect(await screen.findByLabelText('Practice result')).toHaveTextContent('Overall 50');
 
   fireEvent.change(await screen.findByLabelText('Known background'), {
     target: { value: 'I am preparing for a backend interview.' },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
-  // Briefing is set, so the mock returns a context-aware opening line.
   await screen.findByText('I reviewed the background you shared. Could you walk me through one project that best matches this role?');
 
   fireEvent.click(screen.getByRole('button', { name: 'End' }));
-  const restart = await screen.findByRole('button', { name: 'New conversation' });
-  // History stays visible after End, until the user restarts.
-  expect(screen.getByText(scenario.opening_line)).toBeInTheDocument();
+  const readingPracticePanel = screen.getByLabelText('Reading Practice');
+  await within(readingPracticePanel).findByRole('heading', { name: 'Summary' });
+  const restart = await screen.findByRole('button', { name: 'Start' });
+
+  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
+  expect(screen.getByLabelText('Your reply')).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Record' })).toBeDisabled();
 
   fireEvent.click(restart);
 
-  await waitFor(() => {
-    expect(screen.queryByText(scenario.opening_line)).not.toBeInTheDocument();
-  });
-  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
-  expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
-  // Briefing reopened and emptied (text + any PDFs gone).
-  expect(screen.getByLabelText('Known background')).toHaveValue('');
-  expect(screen.getByLabelText('Read transcript')).toHaveValue('');
-  expect(screen.queryByLabelText('Practice result')).not.toBeInTheDocument();
+  await waitFor(() => expect(sessionRequestBodies).toHaveLength(2));
+  expect(screen.getByRole('button', { name: 'End' })).toBeInTheDocument();
+  expect(screen.getByLabelText('Your reply')).not.toBeDisabled();
 });
 
 test('sends a text turn and shows correction feedback', async () => {
@@ -1351,7 +1342,8 @@ test('disables turn and recording controls after ending a session', async () => 
   expect(screen.queryByText('Tasks')).not.toBeInTheDocument();
   expect(screen.getByLabelText('Your reply')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'New conversation' })).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Record' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Record Reading' })).toBeEnabled();
 });
@@ -1415,7 +1407,7 @@ test('renders streaming voice reply deltas and finalizes the turn', async () => 
   await waitFor(() => expect(window.speechSynthesis.speak).toHaveBeenCalled());
 });
 
-test('New conversation ignores stale voice websocket callbacks after reset', async () => {
+test('ending a session ignores stale voice websocket callbacks', async () => {
   const voice = installVoiceMocks();
   render(<App />);
 
@@ -1427,9 +1419,8 @@ test('New conversation ignores stale voice websocket callbacks after reset', asy
   const staleSocket = voice.sockets[0];
 
   fireEvent.click(screen.getByRole('button', { name: 'End' }));
-  const restart = await screen.findByRole('button', { name: 'New conversation' });
-  fireEvent.click(restart);
-  await waitFor(() => expect(screen.queryByText(scenario.opening_line)).not.toBeInTheDocument());
+  await screen.findByRole('button', { name: 'Start' });
+  expect(screen.queryByRole('button', { name: 'New conversation' })).not.toBeInTheDocument();
 
   staleSocket.onmessage?.({
     data: JSON.stringify({
@@ -1457,7 +1448,7 @@ test('New conversation ignores stale voice websocket callbacks after reset', asy
   expect(screen.queryByText('This old voice turn should be ignored.')).not.toBeInTheDocument();
   expect(screen.queryByText('Old AI text')).not.toBeInTheDocument();
   expect(within(screen.getByLabelText('Conversation Assessment')).getByText('No assessment yet.')).toBeInTheDocument();
-  expect(screen.getByText('Ready')).toBeInTheDocument();
+  expect(screen.getByText('Ended')).toBeInTheDocument();
 });
 
 test('renders pronunciation analysis from a voice turn', async () => {
