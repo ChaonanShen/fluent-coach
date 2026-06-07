@@ -58,7 +58,6 @@ function useAutoScrollToBottom(dependency) {
 export default function App() {
   const [scenarios, setScenarios] = useState([]);
   const [selectedScenarioId, setSelectedScenarioId] = useState('');
-  const [customScenarioText, setCustomScenarioText] = useState('');
   const [scenarioBriefingOpen, setScenarioBriefingOpen] = useState(true);
   const [knownInfoText, setKnownInfoText] = useState('');
   const [knownInfoDocuments, setKnownInfoDocuments] = useState([]);
@@ -162,7 +161,7 @@ export default function App() {
     if (scenario || selectedScenarioId !== 'custom') {
       return scenario;
     }
-    const topic = customScenarioText.trim();
+    const topic = knownInfoText.trim();
     return {
       id: 'custom',
       name: 'Custom',
@@ -171,7 +170,7 @@ export default function App() {
         ? [`Practice a realistic conversation about ${topic}`, 'Answer naturally and ask a follow-up question']
         : ['Describe the scenario you want to practice'],
     };
-  }, [customScenarioText, scenarios, selectedScenarioId]);
+  }, [knownInfoText, scenarios, selectedScenarioId]);
 
   const turns = session?.turns || [];
   const sessionEnded = session?.status === 'ended';
@@ -179,7 +178,7 @@ export default function App() {
   const sessionActionLabel = sessionActive ? 'End' : 'Start';
   const knownInfoCharCount = combinedKnownInfoText(knownInfoText, knownInfoDocuments).length;
   const canStartSession = Boolean(
-    selectedScenarioId && (selectedScenarioId !== 'custom' || customScenarioText.trim().length >= 3),
+    selectedScenarioId && (selectedScenarioId !== 'custom' || knownInfoText.trim().length >= 3),
   );
 
   useEffect(() => {
@@ -409,7 +408,7 @@ export default function App() {
     try {
       const payload = { scenario_id: selectedScenarioId };
       if (selectedScenarioId === 'custom') {
-        payload.custom_prompt = customScenarioText.trim();
+        payload.custom_prompt = knownInfoText.trim();
       }
       const combinedKnownInfo = combinedKnownInfoText(knownInfoText, knownInfoDocuments);
       if (combinedKnownInfo.length > MAX_KNOWN_INFO_CHARS) {
@@ -1637,21 +1636,7 @@ export default function App() {
                 </option>
               </select>
             </label>
-            {selectedScenarioId === 'custom' ? (
-              <label className="custom-scenario-label">
-                <textarea
-                  aria-label="Custom scenario"
-                  disabled={sessionActive}
-                  maxLength={2000}
-                  onChange={(event) => setCustomScenarioText(event.target.value)}
-                  placeholder="Describe the English conversation scenario you want to practice..."
-                  rows={1}
-                  value={customScenarioText}
-                />
-              </label>
-            ) : (
-              <div className="conversation-toolbar-fill" aria-hidden="true" />
-            )}
+            <div className="conversation-toolbar-fill" aria-hidden="true" />
           </div>
 
           <ScenarioBriefingPanel

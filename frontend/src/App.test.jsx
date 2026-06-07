@@ -615,20 +615,19 @@ test('keeps browser TTS on one voice after voices load asynchronously', async ()
   expect(replyUtterance.voice).toBe(openingUtterance.voice);
 });
 
-test('starts a custom scenario from the conversation toolbar', async () => {
+test('starts a custom scenario from the scenario briefing', async () => {
   render(<App />);
 
   fireEvent.change(await screen.findByRole('combobox', { name: 'Scenario' }), {
     target: { value: 'custom' },
   });
+  // Custom no longer has its own toolbar textarea; the briefing below is the single input.
+  expect(screen.queryByLabelText('Custom scenario')).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled();
-  expect(screen.queryByText('Custom scenario')).not.toBeInTheDocument();
-  expect(screen.getByPlaceholderText('Describe the English conversation scenario you want to practice...')).toBeInTheDocument();
-  expect(screen.getByLabelText('Custom scenario')).toHaveAttribute('rows', '1');
-  fireEvent.change(screen.getByLabelText('Custom scenario'), {
+  fireEvent.change(screen.getByLabelText('Known background'), {
     target: { value: 'airport check-in' },
   });
-  expect(screen.queryByText('Practice a realistic conversation about airport check-in')).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Start' })).not.toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
   expect(await screen.findByText("Let's practice airport check-in. Could you start with what you want to say first?"))
@@ -636,6 +635,7 @@ test('starts a custom scenario from the conversation toolbar', async () => {
   expect(sessionRequestBodies.at(-1)).toEqual({
     scenario_id: 'custom',
     custom_prompt: 'airport check-in',
+    known_info_text: 'airport check-in',
   });
 });
 
@@ -712,27 +712,32 @@ test('removing a briefing PDF removes its text from start payload', async () => 
   expect(sessionRequestBodies.at(-1).known_info_text).not.toContain('Resume PDF text');
 });
 
-test('custom scenario sends custom prompt and briefing separately', async () => {
+test('custom scenario uses briefing text as prompt and merges PDF into known info', async () => {
   render(<App />);
 
   fireEvent.change(await screen.findByRole('combobox', { name: 'Scenario' }), {
     target: { value: 'custom' },
   });
-  fireEvent.change(screen.getByLabelText('Custom scenario'), {
+  fireEvent.change(screen.getByLabelText('Upload briefing PDF'), {
+    target: { files: [new File(['fake pdf'], 'resume.pdf', { type: 'application/pdf' })] },
+  });
+  expect(await screen.findByText('resume.pdf')).toBeInTheDocument();
+  // A PDF alone does not describe the custom scenario, so Start stays disabled.
+  expect(screen.getByRole('button', { name: 'Start' })).toBeDisabled();
+
+  fireEvent.change(screen.getByLabelText('Known background'), {
     target: { value: 'airport check-in' },
   });
-  fireEvent.change(screen.getByLabelText('Known background'), {
-    target: { value: 'I have two checked bags.' },
-  });
+  expect(screen.getByRole('button', { name: 'Start' })).not.toBeDisabled();
   fireEvent.click(screen.getByRole('button', { name: 'Start' }));
 
-  expect(await screen.findByText("Let's practice airport check-in. Could you start with what you want to say first?"))
-    .toBeInTheDocument();
+  await screen.findByText("Let's practice airport check-in. Could you start with what you want to say first?");
   expect(sessionRequestBodies.at(-1)).toMatchObject({
     scenario_id: 'custom',
     custom_prompt: 'airport check-in',
-    known_info_text: 'I have two checked bags.',
+    known_info_text: 'airport check-in\n\nResume PDF text',
   });
+  expect(sessionRequestBodies.at(-1).known_info_sources).toHaveLength(1);
 });
 
 test('sends a text turn and shows correction feedback', async () => {
