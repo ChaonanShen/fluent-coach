@@ -1603,9 +1603,9 @@ export default function App() {
                     >
                       <div>
                         <strong>{book.title}</strong>
-                        <SummaryScores summary={book.summary} variant="overall" />
                       </div>
                       <div className="mistake-book-counts" aria-label={`${book.title} counts`}>
+                        <span className="count-chip count-chip--score">Overall {formatScore(overallScore(book.summary))}</span>
                         <span>{book.mistake_count} total</span>
                         <span>Grammar {book.grammar_count}</span>
                         <span>Expression {book.expression_count}</span>

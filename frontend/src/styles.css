@@ -1011,6 +1011,12 @@ h3 {
   white-space: nowrap;
 }
 
+.mistake-book-counts .count-chip--score {
+  background: #2f6f5d;
+  border-color: #2f6f5d;
+  color: #fff;
+}
+
 .mistake-book-counts button {
   cursor: pointer;
 }

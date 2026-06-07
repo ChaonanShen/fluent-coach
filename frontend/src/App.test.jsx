@@ -987,13 +987,10 @@ test('shows summary scores on mistake book records and details', async () => {
 
   fireEvent.click(await screen.findByRole('button', { name: 'Mistake Book (2)' }));
 
-  const listScores = await screen.findByLabelText('Overall score');
-  expect(listScores).toHaveTextContent('Overall 85.6');
-  expect(listScores).not.toHaveTextContent('Grammar');
-  expect(listScores).not.toHaveTextContent('Pronunciation');
-  expect(listScores).not.toHaveTextContent('Fluency');
-  expect(listScores).not.toHaveTextContent('Vocabulary');
-  expect(listScores).not.toHaveTextContent('Tasks');
+  // Overall is now a highlighted chip inline with the other count chips, not a separate row.
+  const overallChip = await screen.findByText('Overall 85.6');
+  expect(overallChip).toHaveClass('count-chip--score');
+  expect(screen.queryByLabelText('Overall score')).not.toBeInTheDocument();
   expect(screen.queryByText(/Job Interview - 06\/05/)).not.toBeInTheDocument();
 
   fireEvent.click(await screen.findByRole('button', { name: /Open Job Interview/ }));
