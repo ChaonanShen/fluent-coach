@@ -58,6 +58,7 @@ from backend.app.services.custom_scenarios import build_custom_scenario
 from backend.app.services.dialogue import dialogue_service
 from backend.app.services.grammar import grammar_service
 from backend.app.services.mistakes import mistake_service
+from backend.app.services.opening import opening_service
 from backend.app.services.pronunciation import pronunciation_provider
 from backend.app.services.progress import progress_service
 from backend.app.services.scenarios import get_scenario, list_scenarios, resolve_session_scenario
@@ -97,17 +98,22 @@ def create_session(request: CreateSessionRequest) -> SessionResponse:
         scenario = get_scenario(request.scenario_id)
     if scenario is None:
         raise HTTPException(status_code=404, detail="Unknown scenario")
+    opening_line = opening_service.generate_opening_line(
+        scenario=scenario,
+        known_info_text=request.known_info_text,
+    )
     session = session_store.create(
         scenario,
         custom_scenario=custom_scenario,
         custom_prompt=custom_prompt,
         known_info_text=request.known_info_text,
         known_info_sources=request.known_info_sources,
+        opening_line=opening_line,
     )
     return SessionResponse(
         session=session,
         scenario=scenario,
-        opening_line=scenario.opening_line,
+        opening_line=opening_line,
         conversation_goals=scenario.conversation_goals,
         target_expressions=scenario.target_expressions,
     )

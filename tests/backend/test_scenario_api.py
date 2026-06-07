@@ -68,6 +68,26 @@ def test_create_builtin_session_accepts_known_info() -> None:
     assert body["session"]["known_info_sources"][0]["name"] == "resume.pdf"
 
 
+def test_create_session_with_known_info_returns_context_aware_opening_line() -> None:
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/sessions",
+        json={
+            "scenario_id": "interview",
+            "known_info_text": "Backend engineer with API platform experience.",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["opening_line"] == (
+        "I reviewed the background you shared. "
+        "Could you walk me through one project that best matches this role?"
+    )
+    assert body["session"]["turns"][0]["text"] == body["opening_line"]
+
+
 def test_create_session_rejects_unknown_scenario() -> None:
     client = TestClient(app)
 

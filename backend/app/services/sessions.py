@@ -19,6 +19,7 @@ class SessionStore:
         custom_prompt: str | None = None,
         known_info_text: str | None = None,
         known_info_sources: list[KnownInfoSource] | None = None,
+        opening_line: str | None = None,
     ) -> Session:
         session = Session(
             scenario_id=scenario.id,
@@ -29,7 +30,7 @@ class SessionStore:
             known_info_sources=known_info_sources or [],
         )
         session.rename(_fallback_title(scenario.name, session.created_at), source=SessionTitleSource.FALLBACK)
-        session.add_turn(speaker=TurnSpeaker.AI, text=scenario.opening_line)
+        session.add_turn(speaker=TurnSpeaker.AI, text=opening_line or scenario.opening_line)
         self._sessions[session.id] = session
         if self._storage is not None:
             self._storage.save_session(session)
