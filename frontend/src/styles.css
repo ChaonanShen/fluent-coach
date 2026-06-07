@@ -125,10 +125,15 @@ h3 {
   min-height: 0;
 }
 
-.coach-panel,
-.assessment-panel {
+.coach-panel {
   min-height: 0;
   overflow-y: auto;
+}
+
+.assessment-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .primary-action,
@@ -480,7 +485,9 @@ h3 {
 }
 
 .assessment-feed.assessment-scroll-list {
-  max-height: min(620px, 62vh);
+  flex: 1 1 auto;
+  max-height: none;
+  min-height: 0;
 }
 
 .turn-assessment-item {

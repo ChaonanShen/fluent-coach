@@ -1607,7 +1607,7 @@ function ConversationAssessmentPanel({
   turnAssessmentErrors,
 }) {
   const assessmentItems = userTurnsWithAssessments(session, turnCorrections, turnPronunciations, turnAssessmentErrors);
-  const assessmentListRef = useAutoScrollToBottom(assessmentItems.length);
+  const assessmentListRef = useAutoScrollToBottom(assessmentScrollKey(assessmentItems));
   return (
     <aside className="coach-panel assessment-panel" aria-label="Conversation Assessment">
       <h2>Conversation Assessment</h2>
@@ -1909,6 +1909,23 @@ function userTurnsWithAssessments(session, turnCorrections, turnPronunciations, 
       errors: turnAssessmentErrors[turn.id] || [],
     }))
     .filter(({ correction, pronunciation, errors }) => correction || pronunciation || errors.length);
+}
+
+function assessmentScrollKey(items) {
+  return items
+    .map(({ turn, correction, pronunciation, errors }) => [
+      turn.id,
+      correction?.id || '',
+      correction?.corrected_text || '',
+      correction?.issues?.length || 0,
+      pronunciation?.id || '',
+      pronunciation?.overall ?? '',
+      pronunciation?.accuracy ?? '',
+      pronunciation?.fluency ?? '',
+      (pronunciation?.words || []).map((word) => `${word.word}:${word.accuracy}`).join(','),
+      errors.length,
+    ].join(':'))
+    .join('|');
 }
 
 function pronunciationPracticeTargets(mistake) {

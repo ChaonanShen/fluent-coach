@@ -1121,6 +1121,28 @@ test('renders pronunciation analysis from a voice turn', async () => {
   expect(within(assessmentFeedback).getByText('systems')).toHaveClass('low-word');
 });
 
+test('keeps the latest assessment visible when pronunciation updates an existing turn', async () => {
+  const voice = installVoiceMocks({ voicePronunciationResult: true, delayedPronunciationResult: true });
+  render(<App />);
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Start' }));
+  await screen.findByText(scenario.opening_line);
+  fireEvent.click(screen.getByRole('button', { name: 'Record' }));
+
+  await waitFor(() => expect(voice.getUserMedia).toHaveBeenCalledWith({ audio: true }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Stop' }));
+
+  const assessmentPanel = await screen.findByLabelText('Conversation Assessment');
+  await waitFor(() => expect(within(assessmentPanel).getByLabelText('Assessment feedback')).toBeInTheDocument());
+  const assessmentFeedback = within(assessmentPanel).getByLabelText('Assessment feedback');
+  expect(within(assessmentFeedback).queryByLabelText('Assessment scores')).not.toBeInTheDocument();
+  setScrollMetrics(assessmentFeedback, { clientHeight: 220, scrollHeight: 900 });
+  assessmentFeedback.scrollTop = 100;
+
+  await waitFor(() => expect(within(assessmentFeedback).getByLabelText('Assessment scores')).toHaveTextContent('Overall 72'));
+  expect(assessmentFeedback.scrollTop).toBe(900);
+});
+
 test('shows microphone permission errors clearly', async () => {
   const voice = installVoiceMocks({ getUserMediaError: new Error('Permission denied') });
   render(<App />);
@@ -1414,40 +1436,48 @@ function installVoiceMocks(options = {}) {
         }),
       });
       if (options.voicePronunciationResult) {
-        this.onmessage?.({
-          data: JSON.stringify({
-            type: 'debug.timing',
-            stage: 'pronunciation',
-            timings: {
-              pronunciation_ms: 222,
-            },
-          }),
-        });
-        this.onmessage?.({
-          data: JSON.stringify({
-            type: 'analysis.result',
-            stage: 'pronunciation',
-            turn_id: 'turn_user_voice_1',
-            result: {
-              id: 'assessment_voice_1',
-              provider: 'mock-real',
-              reference_text: 'I have worked on backend systems for three years.',
-              audio_file: '/tmp/audio.wav',
-              overall: 72,
-              accuracy: 70,
-              fluency: 75,
-              prosody: null,
-              completeness: null,
-              words: [
-                { word: 'I', accuracy: 95, fluency: null, phonemes: [], issue: null },
-                { word: 'SYSTEMS', accuracy: 40, fluency: null, phonemes: [], issue: 'low_accuracy' },
-              ],
-              issues: [],
-              created_at: '2026-06-05T00:00:07Z',
-            },
-          }),
-        });
+        if (options.delayedPronunciationResult) {
+          setTimeout(() => this.sendPronunciationResult(), 80);
+          return;
+        }
+        this.sendPronunciationResult();
       }
+    }
+
+    sendPronunciationResult() {
+      this.onmessage?.({
+        data: JSON.stringify({
+          type: 'debug.timing',
+          stage: 'pronunciation',
+          timings: {
+            pronunciation_ms: 222,
+          },
+        }),
+      });
+      this.onmessage?.({
+        data: JSON.stringify({
+          type: 'analysis.result',
+          stage: 'pronunciation',
+          turn_id: 'turn_user_voice_1',
+          result: {
+            id: 'assessment_voice_1',
+            provider: 'mock-real',
+            reference_text: 'I have worked on backend systems for three years.',
+            audio_file: '/tmp/audio.wav',
+            overall: 72,
+            accuracy: 70,
+            fluency: 75,
+            prosody: null,
+            completeness: null,
+            words: [
+              { word: 'I', accuracy: 95, fluency: null, phonemes: [], issue: null },
+              { word: 'SYSTEMS', accuracy: 40, fluency: null, phonemes: [], issue: 'low_accuracy' },
+            ],
+            issues: [],
+            created_at: '2026-06-05T00:00:07Z',
+          },
+        }),
+      });
     }
 
     close() {
